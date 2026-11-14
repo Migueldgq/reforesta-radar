@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { daysLeft, fmtDate, fmtDayShort, isClosed, parseDay, todayUTC, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel, type Triage } from "./model";
+import { daysLeft, fmtDate, fmtDayShort, isClosed, isNextEdition, parseDay, todayUTC, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel, type Triage } from "./model";
 import { useRadar } from "./store";
 
 const badge = "gap-1 font-medium whitespace-nowrap [&>svg]:size-3.5";
@@ -50,6 +50,18 @@ export function ScoreChip({ fit, size = "md" }: { fit: FitAnalysis; size?: keyof
 export function DeadlineChip({ o }: { o: Opportunity }) {
   const d = daysLeft(o);
   const opens = parseDay(o.opensAt);
+  if (isNextEdition(o)) {
+    const closed = parseDay(o.deadline);
+    return (
+      <Badge variant="outline" className={cn(badge, "h-auto items-start text-left text-muted-foreground [&>svg]:mt-px")} title="Convocatoria periódica: prepara la siguiente edición">
+        <RotateCw aria-hidden />
+        <span className="flex flex-col leading-tight">
+          <span>{closed != null ? `Cerró el ${fmtDayShort(closed)}` : "Cerrada"} ·</span>
+          <span>próxima edición</span>
+        </span>
+      </Badge>
+    );
+  }
   if (isClosed(o))
     return (
       <Badge variant="outline" className={cn(badge, "text-muted-foreground")}>

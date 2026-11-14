@@ -1,0 +1,21 @@
+{
+  "name": "reforesta-radar-demo-video",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "capture": "node capture.mjs",
+    "compose": "node compose.mjs",
+    "lint": "HYPERFRAMES_NO_TELEMETRY=1 hyperframes lint composition",
+    "preview": "HYPERFRAMES_NO_TELEMETRY=1 hyperframes preview composition",
+    "render": "node compose.mjs && HYPERFRAMES_NO_TELEMETRY=1 hyperframes render composition --video-frame-format png --output out/demo-draft.mp4",
+    "render:final": "node compose.mjs && HYPERFRAMES_NO_TELEMETRY=1 hyperframes render composition --video-frame-format png --quality delivery --output out/demo-final.mp4",
+    "all": "npm run capture && npm run render"
+  },
+  "devDependencies": {
+    "hyperframes": "0.9.46",
+    "puppeteer-core": "25.17.0"
+  }
+}

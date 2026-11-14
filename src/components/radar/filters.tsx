@@ -169,14 +169,6 @@ export function FilterBar({
         <span className="mr-1 text-sm text-muted-foreground">
           <span className="font-medium text-foreground tabular-nums">{total}</span> {total === 1 ? "convocatoria" : "convocatorias"}
         </span>
-        {!filters.dims.plazo.includes("cerrada") &&
-          (filters.hideClosed ? (
-            <FilterBadge label="Ocultando cerradas" muted onRemove={() => setFilters((f) => ({ ...f, hideClosed: false }))} />
-          ) : (
-            <Button variant="link" size="sm" className="h-6 px-1 text-xs" onClick={() => setFilters((f) => ({ ...f, hideClosed: true }))}>
-              Incluye cerradas · ocultarlas
-            </Button>
-          ))}
         {chips.map((c) => (
           <FilterBadge key={c.key} label={c.label} onRemove={c.remove} />
         ))}
@@ -185,9 +177,9 @@ export function FilterBar({
   );
 }
 
-function FilterBadge({ label, onRemove, muted = false }: { label: string; onRemove: () => void; muted?: boolean }) {
+function FilterBadge({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <Badge variant={muted ? "outline" : "secondary"} className={cn("max-w-full gap-0.5 py-0 pr-0.5 font-normal", muted && "text-muted-foreground")}>
+    <Badge variant="secondary" className="max-w-full gap-0.5 py-0 pr-0.5 font-normal">
       <span className="truncate">{label}</span>
       <button
         type="button"

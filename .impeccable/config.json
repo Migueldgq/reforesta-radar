@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "createdAt": "2026-11-14T18:14:38.494Z",
+        "reason": "orchestrator: Geist is the app's existing typeface (next/font in layout.tsx); user asked landing and demo to match the app's style"
+      }
+    ]
+  }
+}

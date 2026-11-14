@@ -123,11 +123,12 @@ function AppSidebar() {
   const counts = useMemo(() => {
     const c: Record<QuickKey, number> = { abierta: 0, "30d": 0, alto: 0, fuera: 0 };
     for (const o of data?.items ?? []) {
+      // High fit counts every deadline state (closed recurring grants are next-edition leads), like Inicio's card.
+      if (o.fit.tier === "alto") c.alto++;
       if (isClosed(o)) continue; // match Inicio, which hides closed calls by default
       const p = plazoValues(o);
       if (p.includes("abierta")) c.abierta++;
       if (p.includes("30d")) c["30d"]++;
-      if (o.fit.tier === "alto") c.alto++;
       if (o.fit.outsideManualSources) c.fuera++;
     }
     return c;
@@ -139,9 +140,9 @@ function AppSidebar() {
     const on = path === "/" && quickOn(filters, k);
     setFilters((f) => {
       const base: Filters = { ...DEFAULT_FILTERS, hideClosed: f.hideClosed, dims: EMPTY_DIMS };
-      if (on) return base;
+      if (on) return k === "alto" ? { ...base, hideClosed: true } : base;
       if (k === "fuera") return { ...base, flags: ["fuera"] };
-      if (k === "alto") return { ...base, dims: { ...EMPTY_DIMS, tier: ["alto"] } };
+      if (k === "alto") return { ...base, hideClosed: false, dims: { ...EMPTY_DIMS, tier: ["alto"] } };
       return { ...base, dims: { ...EMPTY_DIMS, plazo: [k] } };
     });
     if (path !== "/") router.push("/");
