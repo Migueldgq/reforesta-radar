@@ -153,7 +153,6 @@ export function WeekBars({
   const { ref, show, hide, node } = useTip();
   const max = Math.max(1, ...bins.map((b) => b.count));
   const total = bins.reduce((s, b) => s + b.count, 0);
-  const H = 88;
 
   return (
     <div ref={ref} className="relative flex min-w-0 flex-col gap-4 p-5" onPointerLeave={hide}>
@@ -163,10 +162,11 @@ export function WeekBars({
           {total} en las próximas 12 semanas{later > 0 ? ` · ${later} más adelante` : ""}. Pulsa una semana para filtrar.
         </p>
       </div>
-      <ol className="grid grid-cols-12 items-end gap-1 sm:gap-2" style={{ height: H + 40 }}>
+      {/* Grows to the card's height; labels thin out to every other week when columns get narrow. */}
+      <ol className="@container grid min-h-32 flex-1 grid-cols-12 items-end gap-1 sm:gap-2">
         {bins.map((b, i) => {
           const on = selected === b.start;
-          const h = b.count ? Math.max(4, (b.count / max) * H) : 0;
+          const h = b.count ? `max(4px, ${(b.count / max) * 100}%)` : 0;
           return (
             <li key={b.start} className="h-full">
               <button
@@ -198,15 +198,21 @@ export function WeekBars({
                 onBlur={hide}
                 className="group flex h-full w-full cursor-pointer flex-col items-center justify-end gap-1 rounded-md transition-colors outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
-                <span data-count className={cn("text-xs tabular-nums", on ? "font-medium" : "text-muted-foreground", b.count === 0 && "opacity-40")}>
-                  {b.count}
+                <span className="flex min-h-0 w-full flex-1 flex-col items-center justify-end pt-5">
+                  <span className="relative block w-full max-w-8 transition-[height] duration-300" style={{ height: h }}>
+                    <span
+                      data-count
+                      className={cn("absolute bottom-full left-1/2 mb-1 -translate-x-1/2 text-xs tabular-nums", on ? "font-medium" : "text-muted-foreground", b.count === 0 && "opacity-40")}
+                    >
+                      {b.count}
+                    </span>
+                    <span
+                      className={cn("block h-full w-full rounded-t-sm bg-primary transition-opacity duration-300", selected != null && !on && "opacity-25")}
+                    />
+                  </span>
                 </span>
-                <span
-                  className={cn("block w-full max-w-8 rounded-t-sm bg-primary transition-[height,opacity] duration-300", selected != null && !on && "opacity-25")}
-                  style={{ height: h }}
-                />
                 <span className="h-px w-full bg-border" aria-hidden />
-                <span className={cn("pb-1 text-[11px] leading-tight whitespace-nowrap", on ? "font-medium" : "text-muted-foreground", i % 2 === 1 && "max-sm:invisible")}>
+                <span className={cn("pb-1 text-[11px] leading-tight whitespace-nowrap", on ? "font-medium" : "text-muted-foreground", i % 2 === 1 && "@max-[30rem]:invisible")}>
                   {i === 0 ? "Esta" : b.label}
                 </span>
               </button>

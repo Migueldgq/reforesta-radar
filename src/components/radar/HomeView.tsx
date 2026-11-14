@@ -1,6 +1,6 @@
 "use client";
 
-import { AlarmClock, Check, ChevronDown, Compass, DoorOpen, Loader2, Target } from "lucide-react";
+import { AlarmClock, Check, ChevronDown, Compass, DoorOpen, Loader2, Target, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { isNeutral } from "./profile";
@@ -45,6 +45,7 @@ import { FilterBar, weekChipLabel, type BarDim } from "./filters";
 import { ResultsTable } from "./ResultsTable";
 import { ErrorState, PageHeader } from "./ui";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -91,7 +92,23 @@ export function HomeView() {
   if (loading && !data) return <LoadingHome />;
   if (error && !data) return <ErrorState message={error} onRetry={() => reload()} />;
   if (!data) return null;
-  return <Dashboard items={data.items} fetchedAt={data.fetchedAt} sourceCount={data.sources.length} />;
+  return (
+    <>
+      {data.ingestStale && data.lastIngestAt && <IngestStaleAlert lastIngestAt={data.lastIngestAt} />}
+      <Dashboard items={data.items} fetchedAt={data.fetchedAt} sourceCount={data.sources.length} />
+    </>
+  );
+}
+
+function IngestStaleAlert({ lastIngestAt }: { lastIngestAt: string }) {
+  const [now] = useState(Date.now);
+  const h = Math.floor((now - Date.parse(lastIngestAt)) / 3_600_000);
+  return (
+    <Alert role="status" className="mb-6">
+      <TriangleAlert />
+      <AlertDescription>Los datos no se actualizan desde hace {h} h. Avisad a quien mantiene el radar.</AlertDescription>
+    </Alert>
+  );
 }
 
 function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fetchedAt: string; sourceCount: number }) {
