@@ -1,10 +1,20 @@
 "use client";
 
-import { ArrowUpRight, Building2 } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { useMemo } from "react";
-import { fmtEuros, workLineLabel } from "./model";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { fmtEuros } from "./model";
+import { ScoreBadge, StatusSelect } from "./PipelineView";
 import { useRadar } from "./store";
-import { EmptyState, ErrorState, PageHeader, Panel, TriageSelect } from "./ui";
+
+const STEPS = [
+  "Elegid dos o tres programas de la lista: arriba están los que más se parecen a lo que hacéis.",
+  "Marcadlos «En estudio» para que aparezcan en Seguimiento y nadie los pierda de vista.",
+  "Escribid un primer correo corto usando el ángulo sugerido de cada programa.",
+];
 
 export function EmpresasView() {
   const { data, loading, error, reload, triageOf, openDetail } = useRadar();
@@ -15,102 +25,123 @@ export function EmpresasView() {
   const inPipeline = items.filter((o) => triageOf(o.id) !== "nueva" && triageOf(o.id) !== "descartada").length;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Empresas y fundaciones"
-        sub="Programas de RSC y fundaciones privadas que financian proyectos como los vuestros. Aquí no se espera a que publiquen: se les escribe."
-      />
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Step n={1} title="Elegid tres" body="Las de arriba son las que más se parecen a lo que hacéis." />
-        <Step n={2} title="Marcadlas «En estudio»" body="Así aparecen en Seguimiento y nadie las pierde de vista." />
-        <Step n={3} title="Una página por empresa" body="Usad el ángulo sugerido para un primer correo o llamada." />
+    <div className="flex flex-col gap-8 text-sm">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Empresas y fundaciones</h1>
+        <p className="max-w-3xl text-muted-foreground">
+          El canal corporativo: programas de RSC y fundaciones privadas. Hoy está a cero; el objetivo es cerrar las 2–4 primeras empresas. Aquí no se espera a
+          una convocatoria, se les escribe.
+        </p>
       </div>
+
+      <section aria-labelledby="como-empezar" className="space-y-3">
+        <h2 id="como-empezar" className="font-medium">
+          Cómo empezar
+        </h2>
+        <ol className="grid gap-4 sm:grid-cols-3 sm:gap-6">
+          {STEPS.map((s, i) => (
+            <li key={i} className="flex gap-3">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full border text-xs font-medium tabular-nums">{i + 1}</span>
+              <p className="text-muted-foreground">{s}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
 
       {loading && !data ? (
-        <Panel>
-          <div className="space-y-4 p-5">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="skeleton h-16 w-full" />
-            ))}
-          </div>
-        </Panel>
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-40 w-full rounded-xl" />
+          ))}
+        </div>
       ) : error && !data ? (
-        <ErrorState message={error} onRetry={() => reload()} />
+        <Card className="items-start gap-3 px-6 py-6 shadow-none">
+          <p className="font-medium">No se han podido cargar los programas</p>
+          <p className="text-muted-foreground">{error}</p>
+          <Button size="sm" variant="outline" onClick={() => reload()}>
+            Reintentar
+          </Button>
+        </Card>
       ) : items.length === 0 ? (
-        <Panel>
-          <EmptyState title="No hay programas de empresa cargados" body="Revisa en Fuentes si la fuente de RSC ha respondido." />
-        </Panel>
+        <Card className="items-center gap-2 border-dashed px-6 py-12 text-center shadow-none">
+          <p className="font-medium">No hay programas de empresa cargados</p>
+          <p className="text-muted-foreground">Revisa en Fuentes si la fuente de RSC ha respondido.</p>
+        </Card>
       ) : (
-        <Panel className="overflow-hidden">
-          <div className="flex items-center justify-between border-b border-stone-200/80 px-5 py-3.5">
-            <h2 className="text-sm font-semibold text-stone-900">
-              {items.length} programas <span className="font-normal text-stone-500">· mejor encaje primero</span>
+        <section aria-labelledby="programas" className="space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 id="programas" className="font-medium">
+              {items.length} programas <span className="font-normal text-muted-foreground">· mejor encaje primero</span>
             </h2>
-            <span className="text-xs text-stone-500 tabular-nums">
-              {inPipeline} en marcha · objetivo del año: 2–4 empresas
-            </span>
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {inPipeline} en marcha · objetivo: 2–4 empresas
+            </p>
           </div>
-          <ul className="divide-y divide-stone-100">
-            {items.map((o) => (
-              <li key={o.id} className="grid gap-4 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]">
-                <div className="min-w-0 space-y-1">
-                  <p className="flex items-center gap-1.5 text-xs text-stone-500">
-                    <Building2 className="h-3.5 w-3.5" aria-hidden /> {o.organismo}
-                  </p>
-                  <h3 className="text-[15px] leading-snug font-medium text-stone-900">
-                    <button type="button" onClick={() => openDetail(o.id)} className="cursor-pointer text-left hover:text-brand-900 hover:underline">
-                      {o.titulo}
-                    </button>
-                  </h3>
-                  <p className="text-sm text-stone-700 tabular-nums">{fmtEuros(o.budget) ?? o.amountText ?? "Importe variable"}</p>
-                  {o.rsc?.cadence && <p className="text-xs text-stone-500">{o.rsc.cadence}</p>}
-                  {o.fit.workLines.length > 0 && <p className="text-xs text-stone-500">{o.fit.workLines.map(workLineLabel).join(" · ")}</p>}
-                </div>
-                <div className="space-y-2.5 text-sm leading-relaxed">
-                  {o.rsc ? (
-                    <>
-                      <p className="text-stone-700">
-                        <span className="block text-xs font-medium text-stone-500">Por qué vosotros</span>
-                        {o.rsc.whyReforesta}
-                      </p>
-                      <p className="text-stone-700">
-                        <span className="block text-xs font-medium text-stone-500">Cómo planteárselo</span>
-                        {o.rsc.pitchAngle}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-stone-700">{o.summary}</p>
-                  )}
-                </div>
-                <div className="flex items-start gap-2 lg:flex-col lg:items-end">
-                  <TriageSelect o={o} />
-                  <a
-                    href={o.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-brand-800 hover:bg-brand-50"
-                  >
-                    Web del programa <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
-                  </a>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      )}
-    </div>
-  );
-}
+          <ul className="space-y-3">
+            {items.map((o) => {
+              const amount = o.amountText ?? fmtEuros(o.budget) ?? "Importe variable";
+              return (
+                <li key={o.id}>
+                  <Card className="gap-5 p-5 shadow-none">
+                    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-xs text-muted-foreground">{o.organismo}</p>
+                        <h3 className="text-base leading-snug font-medium">
+                          <button type="button" onClick={() => openDetail(o.id)} className="cursor-pointer text-left hover:underline">
+                            {o.titulo.startsWith(`${o.organismo} — `) ? o.titulo.slice(o.organismo.length + 3) : o.titulo}
+                          </button>
+                        </h3>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {o.tipo && <Badge variant="outline">{o.tipo}</Badge>}
+                        <ScoreBadge fit={o.fit} />
+                      </div>
+                    </div>
 
-function Step({ n, title, body }: { n: number; title: string; body: string }) {
-  return (
-    <div className="flex gap-3 rounded-2xl border border-stone-200/80 bg-white p-4">
-      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-semibold text-brand-800 ring-1 ring-brand-200">{n}</span>
-      <div>
-        <p className="text-sm font-semibold text-stone-900">{title}</p>
-        <p className="text-xs leading-relaxed text-stone-500">{body}</p>
-      </div>
+                    <dl className="flex flex-wrap gap-x-8 gap-y-2">
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Importe orientativo</dt>
+                        <dd className="tabular-nums">{amount}</dd>
+                      </div>
+                      {o.rsc?.cadence && (
+                        <div>
+                          <dt className="text-xs text-muted-foreground">Cuándo</dt>
+                          <dd>{o.rsc.cadence}</dd>
+                        </div>
+                      )}
+                    </dl>
+
+                    {o.rsc ? (
+                      <div className="grid gap-4 md:grid-cols-2 md:gap-8">
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-medium text-muted-foreground">Por qué encaja con Reforesta</h4>
+                          <p className="leading-relaxed">{o.rsc.whyReforesta}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-medium text-muted-foreground">Ángulo para el primer contacto</h4>
+                          <p className="leading-relaxed">{o.rsc.pitchAngle}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      o.summary && <p className="leading-relaxed">{o.summary}</p>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-4">
+                      <StatusSelect o={o} />
+                      <Button asChild variant="outline" size="sm">
+                        <a href={o.url} target="_blank" rel="noreferrer">
+                          Abrir web <ExternalLink aria-hidden />
+                        </a>
+                      </Button>
+                    </div>
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="text-xs text-muted-foreground">Los importes son orientativos, sacados de ediciones anteriores. Confirmadlos en la web de cada programa.</p>
+        </section>
+      )}
     </div>
   );
 }

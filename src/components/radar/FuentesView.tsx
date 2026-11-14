@@ -1,95 +1,175 @@
 "use client";
 
-import { ArrowUpRight, CircleAlert, CircleCheck, CircleX, Loader2, RotateCw } from "lucide-react";
+import { CircleAlert, CircleCheck, CircleMinus, CircleX, ExternalLink, Loader2, RotateCw } from "lucide-react";
 import type { SourceHealth } from "@/lib/types";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { fmtAgo } from "./model";
 import { useRadar } from "./store";
-import { Button, cx, ErrorState, PageHeader, Panel } from "./ui";
 
-const STATUS: Record<SourceHealth["status"], { label: string; icon: typeof CircleCheck; tone: string }> = {
-  ok: { label: "Funciona", icon: CircleCheck, tone: "bg-brand-50 text-brand-800 ring-brand-200" },
-  partial: { label: "Parcial", icon: CircleAlert, tone: "bg-amber-50 text-amber-900 ring-amber-200" },
-  error: { label: "Sin respuesta", icon: CircleX, tone: "bg-red-50 text-red-800 ring-red-200" },
-};
+function StatusBadge({ s }: { s: SourceHealth }) {
+  if (s.status === "error")
+    return (
+      <Badge variant="outline" className="border-destructive/40 text-destructive">
+        <CircleX aria-hidden />
+        Error
+      </Badge>
+    );
+  if (s.status === "partial")
+    return (
+      <Badge variant="outline">
+        <CircleAlert aria-hidden />
+        Parcial
+      </Badge>
+    );
+  if (s.count === 0)
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        <CircleMinus aria-hidden />
+        Sin novedades
+      </Badge>
+    );
+  return (
+    <Badge variant="secondary">
+      <CircleCheck aria-hidden className="text-primary" />
+      Correcta
+    </Badge>
+  );
+}
+
+function SourceLink({ s }: { s: SourceHealth }) {
+  return (
+    <Button asChild variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-foreground">
+      <a href={s.url} target="_blank" rel="noreferrer" aria-label={`Abrir ${s.name} en una pestaña nueva`} title="Abrir la fuente">
+        <ExternalLink aria-hidden />
+      </a>
+    </Button>
+  );
+}
 
 export function FuentesView() {
   const { data, loading, refreshing, error, reload } = useRadar();
   const busy = loading || refreshing;
   const sources = data?.sources ?? [];
-  const ok = sources.filter((s) => s.status === "ok").length;
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <PageHeader
-        title="Fuentes"
-        sub={
-          data ? (
-            <>
-              Consultamos {sources.length} fuentes oficiales y privadas; {ok} responden con normalidad. Última consulta {fmtAgo(data.fetchedAt)}
-              {data.cached ? " (copia guardada)" : ""}.
-            </>
-          ) : (
-            "De dónde salen los datos."
-          )
-        }
-        actions={
-          <Button variant="secondary" onClick={() => reload(true)} disabled={busy}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RotateCw className="h-4 w-4" aria-hidden />}
-            {busy ? "Consultando…" : "Volver a consultar ahora"}
-          </Button>
-        }
-      />
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+      <header className="space-y-1">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">Fuentes</h1>
+        <p className="text-sm text-muted-foreground">De dónde salen los datos y cuándo se consultaron por última vez.</p>
+      </header>
 
-      {error && !data ? (
-        <ErrorState message={error} onRetry={() => reload()} />
-      ) : !data ? (
-        <Panel>
-          <div className="space-y-3 p-5">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div key={i} className="skeleton h-12 w-full" />
-            ))}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {data ? (
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground tabular-nums">{sources.length}</span> fuentes ·{" "}
+            <span className="font-medium text-foreground tabular-nums">{data.items.length}</span> convocatorias · última consulta{" "}
+            {fmtAgo(data.fetchedAt)}
+          </p>
+        ) : (
+          <Skeleton className="h-5 w-72 max-w-full" />
+        )}
+        <Button variant="outline" onClick={() => reload(true)} disabled={busy} className="self-start sm:self-auto">
+          {busy ? <Loader2 className="animate-spin" aria-hidden /> : <RotateCw aria-hidden />}
+          {busy ? "Consultando…" : "Volver a consultar"}
+        </Button>
+      </div>
+
+      {error && (
+        <Alert variant="destructive">
+          <CircleAlert aria-hidden />
+          <AlertTitle className="line-clamp-none">No hemos podido consultar las fuentes</AlertTitle>
+          <AlertDescription className="gap-3 text-muted-foreground!">
+            <p>{error}</p>
+            {!data && (
+              <Button variant="outline" size="sm" onClick={() => reload()}>
+                <RotateCw aria-hidden />
+                Reintentar
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!data && !error && (
+        <div className="space-y-2" aria-busy="true">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
+      )}
+
+      {data && (
+        <div className={cn("transition-opacity", refreshing && "opacity-60")} aria-busy={refreshing || undefined}>
+          {/* Desktop / tablet: table */}
+          <div className="hidden overflow-hidden rounded-lg border md:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-4">Fuente</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Resultados</TableHead>
+                  <TableHead>Nota</TableHead>
+                  <TableHead className="w-12 pr-4">
+                    <span className="sr-only">Enlace</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sources.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="py-3 pl-4 align-top">
+                      <div className="font-medium text-foreground">{s.name}</div>
+                      <div className="text-xs text-muted-foreground">{s.category}</div>
+                    </TableCell>
+                    <TableCell className="py-3 align-top">
+                      <StatusBadge s={s} />
+                    </TableCell>
+                    <TableCell className="py-3 text-right align-top tabular-nums">{s.count}</TableCell>
+                    <TableCell className="max-w-xs py-3 align-top text-sm whitespace-normal text-muted-foreground">{s.note || "—"}</TableCell>
+                    <TableCell className="py-2 pr-4 text-right align-top">
+                      <SourceLink s={s} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
-        </Panel>
-      ) : (
-        <Panel className={cx("overflow-hidden transition-opacity", refreshing && "opacity-60")}>
-          <ul className="divide-y divide-stone-100">
-            {sources.map((s) => {
-              const st = STATUS[s.status];
-              return (
-                <li key={s.id} className="grid gap-2 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-6">
-                  <div className="min-w-0">
-                    <p className="flex flex-wrap items-baseline gap-x-2">
-                      <span className="font-medium text-stone-900">{s.name}</span>
-                      <span className="text-xs text-stone-500">{s.category}</span>
-                    </p>
-                    {s.note && <p className="mt-0.5 text-sm text-stone-500">{s.note}</p>}
+
+          {/* Mobile: stacked cards */}
+          <ul className="flex flex-col gap-3 md:hidden">
+            {sources.map((s) => (
+              <li key={s.id}>
+                <Card className="gap-3 px-4 py-4 shadow-none">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground">{s.name}</p>
+                      <p className="text-xs text-muted-foreground">{s.category}</p>
+                    </div>
+                    <SourceLink s={s} />
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={cx("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1", st.tone)}>
-                      <st.icon className="h-3.5 w-3.5" aria-hidden />
-                      {st.label}
-                    </span>
-                    <span className="text-sm tabular-nums text-stone-700">
-                      <strong className="font-semibold">{s.count}</strong> <span className="text-stone-500">resultados</span>
+                    <StatusBadge s={s} />
+                    <span className="text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground tabular-nums">{s.count}</span> {s.count === 1 ? "resultado" : "resultados"}
                     </span>
                   </div>
-                  <a
-                    href={s.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 justify-self-start text-xs font-medium text-brand-800 hover:underline sm:justify-self-end"
-                  >
-                    Abrir fuente <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
-                  </a>
-                </li>
-              );
-            })}
+                  {s.note && <p className="text-sm text-muted-foreground">{s.note}</p>}
+                </Card>
+              </li>
+            ))}
           </ul>
-        </Panel>
+        </div>
       )}
-      <p className="text-xs leading-relaxed text-stone-500">
-        Los datos se guardan unos minutos para que la aplicación vaya rápida. «Volver a consultar ahora» pregunta otra vez a todas las fuentes; puede tardar
-        hasta medio minuto.
+
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Guardamos una copia de los datos durante unos minutos para que la aplicación vaya rápida y la renovamos en segundo plano. Si una fuente falla, se
+        mantienen sus últimos datos buenos. «Volver a consultar» pregunta otra vez a todas las fuentes y puede tardar hasta medio minuto.
       </p>
     </div>
   );

@@ -3,9 +3,14 @@
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Opportunity, OpportunityKind } from "@/lib/opportunity";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { daysLeft, fmtEuros, parseDay, tidy, TIER_LABELS, TRIAGE_ORDER, type Triage } from "./model";
 import { useRadar } from "./store";
-import { Button, cx, DeadlineChip, EmptyState, TriageSelect } from "./ui";
+import { DeadlineChip, EmptyState, TriageSelect } from "./ui";
 
 export const KIND_SHORT: Record<OpportunityKind, string> = {
   subvencion: "Subvención",
@@ -86,38 +91,28 @@ export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[
     const on = sort.col === col;
     const Icon = on ? (sort.dir === "asc" ? ArrowUp : ArrowDown) : ChevronsUpDown;
     return (
-      <th
-        scope="col"
-        aria-sort={on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-        className={cx(
-          "sticky top-[var(--header-h)] z-10 border-b border-stone-200 bg-white/95 px-3 py-0 font-normal backdrop-blur lg:top-[calc(var(--header-h)+var(--filters-h,0px))]",
-          className,
-        )}
-      >
-        <button
-          type="button"
+      <TableHead aria-sort={on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"} className={cn("h-11 px-2", className, align === "right" && "text-right")}>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => onSort(col)}
-          className={cx(
-            "group inline-flex h-10 w-full cursor-pointer items-center gap-1 text-xs font-medium whitespace-nowrap",
-            align === "right" && "justify-end",
-            on ? "text-stone-900" : "text-stone-500 hover:text-stone-800",
-          )}
+          className={cn("h-8 gap-1 px-2 text-xs font-medium", on ? "text-foreground" : "text-muted-foreground", align === "right" && "-mr-2")}
         >
           {label}
-          <Icon className={cx("h-3.5 w-3.5", on ? "text-stone-700" : "text-stone-300 group-hover:text-stone-400")} aria-hidden />
-        </button>
-      </th>
+          <Icon className={cn("size-3.5", !on && "opacity-50")} aria-hidden />
+        </Button>
+      </TableHead>
     );
   };
 
   if (sorted.length === 0)
     return (
-      <div className="rounded-2xl border border-stone-200/80 bg-white">
+      <div className="rounded-lg border">
         <EmptyState
           title="Ninguna convocatoria cumple todos estos filtros"
           body="Quita alguno de los filtros de arriba o busca con otras palabras."
           action={
-            <Button variant="secondary" onClick={onClear}>
+            <Button variant="outline" onClick={onClear}>
               Limpiar filtros
             </Button>
           }
@@ -126,31 +121,33 @@ export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[
     );
 
   return (
-    <div className="rounded-2xl border border-stone-200/80 bg-white">
-      {/* Desktop / tablet: real table */}
-      <table className="hidden w-full table-fixed border-separate border-spacing-0 text-sm md:table">
-        <caption className="sr-only">Convocatorias filtradas. Pulsa una fila para ver el detalle.</caption>
-        <thead>
-          <tr>
-            {th("score", "Encaje", "w-[76px] rounded-tl-2xl pl-5")}
-            {th("titulo", "Convocatoria")}
-            {th("kind", "Tipo", "hidden w-[108px] xl:table-cell")}
-            {th("source", "Fuente", "w-[124px]")}
-            {th("region", "Territorio", "hidden w-[140px] lg:table-cell")}
-            {th("deadline", "Plazo", "w-[164px]")}
-            {th("budget", "Importe", "w-[112px]", "right")}
-            {th("triage", "Seguimiento", "w-[156px] rounded-tr-2xl pr-5")}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((o) => (
-            <Row key={o.id} o={o} onOpen={() => openDetail(o.id)} />
-          ))}
-        </tbody>
-      </table>
+    <div className="rounded-lg border">
+      {/* Tablet / desktop */}
+      <div className="hidden md:block">
+        <Table className="table-fixed">
+          <caption className="sr-only">Convocatorias filtradas. Pulsa una fila para ver el detalle.</caption>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              {th("score", "Encaje", "w-[76px] pl-3")}
+              {th("titulo", "Convocatoria")}
+              {th("kind", "Tipo", "hidden w-[108px] xl:table-cell")}
+              {th("source", "Fuente", "w-[112px]")}
+              {th("region", "Territorio", "hidden w-[120px] lg:table-cell")}
+              {th("deadline", "Plazo", "w-[148px]")}
+              {th("budget", "Importe", "w-[104px]", "right")}
+              {th("triage", "Seguimiento", "w-[156px] pr-4")}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((o) => (
+              <Row key={o.id} o={o} onOpen={() => openDetail(o.id)} />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
-      {/* Mobile: stacked cards */}
-      <ul className="divide-y divide-stone-100 md:hidden">
+      {/* Mobile: cards */}
+      <ul className="divide-y md:hidden">
         {rows.map((o) => (
           <MobileCard key={o.id} o={o} onOpen={() => openDetail(o.id)} />
         ))}
@@ -171,15 +168,14 @@ export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[
   );
 }
 
-function Score({ o, size = "md" }: { o: Opportunity; size?: "sm" | "md" }) {
+function Score({ o }: { o: Opportunity }) {
   const t = o.fit.tier;
   return (
     <span
       title={`${TIER_LABELS[t]}: ${o.fit.score} de 100`}
-      className={cx(
-        "inline-grid shrink-0 place-items-center rounded-lg font-semibold tabular-nums",
-        size === "md" ? "h-9 w-9 text-sm" : "h-8 w-8 text-[13px]",
-        t === "alto" ? "bg-brand-800 text-white" : t === "medio" ? "bg-brand-100 text-brand-900" : "bg-stone-100 text-stone-500",
+      className={cn(
+        "inline-grid size-8 shrink-0 place-items-center rounded-md text-[13px] font-semibold tabular-nums",
+        t === "alto" ? "bg-primary text-primary-foreground" : t === "medio" ? "bg-secondary text-foreground" : "border text-muted-foreground",
       )}
     >
       {o.fit.score}
@@ -188,75 +184,79 @@ function Score({ o, size = "md" }: { o: Opportunity; size?: "sm" | "md" }) {
   );
 }
 
-function DeadlineCell({ o }: { o: Opportunity }) {
-  const d = parseDay(o.deadline);
-  return (
-    <div className="flex flex-col items-start gap-1">
-      <DeadlineChip o={o} />
-      {d != null && <span className="pl-0.5 text-xs text-stone-500 tabular-nums">{fmtDate.format(d).replace(".", "")}</span>}
-    </div>
-  );
-}
-
 function Amount({ o }: { o: Opportunity }) {
   const a = fmtEuros(o.budget);
-  if (a) return <span className="text-stone-900 tabular-nums">{a}</span>;
-  if (o.amountText) return <span className="text-xs leading-snug text-stone-600">{o.amountText}</span>;
-  return <span className="text-stone-300">—</span>;
+  if (a) return <span className="tabular-nums">{a}</span>;
+  if (o.amountText)
+    return (
+      <span className="line-clamp-2 text-xs text-muted-foreground" title={o.amountText}>
+        {o.amountText}
+      </span>
+    );
+  return <span className="text-muted-foreground">—</span>;
 }
 
 function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
-  const td = "border-b border-stone-100 px-3 py-3.5 align-top group-last:border-b-0";
+  const d = parseDay(o.deadline);
+  const title = tidy(o.titulo);
   return (
-    <tr onClick={onOpen} className="group cursor-pointer transition-colors hover:bg-stone-50/80">
-      <td className={cx(td, "pl-5")}>
+    <TableRow onClick={onOpen} className="cursor-pointer">
+      <TableCell className="py-3 pl-4">
         <Score o={o} />
-      </td>
-      <td className={td}>
+      </TableCell>
+      <TableCell className="py-3">
         <button
           type="button"
+          title={title}
           onClick={(e) => {
             e.stopPropagation();
             onOpen();
           }}
-          className="block w-full cursor-pointer text-left focus-visible:rounded-sm"
+          className="block w-full cursor-pointer rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
-          <span className="line-clamp-2 leading-snug font-medium text-stone-900 group-hover:text-brand-900">{tidy(o.titulo)}</span>
-          <span className="mt-0.5 block truncate text-xs text-stone-500">{tidy(o.organismo)}</span>
+          <span className="block truncate font-medium">{title}</span>
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">{tidy(o.organismo)}</span>
         </button>
-      </td>
-      <td className={cx(td, "hidden text-stone-700 xl:table-cell")}>{KIND_SHORT[o.kind]}</td>
-      <td className={cx(td, "text-stone-700")}>
-        <span className="line-clamp-2">{o.sourceLabel}</span>
-      </td>
-      <td className={cx(td, "hidden text-stone-700 lg:table-cell")}>
-        <span className="line-clamp-2">{o.region}</span>
-      </td>
-      <td className={td}>
-        <DeadlineCell o={o} />
-      </td>
-      <td className={cx(td, "text-right")}>
+      </TableCell>
+      <TableCell className="hidden py-3 xl:table-cell">
+        <Badge variant="outline" className="font-normal">
+          {KIND_SHORT[o.kind]}
+        </Badge>
+      </TableCell>
+      <TableCell className="truncate py-3 text-muted-foreground" title={o.sourceLabel}>
+        {o.sourceLabel}
+      </TableCell>
+      <TableCell className="hidden truncate py-3 text-muted-foreground lg:table-cell" title={o.region}>
+        {o.region}
+      </TableCell>
+      <TableCell className="py-3">
+        <div className="flex flex-col items-start gap-1">
+          <DeadlineChip o={o} />
+          {d != null && <span className="pl-0.5 text-xs text-muted-foreground tabular-nums">{fmtDate.format(d).replace(".", "")}</span>}
+        </div>
+      </TableCell>
+      <TableCell className="py-3 text-right whitespace-normal">
         <Amount o={o} />
-      </td>
-      <td className={cx(td, "pr-5")} onClick={(e) => e.stopPropagation()}>
+      </TableCell>
+      <TableCell className="py-3 pr-4" onClick={(e) => e.stopPropagation()}>
         <TriageSelect o={o} />
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
 function MobileCard({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
   return (
     <li className="relative flex gap-3 px-4 py-4">
-      <Score o={o} size="sm" />
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <p className="truncate text-xs text-stone-500">
+      <Score o={o} />
+      <div className="min-w-0 flex-1 space-y-2">
+        <p className="truncate text-xs text-muted-foreground">
           {KIND_SHORT[o.kind]} · {o.sourceLabel} · {o.region}
         </p>
         <button type="button" onClick={onOpen} className="block text-left after:absolute after:inset-0 after:content-['']">
-          <span className="line-clamp-3 text-[15px] leading-snug font-medium text-stone-900">{tidy(o.titulo)}</span>
+          <span className="line-clamp-3 leading-snug font-medium">{tidy(o.titulo)}</span>
         </button>
-        <p className="truncate text-xs text-stone-500">{tidy(o.organismo)}</p>
+        <p className="truncate text-xs text-muted-foreground">{tidy(o.organismo)}</p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-0.5">
           <DeadlineChip o={o} />
           <span className="text-sm">
@@ -288,67 +288,42 @@ function Pager({
 }) {
   const from = page * size + 1;
   const to = Math.min(total, from + size - 1);
-  const btn =
-    "grid h-8 min-w-8 cursor-pointer place-items-center rounded-lg px-2 text-sm tabular-nums transition-colors disabled:cursor-not-allowed disabled:opacity-40";
-  const nums: (number | "…")[] = [];
-  for (let i = 0; i < pages; i++) {
-    if (i === 0 || i === pages - 1 || Math.abs(i - page) <= 1) nums.push(i);
-    else if (nums[nums.length - 1] !== "…") nums.push("…");
-  }
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 px-4 py-3 sm:px-5">
-      <p className="text-sm text-stone-500 tabular-nums">
-        <span className="font-medium text-stone-800">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+      <p className="text-sm text-muted-foreground tabular-nums">
+        <span className="font-medium text-foreground">
           {from}–{to}
         </span>{" "}
         de {total}
       </p>
-      <nav aria-label="Páginas" className="flex items-center gap-1">
-        <button type="button" className={cx(btn, "hover:bg-stone-100")} disabled={page === 0} onClick={() => onPage(page - 1)} aria-label="Página anterior">
-          <ChevronLeft className="h-4 w-4" aria-hidden />
-        </button>
-        {nums.map((n, i) =>
-          n === "…" ? (
-            <span key={`e${i}`} className="px-1 text-stone-400">
-              …
-            </span>
-          ) : (
-            <button
-              key={n}
-              type="button"
-              aria-current={n === page ? "page" : undefined}
-              onClick={() => onPage(n)}
-              className={cx(btn, n === page ? "bg-stone-900 font-medium text-white" : "text-stone-600 hover:bg-stone-100")}
-            >
-              {n + 1}
-            </button>
-          ),
-        )}
-        <button
-          type="button"
-          className={cx(btn, "hover:bg-stone-100")}
-          disabled={page >= pages - 1}
-          onClick={() => onPage(page + 1)}
-          aria-label="Página siguiente"
-        >
-          <ChevronRight className="h-4 w-4" aria-hidden />
-        </button>
-      </nav>
-      <label className="flex items-center gap-2 text-sm text-stone-500">
-        Por página
-        <select
-          value={size}
-          onChange={(e) => onSize(Number(e.target.value))}
-          className="h-8 cursor-pointer rounded-lg border border-stone-200 bg-white px-2 text-sm text-stone-800"
-        >
-          {[25, 50, 100].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span className="hidden sm:inline">Filas por página</span>
+          <Select value={String(size)} onValueChange={(v) => onSize(Number(v))}>
+            <SelectTrigger size="sm" className="w-[72px]" aria-label="Filas por página">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[25, 50, 100].map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <span className="text-sm text-muted-foreground tabular-nums">
+          Página {page + 1} de {pages}
+        </span>
+        <nav aria-label="Páginas" className="flex items-center gap-1">
+          <Button variant="outline" size="icon" className="size-8" disabled={page === 0} onClick={() => onPage(page - 1)} aria-label="Página anterior">
+            <ChevronLeft aria-hidden />
+          </Button>
+          <Button variant="outline" size="icon" className="size-8" disabled={page >= pages - 1} onClick={() => onPage(page + 1)} aria-label="Página siguiente">
+            <ChevronRight aria-hidden />
+          </Button>
+        </nav>
+      </div>
     </div>
   );
 }
-

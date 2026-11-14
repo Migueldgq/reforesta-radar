@@ -1,6 +1,6 @@
 "use client";
 
-import { AlarmClock, ChartNoAxesColumn, Compass, DoorOpen, Loader2, Target } from "lucide-react";
+import { AlarmClock, Check, ChevronDown, Compass, DoorOpen, Loader2, Target } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Opportunity, OpportunityKind } from "@/lib/opportunity";
 import {
@@ -30,10 +30,15 @@ import {
   type Triage,
 } from "./model";
 import { useRadar } from "./store";
-import { BarList, StatTile, WeekBars, type BarRow, type WeekBin } from "./charts";
+import { BarList, WeekBars, type BarRow, type WeekBin } from "./charts";
 import { FilterBar, weekChipLabel, type BarDim } from "./filters";
 import { ResultsTable } from "./ResultsTable";
-import { cx, ErrorState, PageHeader } from "./ui";
+import { ErrorState, PageHeader } from "./ui";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const WORK_LINE_KEYS = ["restauracion", "conservacion", "educacion", "agroambiental", NO_LINE];
 const KIND_KEYS: OpportunityKind[] = ["subvencion", "europa", "boletin", "licitacion", "empresa"];
@@ -159,8 +164,15 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
   for (const dim of Object.keys(filters.dims) as Dim[])
     for (const k of filters.dims[dim]) chips.push({ key: `${dim}:${k}`, label: `${DIM_TITLES[dim]}: ${dimLabel(dim, k)}`, remove: () => toggleDim(dim, k) });
 
+  const stats = [
+    { label: "Abiertas ahora", icon: DoorOpen, value: countOf(rows.plazo, "abierta"), caption: "Se pueden pedir hoy", on: filters.dims.plazo.includes("abierta"), toggle: () => toggleDim("plazo", "abierta") },
+    { label: "Cierran en ≤30 días", icon: AlarmClock, value: countOf(rows.plazo, "30d"), caption: "Hay que decidir pronto", on: filters.dims.plazo.includes("30d"), toggle: () => toggleDim("plazo", "30d") },
+    { label: "Encaje alto", icon: Target, value: countOf(rows.tier, "alto"), caption: "Se parecen a lo que hacéis", on: filters.dims.tier.includes("alto"), toggle: () => toggleDim("tier", "alto") },
+    { label: "Fuera de tus 4 fuentes", icon: Compass, value: fueraCount, caption: "Lo que hoy no estáis viendo", on: filters.flags.includes("fuera"), toggle: toggleFuera },
+  ];
+
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-8">
       <PageHeader
         title="Convocatorias"
         sub={
@@ -168,84 +180,65 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
             <span>
               {items.length} oportunidades de {sourceCount} fuentes · datos de {fmtAgo(fetchedAt)}
             </span>
-            {refreshing && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs text-stone-600 ring-1 ring-stone-200" role="status">
-                <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Actualizando…
-              </span>
-            )}
             {error && !refreshing && <span className="text-xs text-amber-800">No se pudo actualizar; mostrando la última copia.</span>}
           </span>
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile
-          label="Abiertas ahora"
-          icon={<DoorOpen className="h-4 w-4" aria-hidden />}
-          value={countOf(rows.plazo, "abierta")}
-          caption="Se pueden pedir hoy"
-          on={filters.dims.plazo.includes("abierta")}
-          onClick={() => toggleDim("plazo", "abierta")}
-        />
-        <StatTile
-          label="Cierran en ≤ 30 días"
-          icon={<AlarmClock className="h-4 w-4" aria-hidden />}
-          value={countOf(rows.plazo, "30d")}
-          caption="Hay que decidir pronto"
-          on={filters.dims.plazo.includes("30d")}
-          onClick={() => toggleDim("plazo", "30d")}
-        />
-        <StatTile
-          label="Encaje alto"
-          icon={<Target className="h-4 w-4" aria-hidden />}
-          value={countOf(rows.tier, "alto")}
-          caption="Se parecen a lo que hacéis"
-          on={filters.dims.tier.includes("alto")}
-          onClick={() => toggleDim("tier", "alto")}
-        />
-        <StatTile
-          label="Fuera de tus 4 fuentes"
-          icon={<Compass className="h-4 w-4" aria-hidden />}
-          value={fueraCount}
-          caption="Lo que hoy no estáis viendo"
-          on={filters.flags.includes("fuera")}
-          onClick={toggleFuera}
-        />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {stats.map((s) => (
+          <button
+            key={s.label}
+            type="button"
+            aria-pressed={s.on}
+            onClick={s.toggle}
+            className={cn(
+              "flex cursor-pointer flex-col gap-2 rounded-lg border bg-card p-4 text-left transition-colors outline-none hover:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:p-5",
+              s.on && "border-primary ring-1 ring-primary",
+            )}
+          >
+            <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground sm:text-sm">
+              <span className="truncate">{s.label}</span>
+              {s.on ? <Check className="size-4 shrink-0 text-primary" aria-hidden /> : <s.icon className="size-4 shrink-0 max-sm:hidden" aria-hidden />}
+            </span>
+            <span className="text-3xl font-semibold tracking-tight tabular-nums">{s.value}</span>
+            <span className="text-xs text-muted-foreground">{s.on ? "Filtro activo · pulsa para quitarlo" : s.caption}</span>
+          </button>
+        ))}
       </div>
 
-      <section aria-label="Resumen gráfico" className="rounded-2xl border border-stone-200/80 bg-white">
-        <div className="grid divide-y divide-stone-100 lg:grid-cols-[1.7fr_1fr_1fr] lg:divide-x lg:divide-y-0">
+      <Card className="gap-0 py-0" aria-label="Resumen gráfico">
+        <div className="grid divide-y lg:grid-cols-[1.6fr_1fr_1fr] lg:divide-x lg:divide-y-0">
           <WeekBars bins={bins} later={later} selected={filters.week} onSelect={(w) => setFilters((f) => ({ ...f, week: w }))} />
           <BarList title="Línea de trabajo" rows={rows.workLine} selected={filters.dims.workLine} onToggle={(k) => toggleDim("workLine", k)} total={total} maxRows={4} />
           <BarList title="Territorio" rows={rows.region} selected={filters.dims.region} onToggle={(k) => toggleDim("region", k)} total={total} maxRows={4} />
         </div>
-        {more && (
-          <div className="grid divide-y divide-stone-100 border-t border-stone-100 md:grid-cols-2 md:divide-y-0 lg:grid-cols-4 lg:divide-x">
-            <BarList title="Fuente" rows={rows.source} selected={filters.dims.source} onToggle={(k) => toggleDim("source", k)} total={total} maxRows={4} />
-            <BarList title="Tipo" rows={rows.kind} sort={false} selected={filters.dims.kind} onToggle={(k) => toggleDim("kind", k)} total={total} maxRows={5} />
-            <BarList title="Importe total" rows={rows.budget} sort={false} selected={filters.dims.budget} onToggle={(k) => toggleDim("budget", k)} total={total} maxRows={5} />
-            <BarList title="Vuestro seguimiento" rows={rows.triage} sort={false} selected={filters.dims.triage} onToggle={(k) => toggleDim("triage", k)} total={total} maxRows={5} />
+        <Collapsible open={more} onOpenChange={setMore}>
+          <CollapsibleContent>
+            <div className="grid divide-y border-t md:grid-cols-2 md:divide-y-0 lg:grid-cols-4 lg:divide-x">
+              <BarList title="Fuente" rows={rows.source} selected={filters.dims.source} onToggle={(k) => toggleDim("source", k)} total={total} maxRows={4} />
+              <BarList title="Tipo" rows={rows.kind} sort={false} selected={filters.dims.kind} onToggle={(k) => toggleDim("kind", k)} total={total} maxRows={5} />
+              <BarList title="Importe total" rows={rows.budget} sort={false} selected={filters.dims.budget} onToggle={(k) => toggleDim("budget", k)} total={total} maxRows={5} />
+              <BarList title="Vuestro seguimiento" rows={rows.triage} sort={false} selected={filters.dims.triage} onToggle={(k) => toggleDim("triage", k)} total={total} maxRows={5} />
+            </div>
+          </CollapsibleContent>
+          <div className="border-t px-3 py-2">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="text-muted-foreground">
+                <ChevronDown className={cn("transition-transform", more && "rotate-180")} aria-hidden />
+                {more ? "Menos gráficos" : "Más gráficos"}
+              </Button>
+            </CollapsibleTrigger>
           </div>
-        )}
-        <div className="border-t border-stone-100 px-4 py-2 sm:px-5">
-          <button
-            type="button"
-            aria-expanded={more}
-            onClick={() => setMore((v) => !v)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md py-1 text-xs font-medium text-stone-600 hover:text-stone-900"
-          >
-            <ChartNoAxesColumn className="h-3.5 w-3.5" aria-hidden />
-            {more ? "Menos gráficos" : "Más gráficos: fuente, tipo, importe y seguimiento"}
-          </button>
-        </div>
-      </section>
+        </Collapsible>
+      </Card>
 
-      <div className="flex flex-col">
+      <section aria-label="Convocatorias" className="flex flex-col gap-4">
         <FilterBar dims={barDims} chips={chips} total={total} fueraCount={fueraCount} />
-        <div className={cx("mt-4 transition-opacity", refreshing && "opacity-90")}>
+        <div className={cn("transition-opacity", refreshing && "opacity-90")}>
           <ResultsTable items={visible} onClear={clearAll} resetKey={JSON.stringify(filters)} />
         </div>
-      </div>
+      </section>
     </div>
   );
 }
@@ -270,37 +263,34 @@ function LoadingHome() {
   }, []);
   const src = SOURCES_LOADING[Math.floor(t / 2) % SOURCES_LOADING.length];
   return (
-    <div className="flex flex-col gap-5" aria-busy="true">
+    <div className="flex flex-col gap-8" aria-busy="true">
       <PageHeader title="Convocatorias" />
-      <div className="flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900" role="status">
-        <span className="relative flex h-2.5 w-2.5 shrink-0">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-500 opacity-60 motion-reduce:hidden" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-600" />
-        </span>
+      <div className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm" role="status">
+        <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
         <span>
-          Consultando <strong className="font-semibold">{src}</strong>…{" "}
-          <span className="text-brand-700">La primera carga tarda unos 20–30 segundos ({t} s).</span>
+          Consultando <span className="font-medium">{src}</span>…{" "}
+          <span className="text-muted-foreground">La primera carga tarda unos 20–30 segundos ({t} s).</span>
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-[104px] rounded-2xl border border-stone-200/80 bg-white p-4">
-            <div className="skeleton h-3 w-24" />
-            <div className="skeleton mt-4 h-7 w-14" />
+          <div key={i} className="space-y-4 rounded-lg border p-5">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-7 w-14" />
           </div>
         ))}
       </div>
-      <div className="h-[230px] rounded-2xl border border-stone-200/80 bg-white p-5">
-        <div className="skeleton h-3 w-32" />
-        <div className="mt-6 flex h-[140px] items-end gap-2 lg:w-[58%]">
+      <div className="rounded-lg border p-5">
+        <Skeleton className="h-3 w-32" />
+        <div className="mt-6 flex h-[120px] items-end gap-2 lg:w-[55%]">
           {[40, 70, 30, 90, 55, 20, 65, 45, 80, 35, 50, 25].map((h, i) => (
-            <div key={i} className="skeleton flex-1" style={{ height: `${h}%` }} />
+            <Skeleton key={i} className="flex-1" style={{ height: `${h}%` }} />
           ))}
         </div>
       </div>
-      <div className="rounded-2xl border border-stone-200/80 bg-white p-5">
+      <div className="space-y-4 rounded-lg border p-5">
         {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="skeleton mb-4 h-10 w-full last:mb-0" />
+          <Skeleton key={i} className="h-10 w-full" />
         ))}
       </div>
     </div>
