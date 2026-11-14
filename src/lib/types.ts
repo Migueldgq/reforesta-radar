@@ -153,7 +153,7 @@ export type ExternalSourceId =
 export interface SourceHealth {
   id: string;
   name: string;
-  category: "API Oficial" | "Boletín Oficial" | "Portal UE" | "Web / RSS" | "RSC Privado";
+  category: string;
   status: "ok" | "partial" | "error";
   count: number;
   url: string;
