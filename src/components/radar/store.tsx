@@ -148,10 +148,10 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       }
       setError(r.error ?? null);
       setLoading(false);
-      const again = !!r.data && (r.data.refreshing === true || r.data.stale === true);
+      const again = r.data?.refreshing === true;
       setRefreshing(again);
       if (pollRef.current) clearTimeout(pollRef.current);
-      if (again && r.data?.refreshing) pollRef.current = setTimeout(() => void fetchRef.current?.(false), 6000);
+      if (again) pollRef.current = setTimeout(() => void fetchRef.current?.(false), 6000);
     });
   }, []);
 
