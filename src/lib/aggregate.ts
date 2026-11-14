@@ -3,7 +3,7 @@ import { getBoeRadar } from "./boe";
 import { cachedSource, getAggregate, warmUp, type AggregateData, type SourceResult } from "./cache";
 import type { OpportunitiesResponse, Opportunity } from "./opportunity";
 import { RSC_OPPORTUNITIES } from "./rsc-opportunities";
-import { scoreRsc } from "./scoring";
+import { geographicFit, scoreRsc } from "./scoring";
 import { fetchBocyl, fetchBoja, fetchMontemadrid, fetchTed } from "./sources/extra";
 import { scrapeBocm, scrapeDog, scrapeEu, scrapeFundacionBiodiversidad } from "./sources/multi-source";
 import type { SourceHealth } from "./types";
@@ -67,10 +67,8 @@ async function build(force: boolean): Promise<AggregateData> {
     const prev = byId.get(o.id);
     if (!prev || o.fit.score > prev.fit.score) byId.set(o.id, o);
   }
-  const items = Array.from(byId.values()).sort((a, b) => {
-    if (b.fit.score !== a.fit.score) return b.fit.score - a.fit.score;
-    return (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999");
-  });
+  // Stored with BASE fit only; the geographic adjustment is applied per response (see rank()).
+  const items = Array.from(byId.values());
 
   const sources: SourceHealth[] = [
     ...results.map((r) => r.health),
@@ -88,9 +86,23 @@ async function build(force: boolean): Promise<AggregateData> {
   return { items, sources, fetchedAt: new Date().toISOString() };
 }
 
+/**
+ * Geographic fit on top of the cached base fit, then sort. Cached items are never mutated, so this is
+ * idempotent and a change to GEO_FIT applies to the next response without rebuilding any source.
+ */
+function rank(items: Opportunity[]): Opportunity[] {
+  return items
+    .map((o) => ({ ...o, fit: geographicFit(o) }))
+    .sort((a, b) => {
+      if (b.fit.score !== a.fit.score) return b.fit.score - a.fit.score;
+      return (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999");
+    });
+}
+
 /** Stale-while-revalidate; `refresh` forces a rebuild of every source (still deduped). */
-export function getOpportunities(refresh = false): Promise<OpportunitiesResponse> {
-  return getAggregate(build, refresh);
+export async function getOpportunities(refresh = false): Promise<OpportunitiesResponse> {
+  const data = await getAggregate(build, refresh);
+  return { ...data, items: rank(data.items) };
 }
 
 /** Called from instrumentation at server start. */

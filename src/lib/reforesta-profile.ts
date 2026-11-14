@@ -169,6 +169,7 @@ export const DEALBREAKER_TERMS: { term: string; warning: string; penalty: number
   { term: "subv. nom", warning: "Subvención nominativa (asignada a un beneficiario concreto).", penalty: 45 },
   { term: "subv.nom", warning: "Subvención nominativa (asignada a un beneficiario concreto).", penalty: 45 },
   { term: "concesion directa", warning: "Concesión directa (no es concurrencia competitiva abierta).", penalty: 40 },
+  { term: "subvencion directa", warning: "Concesión directa (no es concurrencia competitiva abierta).", penalty: 40 },
   { term: "concessio directa", warning: "Concesión directa (no es concurrencia competitiva abierta).", penalty: 40 },
   { term: "convenio", warning: "Convenio con una entidad concreta: no es una convocatoria abierta.", penalty: 35 },
   { term: "conveni", warning: "Convenio con una entidad concreta: no es una convocatoria abierta.", penalty: 35 },
@@ -219,3 +220,28 @@ export const DEALBREAKER_TERMS: { term: string; warning: string; penalty: number
   { term: "ganader", warning: "Orientada a explotaciones ganaderas.", penalty: 15 },
   { term: "explotaciones agrarias", warning: "Orientada a explotaciones agrarias.", penalty: 15 },
 ];
+
+/**
+ * Geographic fit: where Reforesta (based in Madrid) can realistically apply. Points are added to the
+ * base fit at aggregate time (see `geographicFit` in scoring.ts). Regions not listed get `otherRegion`.
+ */
+export const GEO_FIT = {
+  regions: {
+    "Comunidad de Madrid": { delta: 12, reason: "Comunidad de Madrid: vuestro territorio de trabajo." },
+    Estatal: { delta: 10, reason: "Ámbito estatal: podéis presentaros desde Madrid." },
+    // tiny nudge: open to Spanish entities, but mostly consortium research (Horizon) — don't lift those to "alto"
+    "Unión Europea": { delta: 1, reason: "Ámbito europeo: abierta a entidades españolas." },
+    "Castilla y León": { delta: 3, reason: "Castilla y León: comparte el Sistema Central con Madrid; actuar allí es plausible." },
+    "Castilla-La Mancha": { delta: 3, reason: "Castilla-La Mancha: región vecina donde una ONG madrileña puede actuar." },
+  } as Record<string, { delta: number; reason: string }>,
+  /** Ayuntamientos inside Comunidad de Madrid (Reforesta works with them). */
+  madridMunicipal: { delta: 4, reason: "Ayuntamiento de la Comunidad de Madrid: trabajáis con ayuntamientos de vuestro territorio." },
+  /** Regional government, diputación or university of another autonomous community. */
+  otherRegion: -12,
+  /** Ayuntamiento outside Comunidad de Madrid (or of an unidentified municipality). */
+  otherMunicipal: -22,
+  /** Out-of-territory calls stay "medio" at most, below closed in-territory calls (next edition). */
+  outOfTerritoryCap: 50,
+  /** Closed calls (next edition) stay below "alto" even with a territory bonus. */
+  closedCap: 55,
+};
