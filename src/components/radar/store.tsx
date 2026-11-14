@@ -13,6 +13,7 @@ import {
 } from "react";
 import type { OpportunitiesResponse, Opportunity } from "@/lib/opportunity";
 import { DEFAULT_FILTERS, filtersFromUrl, type Filters, type Triage } from "./model";
+import { applyProfileAll, DEFAULT_USER_PROFILE, isNeutral, loadProfile, saveProfile, subscribeProfile, type UserProfile } from "./profile";
 
 /* ---------- Last payload cached for instant paint ---------- */
 
@@ -101,7 +102,12 @@ async function request(force: boolean): Promise<{ data?: Payload; error?: string
 /* ---------- Context ---------- */
 
 interface RadarState {
+  /** Server payload with the team's Perfil adjustments applied (what every view should use). */
   data: Payload | null;
+  /** Untouched server payload. */
+  rawData: Payload | null;
+  profile: UserProfile;
+  setProfile: (p: UserProfile) => void;
   loading: boolean;
   refreshing: boolean;
   error: string | null;
@@ -129,7 +135,13 @@ export function useRadar(): RadarState {
 }
 
 export function RadarProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<Payload | null>(null);
+  const [rawData, setData] = useState<Payload | null>(null);
+  const profile = useSyncExternalStore(subscribeProfile, loadProfile, () => DEFAULT_USER_PROFILE);
+  // Always derived from the raw server items, so changing the profile re-ranks without refetching.
+  const data = useMemo<Payload | null>(
+    () => (rawData && !isNeutral(profile) ? { ...rawData, items: applyProfileAll(rawData.items, profile) } : rawData),
+    [rawData, profile],
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -209,6 +221,9 @@ export function RadarProvider({ children }: { children: ReactNode }) {
   const value = useMemo<RadarState>(
     () => ({
       data,
+      rawData,
+      profile,
+      setProfile: saveProfile,
       loading,
       refreshing,
       error,
@@ -223,7 +238,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       openDetail: setSelectedId,
       closeDetail: () => setSelectedId(null),
     }),
-    [data, loading, refreshing, error, reload, byId, triage, triageOf, setTriage, filters, selectedId],
+    [data, rawData, profile, loading, refreshing, error, reload, byId, triage, triageOf, setTriage, filters, selectedId],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -368,7 +368,7 @@ function detailToOpportunity(raw: BDNSRawSearchItem, d: BDNSDetailResponse): Opp
   const regiones = (d.regiones ?? []).map((r) => r.descripcion);
   const nivelAdmin = bdnsNivel(d.organo?.nivel1 || raw.nivel1);
   let region = inferComunidadAutonoma(regiones, `${d.organo?.nivel2 ?? ""} ${organismo}`, d.organo?.nivel1 || raw.nivel1);
-  if (region.startsWith("Estatal")) region = "Estatal";
+  if (region.startsWith("Estatal")) region = nivelAdmin === "Estatal" ? "Estatal" : "Sin determinar";
   const beneficiarios = (d.tiposBeneficiarios ?? []).map((b) => b.descripcion);
   const titulo = d.descripcion || raw.descripcion;
   const finalidad = d.descripcionFinalidad ?? "";
@@ -411,10 +411,7 @@ function detailToOpportunity(raw: BDNSRawSearchItem, d: BDNSDetailResponse): Opp
   } else if (estimatedEnd && !d.fechaFinSolicitud) {
     fit.warnings.push(`Fecha límite estimada a partir de «${d.textFin}»: confirmar en el extracto oficial.`);
   }
-  if (nivelAdmin === "Local") {
-    fit.score = Math.max(0, fit.score - 8);
-    fit.warnings.push("Convocatoria municipal: suele exigir sede o actividad en el municipio.");
-  }
+  // Territory (municipal / other region) is scored later, in aggregate.ts via geographicFit().
   fit.tier = tierFor(fit.score);
 
   const deadlineText =
@@ -456,7 +453,7 @@ function rawToOpportunity(raw: BDNSRawSearchItem): Opportunity {
   const organismo = [raw.nivel3, raw.nivel2].filter(Boolean).join(" · ") || raw.nivel1;
   const nivelAdmin = bdnsNivel(raw.nivel1);
   let region = inferComunidadAutonoma([], `${raw.nivel2 ?? ""} ${organismo}`, raw.nivel1);
-  if (region.startsWith("Estatal")) region = "Estatal";
+  if (region.startsWith("Estatal")) region = nivelAdmin === "Estatal" ? "Estatal" : "Sin determinar";
   const fit = scoreConvocatoria({
     titulo: raw.descripcion,
     organismo,
@@ -464,7 +461,7 @@ function rawToOpportunity(raw: BDNSRawSearchItem): Opportunity {
     extraText: raw.descripcionLeng ?? "",
     kind: "subvencion",
   });
-  fit.score = Math.max(0, fit.score - 5 - (nivelAdmin === "Local" ? 8 : 0));
+  fit.score = Math.max(0, fit.score - 5);
   fit.tier = tierFor(fit.score);
   fit.warnings.push("Ficha BDNS no cargada en este barrido: abre la convocatoria para ver plazo, tipo y beneficiarios.");
   return {

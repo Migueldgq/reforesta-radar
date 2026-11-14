@@ -2,6 +2,8 @@
 
 import { AlarmClock, Check, ChevronDown, Compass, DoorOpen, Loader2, Target } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { isNeutral } from "./profile";
 import type { Opportunity, OpportunityKind } from "@/lib/opportunity";
 import {
   BUDGET_BUCKETS,
@@ -82,7 +84,7 @@ export function HomeView() {
 }
 
 function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fetchedAt: string; sourceCount: number }) {
-  const { filters, setFilters, triageOf, refreshing, error } = useRadar();
+  const { filters, setFilters, triageOf, refreshing, error, profile } = useRadar();
   const [more, setMore] = useState(false);
   const hay = useMemo(() => new Map(items.map((o) => [o.id, haystackOf(o)])), [items]);
 
@@ -180,6 +182,7 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
             <span>
               {items.length} oportunidades de {sourceCount} fuentes · datos de {fmtAgo(fetchedAt)}
             </span>
+            {!isNeutral(profile) && <Link href="/perfil" className="inline-flex h-5 items-center rounded-full border px-2 text-xs text-foreground hover:bg-accent">Perfil ajustado</Link>}
             {error && !refreshing && <span className="text-xs text-amber-800">No se pudo actualizar; mostrando la última copia.</span>}
           </span>
         }

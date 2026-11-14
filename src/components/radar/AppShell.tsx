@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { AlarmClock, Building2, ChevronRight, Compass, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, RotateCw, Sprout, Target } from "lucide-react";
+import { AlarmClock, Building2, ChevronRight, Compass, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, RotateCw, SlidersHorizontal, Sprout, Target } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -38,6 +38,7 @@ const RADAR = [
 const TOOLS = [
   { href: "/analizar", label: "Analizar PDF", icon: FileSearch },
   { href: "/fuentes", label: "Fuentes", icon: Database },
+  { href: "/perfil", label: "Perfil", icon: SlidersHorizontal },
 ];
 
 type QuickKey = "abierta" | "30d" | "alto" | "fuera";

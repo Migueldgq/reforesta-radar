@@ -18,6 +18,7 @@ type MemoEntry = { at: number; ttl: number; value: unknown; persist: boolean };
 
 interface Store {
   loaded: boolean;
+  scoringVersion?: number;
   aggregate: { at: number; data: AggregateData } | null;
   aggregateInFlight: Promise<AggregateData> | null;
   sources: Map<string, SourceEntry>;
@@ -42,17 +43,30 @@ const store: Store = (g.__radarStore ??= {
 export const AGGREGATE_TTL_MS = 10 * 60 * 1000;
 const MEMO_MAX = 2000;
 const CACHE_FILE = path.join(process.cwd(), ".cache", "oportunidades.json");
+/**
+ * Bump when base scoring (scoring.ts / source mappers) changes: cached source results and the aggregate
+ * hold scored items and are discarded on mismatch (memo keeps raw upstream data and survives).
+ */
+const SCORING_VERSION = 4;
 
 // ---------------------------------------------------------------- disk
 
 function loadFromDisk() {
+  // In-memory store survives dev hot reload: drop scored data built by older scoring code.
+  if (store.scoringVersion !== SCORING_VERSION) {
+    store.scoringVersion = SCORING_VERSION;
+    store.aggregate = null;
+    store.sources.clear();
+  }
   if (store.loaded) return;
   store.loaded = true;
   try {
     const d = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
     if (d?.v !== 1) return;
-    store.aggregate ??= d.aggregate ?? null;
-    for (const [k, e] of Object.entries(d.sources ?? {})) if (!store.sources.has(k)) store.sources.set(k, e as SourceEntry);
+    if (d.scoring === SCORING_VERSION) {
+      store.aggregate ??= d.aggregate ?? null;
+      for (const [k, e] of Object.entries(d.sources ?? {})) if (!store.sources.has(k)) store.sources.set(k, e as SourceEntry);
+    }
     for (const [k, e] of Object.entries(d.memo ?? {})) if (!store.memo.has(k)) store.memo.set(k, e as MemoEntry);
   } catch {
     // no file yet / unreadable: start cold
@@ -65,7 +79,7 @@ async function saveToDisk() {
   saving = true;
   try {
     const memo = Object.fromEntries(Array.from(store.memo).filter(([, e]) => e.persist));
-    const json = JSON.stringify({ v: 1, aggregate: store.aggregate, sources: Object.fromEntries(store.sources), memo });
+    const json = JSON.stringify({ v: 1, scoring: SCORING_VERSION, aggregate: store.aggregate, sources: Object.fromEntries(store.sources), memo });
     await fsp.mkdir(path.dirname(CACHE_FILE), { recursive: true });
     const tmp = `${CACHE_FILE}.${process.pid}.tmp`;
     await fsp.writeFile(tmp, json);

@@ -37,11 +37,9 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      const arrayBuffer = await file.arrayBuffer();
-      const result = await analyzePdfBuffer(
-        new Uint8Array(arrayBuffer),
-        file.name
-      );
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (!isPdf(bytes)) return NextResponse.json({ error: NOT_PDF_ERROR }, { status: 415 });
+      const result = await analyzePdfBuffer(bytes, file.name);
       return NextResponse.json(result);
     }
 

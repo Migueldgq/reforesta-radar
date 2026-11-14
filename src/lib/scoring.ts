@@ -1,5 +1,6 @@
 import {
   DEALBREAKER_TERMS,
+  GEO_FIT,
   KEYWORD_RULES,
   ONG_POSITIVE_TERMS,
   REFORESTA_PROFILE,
@@ -132,7 +133,8 @@ export function scoreConvocatoria(input: ScoreInput): FitAnalysis {
     tipoNorm.includes("nominativa") ||
     hasTerm(titleNorm, "nominativa") ||
     hasTerm(titleNorm, "subv.nom") ||
-    hasTerm(titleNorm, "concesion directa");
+    hasTerm(titleNorm, "concesion directa") ||
+    hasTerm(titleNorm, "subvencion directa");
   const isCompetitive = !isDirect && !hasTerm(titleNorm, "convenio");
   if (tipoNorm.includes("concurrencia competitiva")) {
     raw += 12;
@@ -272,6 +274,65 @@ export function scoreConvocatoria(input: ScoreInput): FitAnalysis {
     warnings,
     daysRemaining,
     deadlineState,
+  };
+}
+
+const LOCAL_PREFIX = /^(ayuntamiento|ajuntament|concello|udala|ayto\.?)\s+(de\s+|del\s+|d'\s*)?/i;
+const SUPRAMUNICIPAL = /^(diputaci|cabildo|consell insular|consell comarcal|comarca|mancomunidad|junta general)/;
+const MINOR_WORDS = new Set(["de", "del", "la", "las", "los", "el", "y", "i", "en"]);
+
+function titleCase(s: string): string {
+  return s
+    .toLowerCase()
+    .split(" ")
+    .map((w, i) => (i > 0 && MINOR_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+}
+
+/**
+ * Geographic fit on top of the base fit: can Reforesta (Madrid) realistically apply from where it is?
+ * Pure: returns a new FitAnalysis and never mutates `base`, so it is safe to apply to cached items
+ * (always pass the stored base fit, never an already-adjusted one). Table: GEO_FIT in reforesta-profile.ts.
+ */
+export function geographicFit(o: { region: string; nivelAdmin: string; organismo: string; fit: FitAnalysis }): FitAnalysis {
+  const base = o.fit;
+  const region = o.region === "Principado de Asturias" ? "Asturias" : o.region;
+  const entity = o.organismo.split(" · ")[0].trim();
+  const entityNorm = normalizeText(entity);
+  const isMunicipal = o.nivelAdmin === "Local" && !SUPRAMUNICIPAL.test(entityNorm);
+  const known = region !== "Sin determinar" && region !== "";
+
+  let delta = 0;
+  let reason: string | null = null;
+  let warning: string | null = null;
+  if (o.nivelAdmin === "Privada" && (region === "Estatal" || !known)) {
+    // nationwide private/RSC programme: no territorial restriction
+  } else if (region === "Comunidad de Madrid") {
+    const g = isMunicipal ? GEO_FIT.madridMunicipal : GEO_FIT.regions[region];
+    delta = g.delta;
+    reason = g.reason;
+  } else if (isMunicipal) {
+    const name = titleCase(entity.replace(LOCAL_PREFIX, ""));
+    delta = GEO_FIT.otherMunicipal;
+    warning = `Convocatoria municipal de ${name}${known && region !== "Estatal" ? ` (${region})` : ""}: normalmente exige sede en el municipio.`;
+  } else if (GEO_FIT.regions[region] && (o.nivelAdmin !== "Estatal" || region === "Estatal")) {
+    delta = GEO_FIT.regions[region].delta;
+    reason = GEO_FIT.regions[region].reason;
+  } else if (known && region !== "Estatal" && o.nivelAdmin !== "Estatal" && o.nivelAdmin !== "UE") {
+    delta = GEO_FIT.otherRegion;
+    warning = `Convocatoria de ${region}: suele exigir sede o actuación allí.`;
+  }
+  if (delta === 0) return base;
+
+  let score = Math.max(0, Math.min(100, base.score + delta));
+  if (delta < 0) score = Math.min(score, GEO_FIT.outOfTerritoryCap);
+  if (base.deadlineState === "cerrada") score = Math.min(score, Math.max(base.score, GEO_FIT.closedCap));
+  return {
+    ...base,
+    score,
+    tier: tierFor(score),
+    reasons: reason ? [reason, ...base.reasons] : base.reasons,
+    warnings: warning ? [warning, ...base.warnings] : base.warnings,
   };
 }
 
