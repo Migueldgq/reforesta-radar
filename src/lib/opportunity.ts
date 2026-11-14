@@ -25,9 +25,14 @@ export interface Opportunity {
   summary: string | null;     // 1-3 sentences: purpose / finalidad if known
   rsc?: { whyReforesta: string; pitchAngle: string; cadence: string };
   fit: FitAnalysis;           // existing type in src/lib/types.ts
+  firstSeenAt?: string;       // ISO; only with the Postgres store (first ingest that saw it)
 }
 export interface OpportunitiesResponse {
   items: Opportunity[]; sources: SourceHealth[]; fetchedAt: string; cached: boolean;
   stale?: boolean;      // served from cache past its TTL (a background refresh was started)
   refreshing?: boolean; // a background refresh is running right now
+  storage?: "postgres" | "cache"; // where this response came from
+  lastIngestAt?: string | null;   // Postgres: finish time of the last successful ingest run
+  ingestStale?: boolean;          // Postgres: last successful ingest older than 12 h (or none yet)
+  storageError?: string;          // Postgres configured but unreachable: served from the cache path instead
 }

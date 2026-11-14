@@ -47,7 +47,7 @@ const CACHE_FILE = path.join(process.cwd(), ".cache", "oportunidades.json");
  * Bump when base scoring (scoring.ts / source mappers) changes: cached source results and the aggregate
  * hold scored items and are discarded on mismatch (memo keeps raw upstream data and survives).
  */
-const SCORING_VERSION = 10;
+export const SCORING_VERSION = 10;
 
 // ---------------------------------------------------------------- disk
 
@@ -132,6 +132,27 @@ export async function memo<T>(
     store.memoInFlight.set(key, run);
   }
   return run;
+}
+
+// ---------------------------------------------------------------- external memo persistence (ingest script)
+
+export type PersistedMemo = { key: string; value: unknown; expiresAt: number };
+
+/** Use an external store (Postgres fetch_cache) instead of .cache/oportunidades.json: never read the file. */
+export function seedMemo(entries: PersistedMemo[]) {
+  store.loaded = true;
+  store.scoringVersion = SCORING_VERSION;
+  // `at` is set just before any later persistedMemoSince(Date.now()) cut-off, so seeded entries are not re-saved.
+  // An expired entry still serves as the fallback value if its refetch fails (see memo()).
+  const at = Date.now() - 1;
+  for (const e of entries) store.memo.set(e.key, { at, ttl: e.expiresAt - at, value: e.value, persist: true });
+}
+
+/** Persistable memo entries written at or after `since` (ms epoch). */
+export function persistedMemoSince(since: number): PersistedMemo[] {
+  return Array.from(store.memo)
+    .filter(([, e]) => e.persist && e.at >= since)
+    .map(([key, e]) => ({ key, value: e.value, expiresAt: e.at + e.ttl }));
 }
 
 // ---------------------------------------------------------------- sources
