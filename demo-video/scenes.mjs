@@ -1,46 +1,46 @@
-// Single source of truth for the demo's scene order, timing and on-screen captions.
-// capture.mjs records the scenes with `route`; compose.mjs builds composition/index.html from this list.
-// Keep it in sync with GUION.md (same ids, durations and captions).
+// Single source of truth for the demo's scene order and on-screen text.
+// - "screen" scenes are recorded by capture.mjs (ACTIONS[id]); their length comes from the recording
+//   (captures/<id>.json). `captions[i]` is shown from the moment the recording logs `caption i`.
+// - "card" scenes are typographic cards rendered by HyperFrames with a fixed `duration`.
+// compose.mjs builds composition/index.html from this list. Keep GUION.md in sync.
 
 export const FPS = 30;
-export const CROSSFADE = 0.5; // seconds each scene overlaps the previous one
-
+export const CUT = 0.12; // seconds of overlap between scenes: a near-hard cut
 export const REPO_URL = "github.com/Migueldgq/reforesta-radar";
 
-/** kind: "card" = typographic card made in HyperFrames; "screen" = captured from the app. */
 export const SCENES = [
-  {
-    id: "intro",
-    kind: "card",
-    duration: 4,
-    eyebrow: "1hack A Coruña · Reto Reforesta",
-    title: "Reforesta Radar",
-    subtitle: "Encontrar y priorizar convocatorias, sin leerse cada base.",
-  },
+  { id: "landing", kind: "screen", route: "/landing", captions: [] },
   {
     id: "problema",
     kind: "card",
-    duration: 6,
+    duration: 3,
     eyebrow: "El problema",
     title: "4–5 solicitudes al año.",
-    subtitle: "Siempre las mismas cuatro fuentes. Decenas de páginas por convocatoria.",
+    subtitle: "Siempre las mismas cuatro fuentes.",
   },
-  { id: "fuentes", kind: "screen", route: "/fuentes", duration: 7, caption: "Once fuentes públicas y privadas, en una sola lista" },
-  { id: "inicio", kind: "screen", route: "/", duration: 10, caption: "Gráficos que filtran la tabla al pulsarlos" },
-  { id: "encaja", kind: "screen", route: "/", duration: 10, caption: "¿Encaja? Nota de 0 a 100, con sus motivos y sus avisos" },
-  { id: "ejemplos", kind: "screen", route: "/?cerradas=1", duration: 16, caption: "Las dos convocatorias del reto, encontradas: «prepara la siguiente edición»" },
-  { id: "fuera", kind: "screen", route: "/", duration: 7, caption: "«Fuera de tus 4 fuentes»: lo que hoy no estáis viendo" },
-  { id: "seguimiento", kind: "screen", route: "/seguimiento", duration: 8, caption: "Seguimiento: de «En estudio» a «A presentar», arrastrando" },
-  { id: "empresas", kind: "screen", route: "/empresas", duration: 7, caption: "Empresas: programas de RSC con motivo de encaje y ángulo de contacto" },
-  { id: "analizar", kind: "screen", route: "/analizar", duration: 9, caption: "Analizar PDF: unas bases convertidas en una ficha de decisión" },
+  { id: "fuentes", kind: "screen", route: "/fuentes", captions: ["11 fuentes, una sola lista"] },
+  { id: "mapa", kind: "screen", route: "/", captions: ["Todo de un vistazo", "Pulsa Madrid: la tabla responde"] },
+  { id: "encaje", kind: "screen", route: "/", captions: ["Hoy, nada abierto que encaje", "Lo que vuelve: próximas ediciones"] },
+  {
+    id: "ejemplos",
+    kind: "screen",
+    route: null, // continues on the page left by "encaje"
+    captions: ["Ejemplo del reto: cerró en junio", "¿Encaja? 85, y por qué", "A «En estudio»", "El otro ejemplo, justo debajo"],
+    lowerThirds: [
+      { chip: "Ejemplo del reto", title: "Subvenciones a entidades sin ánimo de lucro · proyectos ambientales 2026", meta: "BDNS 904719 · Comunidad de Madrid" },
+      { chip: "Ejemplo del reto", title: "Actividades de interés general · protección del medio ambiente 2026", meta: "BDNS 923290 · MITECO" },
+    ],
+  },
+  { id: "seguimiento", kind: "screen", route: "/seguimiento", captions: ["Seguimiento: arrastra y decide"] },
+  { id: "perfil", kind: "screen", route: "/perfil", captions: ["Perfil: ajustad el criterio", "El efecto, al momento"] },
+  { id: "empresas", kind: "screen", route: "/empresas", captions: ["Empresas: el canal RSC"] },
+  { id: "analizar", kind: "screen", route: "/analizar", captions: ["Unas bases en PDF…", "…una ficha de decisión"] },
   {
     id: "outro",
     kind: "card",
-    duration: 6,
+    duration: 3,
     eyebrow: "Reforesta Radar",
     title: "Menos horas leyendo bases, más horas en el monte.",
     subtitle: REPO_URL,
   },
 ];
-
-export const totalDuration = () => SCENES.reduce((t, s) => t + s.duration, 0) - CROSSFADE * (SCENES.length - 1);

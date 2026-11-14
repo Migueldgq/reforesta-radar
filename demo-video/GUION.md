@@ -1,28 +1,34 @@
-# Guion del vídeo de demo — Reforesta Radar
+# Guion del vídeo de demo — Reforesta Radar (v2, dinámico)
 
-Duración total: **≈85 s** (11 escenas, fundidos de 0,5 s entre ellas). 1920×1080, 30 fps, sin música.
-Los ids, duraciones y rótulos de esta tabla son los de `scenes.mjs`: si cambias uno, cambia el otro.
+Duración objetivo: **55–60 s**. 1920×1080, 30 fps, H.264 + AAC. Sin música ni locución: solo efectos (clic en cada clic, un *whoosh* suave en cortes y zooms).
+Los ids y rótulos son los de `scenes.mjs`. La duración de cada escena de pantalla sale de la grabación (`captures/<id>.json`): no se fija a mano.
 
-Hilo: el problema → el radar lee 11 fuentes → decide por ti qué encaja → encuentra las convocatorias del reto → os enseña lo que no veíais → seguimiento → empresas → PDF → cierre.
-Criterios del jurado (RETO.md): **el problema** (escenas 1–2, 7), **funciona con convocatorias reales** (escenas 3, 6, 10), **el lunes** (sin cuentas ni claves; escenas 8 y 11).
+Ritmo: cortes casi secos (0,12 s), desplazamientos del cursor y scroll acelerados ×2,5–3, y a velocidad real en el momento que importa. Cada momento clave lleva un zoom (×1,4–1,9) centrado en la interacción.
 
-| # | id | Dur. | En pantalla | Rótulo en pantalla | Locución (opcional) |
+Historia honesta: **hoy no hay ninguna convocatoria abierta con encaje alto para Reforesta**; el radar enseña lo que volverá y cuándo cerró, para prepararlo con tiempo.
+
+| # | id | ≈Dur. | En pantalla | Zoom / efecto | Rótulo (≤6 palabras) |
 |---|---|---|---|---|---|
-| 1 | `intro` | 4 s | Tarjeta: «1hack A Coruña · Reto Reforesta» / **Reforesta Radar** | Encontrar y priorizar convocatorias, sin leerse cada base. | «Reforesta Radar: encontrar y priorizar convocatorias sin leerse cada base.» |
-| 2 | `problema` | 6 s | Tarjeta de texto | **4–5 solicitudes al año.** Siempre las mismas cuatro fuentes. Decenas de páginas por convocatoria. | «Hoy Reforesta presenta cuatro o cinco solicitudes al año. Las encuentra revisando siempre las mismas cuatro fuentes y leyendo bases de decenas de páginas.» |
-| 3 | `fuentes` | 7 s | `/fuentes`: tabla con el estado de cada fuente (Funciona / Parcial / Sin respuesta) y cuántos resultados aporta; scroll suave. | 01 · Once fuentes públicas y privadas, en una sola lista | «El radar consulta once fuentes —BDNS, BOE, la UE, boletines autonómicos, fundaciones y empresas— y lo junta todo en una lista.» |
-| 4 | `inicio` | 10 s | `/`: cifras de arriba y gráficos. Se pulsa una barra de «Cuándo cierran» y luego «Restauración de ecosistemas»: la tabla se filtra. Scroll a la tabla; «Limpiar». | 02 · Gráficos que filtran la tabla al pulsarlos | «En Inicio, cada gráfico es un filtro: cuándo cierran, línea de trabajo, territorio.» |
-| 5 | `encaja` | 10 s | `/`: se abre la primera convocatoria. Panel de detalle con «¿Encaja?», nota de 0 a 100, motivos y avisos; se marca «En estudio». | 03 · ¿Encaja? Nota de 0 a 100, con sus motivos y sus avisos | «Cada convocatoria trae una nota y, sobre todo, el porqué: motivos y avisos en frases cortas. Sin IA generativa: reglas que se pueden leer.» |
-| 6 | `ejemplos` | 16 s | `/?cerradas=1`: se busca «científica» → BDNS 923290 (MITECO); luego «madrid ambientales» → BDNS 904719 (Comunidad de Madrid). En ambos, el motivo «la edición actual cerró el …; prepara la siguiente con tiempo». | 04 · Las dos convocatorias del reto, encontradas: «prepara la siguiente edición» | «Las dos convocatorias de ejemplo del reto aparecen. Ya cerraron, y por eso el radar las guarda: como aviso para preparar la próxima edición con tiempo.» |
-| 7 | `fuera` | 7 s | `/`: se pulsa la cifra «Fuera de tus 4 fuentes»; la tabla muestra solo lo que viene de fuera de MITECO, Fundación Biodiversidad, Comunidad de Madrid y Agenda 2030. | 05 · «Fuera de tus 4 fuentes»: lo que hoy no estáis viendo | «Y marca lo que viene de fuera de vuestras cuatro fuentes: la gran mayoría de los resultados.» |
-| 8 | `seguimiento` | 8 s | `/seguimiento`: tablero En estudio / A presentar / Presentada / Descartada; se arrastra una tarjeta de «En estudio» a «A presentar». | 06 · Seguimiento: de «En estudio» a «A presentar», arrastrando | «Lo que interesa pasa a un tablero, hasta presentarlo. La columna Presentada cuenta las solicitudes del año.» |
-| 9 | `empresas` | 7 s | `/empresas`: programas de RSC y fundaciones con motivo de encaje, importe orientativo y ángulo para el primer contacto; scroll. | 07 · Empresas: programas de RSC con motivo de encaje y ángulo de contacto | «Para el canal de empresas, que hoy está a cero: programas seleccionados, por qué encajan y cómo abrir la conversación.» |
-| 10 | `analizar` | 9 s | `/analizar`: se pulsa el PDF de ejemplo «Comunidad de Madrid · Orden 1689/2026»; aparece la ficha (nota, motivos, avisos, quién puede pedirla, dinero, plazos, requisitos); scroll. | 08 · Analizar PDF: unas bases convertidas en una ficha de decisión | «¿Unas bases de doce páginas? Se suben y en segundos hay una ficha con la misma puntuación que el resto del radar.» |
-| 11 | `outro` | 6 s | Tarjeta final | **Menos horas leyendo bases, más horas en el monte.** github.com/Migueldgq/reforesta-radar | «Sin cuentas, sin claves, sin base de datos: se abre y funciona. Menos horas leyendo bases, más horas en el monte.» |
+| 0 | `landing` | 3,8 s | `/landing`: animación de entrada del hero («Cada convocatoria que se escapa es monte que no se planta»). Arranque en frío. | — | — |
+| 1 | `problema` | 3 s | Tarjeta: **4–5 solicitudes al año.** Siempre las mismas cuatro fuentes. | palabras que entran | — |
+| 2 | `fuentes` | 3 s | `/fuentes`: tabla de las 11 fuentes con su estado. | ×1,45 sobre la tabla | 01 · 11 fuentes, una sola lista |
+| 3 | `mapa` | 6 s | `/`: vista general; clic en **Comunidad de Madrid** en el mapa; scroll a la tabla, ya filtrada. | ×1,8 en Madrid (clic) → ×1,4 en la tabla | 02 · Todo de un vistazo → Pulsa Madrid: la tabla responde |
+| 4 | `encaje` | 5,5 s | Tarjeta **Encaje alto 20 — «Ninguna abierta hoy · ver próximas ediciones»**; clic; pestaña **Próximas ediciones**. | ×1,9 en la tarjeta → ×1,6 en la pestaña | 03 · Hoy, nada abierto que encaje → Lo que vuelve: próximas ediciones |
+| 5 | `ejemplos` | 13 s | Fila **BDNS 904719** (Comunidad de Madrid, ejemplo del reto) con «Cerró el 8 jun · próxima edición»; se abre: **85 · Sí, merece la pena estudiarla** y sus motivos; se marca **En estudio**; se cierra y justo debajo está **BDNS 923290** (MITECO), el otro ejemplo. | ×1,9 en la etiqueta → ×1,6 en el veredicto → ×1,7 en «En estudio» → ×1,6 en la fila 923290. Rótulo inferior animado para cada ejemplo. | 04 · Ejemplo del reto: cerró en junio → ¿Encaja? 85, y por qué → A «En estudio» → El otro ejemplo, justo debajo |
+| 6 | `seguimiento` | 4,5 s | `/seguimiento`: se arrastra la tarjeta de 904719 de «En estudio» a «A presentar». | ×1,35 siguiendo el arrastre | 05 · Seguimiento: arrastra y decide |
+| 7 | `perfil` | 5,7 s | `/perfil`: «Educación ambiental» → **Mucho más**; el panel «Efecto de vuestros ajustes» cambia al momento (Encaje alto 0 → N, notas «antes → ahora»). | ×1,6 en el control → ×1,6 en el panel | 06 · Perfil: ajustad el criterio → El efecto, al momento |
+| 8 | `empresas` | 4 s | `/empresas`: programas de RSC con motivo de encaje. | ×1,5 en la primera tarjeta | 07 · Empresas: el canal RSC |
+| 9 | `analizar` | 5,5 s | `/analizar`: PDF de ejemplo «Comunidad de Madrid · Orden 1689/2026» → ficha con nota /100, motivos y avisos (la espera de la extracción se corta). | ×1,6 en el botón → ×1,7 en el veredicto | 08 · Unas bases en PDF… → …una ficha de decisión |
+| 10 | `outro` | 3 s | Tarjeta: **Menos horas leyendo bases, más horas en el monte.** github.com/Migueldgq/reforesta-radar | palabras que entran | — |
+
+## Locución opcional (≈110 palabras, si se graba)
+
+«Cada convocatoria que se escapa es monte que no se planta. Reforesta presenta cuatro o cinco solicitudes al año, buscando siempre en las mismas cuatro fuentes. El radar lee once. En Inicio, todo de un vistazo: pulsa Madrid y la tabla responde. Hoy no hay nada abierto que encaje de verdad; pero el radar enseña lo que vuelve. La convocatoria de ejemplo del reto, la de la Comunidad de Madrid: un 85, y el porqué. La marcamos en estudio; la del MITECO está justo debajo. En Seguimiento se arrastra hasta presentarla. En Perfil ajustáis el criterio y veis el efecto al momento. Empresas para el canal RSC, y cualquier PDF de bases, convertido en una ficha. Menos horas leyendo bases, más horas en el monte.»
+
+Si se añade, la voz manda: alarga las pausas (`sleep`) de `capture.mjs` donde haga falta y vuelve a capturar.
 
 ## Notas
 
-- **Cifras**: el guion no cita números concretos (547 resultados, 513 de fuera…) porque los datos son en vivo y cambian cada día; lo que se ve en pantalla es el dato del día de la grabación.
-- **Locución**: ≈150 palabras, cabe en ≈75 s a ritmo tranquilo. Si se graba, el ritmo de la voz manda: ajusta las duraciones en `scenes.mjs`.
-- **Escena 10**: se usa el PDF de Madrid (12 páginas) porque el de MITECO es un extracto de 3 páginas y su ficha sale casi vacía («No se pudo extraer un resumen automático»).
-- Todo lo que se afirma sale del README: 11 fuentes, nota 0–100 con motivos y avisos, sin IA generativa ni claves, las dos convocatorias del reto como «próxima edición», «Fuera de tus 4 fuentes», tablero con columna Presentada, vista Empresas, ficha de PDF.
+- Las cifras que se ven (20 de encaje alto, 85, 84…) son las del día de la grabación; el guion no las cita de memoria.
+- Se usa el PDF de Madrid (12 páginas): el de MITECO es un extracto de 3 páginas y su ficha sale casi vacía.
+- Lo que se afirma está en el README (11 fuentes, nota 0–100 con motivos, ediciones cerradas como «próxima edición», tablero de seguimiento, empresas, ficha de PDF, sin cuentas ni claves) o se ve en pantalla en la app actual (mapa, pestaña «Próximas ediciones», Perfil). El README aún no describe el mapa ni el Perfil: conviene añadirlos antes de entregar.
