@@ -1,0 +1,203 @@
+/*
+ * Landing-only motion. Rules:
+ * - Final (visible, static) state is the default. Hidden "before" states only apply under
+ *   `html.lp-ready` (added by <MotionRoot> after hydration, so no-JS shows everything) and
+ *   `prefers-reduced-motion: no-preference`.
+ * - Only opacity and transform animate. Colours come from theme tokens.
+ */
+
+.lp-root {
+  --lp-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+html:has(.lp-root) {
+  scroll-padding-top: 5rem;
+}
+
+/* ---------- Sticky nav: hairline + denser background once scrolled ---------- */
+.lp-nav {
+  border-bottom: 1px solid transparent;
+  transition: border-color 200ms, background-color 200ms;
+}
+html[data-lp-scrolled] .lp-nav {
+  border-bottom-color: var(--border);
+}
+
+/* ---------- Micro-interactions ---------- */
+.lp-root [data-slot="button"] {
+  transition: background-color 150ms, color 150ms, box-shadow 150ms, transform 150ms var(--lp-ease);
+}
+.lp-root [data-slot="button"]:active {
+  transform: translateY(1px) scale(0.98);
+}
+.lp-link {
+  text-decoration: none;
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
+  transition: background-size 250ms var(--lp-ease), color 150ms;
+}
+.lp-link:hover,
+.lp-link:focus-visible {
+  background-size: 100% 1px;
+}
+.lp-lift {
+  transition: transform 200ms var(--lp-ease), box-shadow 200ms;
+}
+.lp-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px -12px color-mix(in oklab, var(--foreground) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.lp-root) {
+    scroll-behavior: smooth;
+  }
+
+  /* ---------- Hero: load sequence ---------- */
+  .lp-enter,
+  .lp-word {
+    animation: lp-rise 750ms var(--lp-ease) both;
+    animation-delay: calc(var(--lp-i, 0) * 90ms);
+  }
+  .lp-word {
+    display: inline-block;
+    animation-delay: calc(120ms + var(--w, 0) * 45ms);
+  }
+
+  /* Hero product frame: tilted, settles flat as the page scrolls. */
+  @supports (animation-timeline: scroll()) {
+    .lp-tilt {
+      animation: lp-settle linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 480px;
+      transform-origin: 50% 0;
+    }
+  }
+
+  /* Rows of the live table arrive one by one (also when streamed in). */
+  .lp-row {
+    animation: lp-fade-up 500ms var(--lp-ease) both;
+    animation-delay: calc(700ms + var(--i, 0) * 90ms);
+  }
+
+  /* ---------- Scroll reveals ---------- */
+  .lp-ready [data-reveal],
+  .lp-ready [data-stagger] > * {
+    transition: opacity 700ms var(--lp-ease), transform 700ms var(--lp-ease);
+    transition-delay: calc(var(--i, 0) * 80ms);
+  }
+  .lp-ready [data-reveal]:not(.is-in),
+  .lp-ready [data-stagger]:not(.is-in) > * {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  /* Bars and meters grow once their block is revealed. */
+  .lp-ready .lp-bar {
+    transform-origin: bottom;
+    transition: transform 900ms var(--lp-ease);
+    transition-delay: calc(250ms + var(--i, 0) * 45ms);
+  }
+  .lp-ready .lp-meter {
+    transform-origin: left;
+    transition: transform 900ms var(--lp-ease);
+    transition-delay: calc(250ms + var(--i, 0) * 45ms);
+  }
+  .lp-ready [data-reveal]:not(.is-in) .lp-bar {
+    transform: scaleY(0);
+  }
+  .lp-ready [data-reveal]:not(.is-in) .lp-meter {
+    transform: scaleX(0);
+  }
+
+  /* ---------- "Cómo funciona" scenes (play once, in order) ---------- */
+  .lp-ready .lp-src {
+    transition: opacity 400ms, transform 500ms var(--lp-ease);
+    transition-delay: calc(var(--d, 0ms) + var(--i) * 140ms);
+  }
+  .lp-ready .lp-line {
+    transition: opacity 400ms, transform 500ms var(--lp-ease);
+    transition-delay: calc(var(--d, 0ms) + 250ms + var(--i) * 140ms);
+  }
+  .lp-ready [data-reveal]:not(.is-in) .lp-scene .lp-src {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  .lp-ready [data-reveal]:not(.is-in) .lp-scene .lp-line {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+
+  .lp-ready .is-in .lp-scene .lp-rank {
+    animation: lp-sort 900ms var(--lp-ease) both;
+    animation-delay: calc(var(--d, 0ms) + 500ms);
+  }
+  .lp-ready [data-reveal]:not(.is-in) .lp-scene .lp-rank {
+    transform: translateY(var(--from));
+  }
+
+  .lp-ready .is-in .lp-scene .lp-card {
+    animation: lp-move 1800ms var(--lp-ease) both;
+    animation-delay: calc(var(--d, 0ms) + 400ms);
+  }
+  .lp-ready [data-reveal]:not(.is-in) .lp-scene .lp-card {
+    transform: translateX(0);
+  }
+}
+
+/* Final positions (also the reduced-motion / no-JS state). */
+.lp-rank {
+  transform: translateY(var(--to));
+}
+.lp-card {
+  transform: translateX(calc(2 * (100% + 0.375rem)));
+}
+
+@keyframes lp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+@keyframes lp-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes lp-settle {
+  from {
+    transform: perspective(1400px) rotateX(10deg) scale(0.95);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes lp-sort {
+  from {
+    transform: translateY(var(--from));
+  }
+  to {
+    transform: translateY(var(--to));
+  }
+}
+@keyframes lp-move {
+  0%,
+  15% {
+    transform: translateX(0);
+  }
+  45%,
+  60% {
+    transform: translateX(calc(100% + 0.375rem));
+  }
+  100% {
+    transform: translateX(calc(2 * (100% + 0.375rem)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-tilt,
+  .lp-root * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
