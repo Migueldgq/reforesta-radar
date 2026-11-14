@@ -88,6 +88,7 @@ export const KEYWORD_RULES: {
       { term: "patrimonio natural", weight: 16, label: "Patrimonio natural" },
       { term: "espacios naturales", weight: 14, label: "Espacios naturales" },
       { term: "espacios protegidos", weight: 14, label: "Espacios naturales" },
+      { term: "parques nacionales", weight: 12, label: "Parques nacionales" },
       { term: "red natura", weight: 16, label: "Red Natura 2000" },
       { term: "natura 2000", weight: 16, label: "Red Natura 2000" },
       { term: "reserva de la biosfera", weight: 12, label: "Reserva de la Biosfera" },
@@ -124,6 +125,7 @@ export const KEYWORD_RULES: {
       { term: "educacio ambiental", weight: 20, label: "Educación ambiental" },
       { term: "educacion para la sostenibilidad", weight: 16, label: "Educación ambiental" },
       { term: "sensibilizacion ambiental", weight: 14, label: "Sensibilización" },
+      { term: "sensibilizacion", weight: 8, label: "Sensibilización" },
       { term: "voluntariado ambiental", weight: 18, label: "Voluntariado ambiental" },
       { term: "voluntariado", weight: 6, label: "Voluntariado" },
       { term: "divulgacion ambiental", weight: 10, label: "Divulgación" },
@@ -170,6 +172,13 @@ export const DEALBREAKER_TERMS: { term: string; warning: string; penalty: number
   { term: "subv.nom", warning: "Subvención nominativa (asignada a un beneficiario concreto).", penalty: 45 },
   { term: "concesion directa", warning: "Concesión directa (no es concurrencia competitiva abierta).", penalty: 40 },
   { term: "subvencion directa", warning: "Concesión directa (no es concurrencia competitiva abierta).", penalty: 40 },
+  { term: "aportacion al", warning: "Aportación a una entidad concreta: no es una convocatoria abierta.", penalty: 40 },
+  { term: "aportacion a la", warning: "Aportación a una entidad concreta: no es una convocatoria abierta.", penalty: 40 },
+  { term: "transferencia al", warning: "Transferencia a una entidad concreta: no es una convocatoria abierta.", penalty: 40 },
+  { term: "transferencia a la", warning: "Transferencia a una entidad concreta: no es una convocatoria abierta.", penalty: 40 },
+  { term: "contribucion voluntaria", warning: "Contribución a un organismo concreto: no es una convocatoria abierta.", penalty: 40 },
+  { term: "convocatoria instrumental", warning: "Convocatoria instrumental de cooperación internacional: proyecto en otro país con socio predefinido.", penalty: 25 },
+  { term: "anulada", warning: "Convocatoria anulada.", penalty: 60 },
   { term: "concessio directa", warning: "Concesión directa (no es concurrencia competitiva abierta).", penalty: 40 },
   { term: "convenio", warning: "Convenio con una entidad concreta: no es una convocatoria abierta.", penalty: 35 },
   { term: "conveni", warning: "Convenio con una entidad concreta: no es una convocatoria abierta.", penalty: 35 },
@@ -204,7 +213,8 @@ export const DEALBREAKER_TERMS: { term: string; warning: string; penalty: number
   { term: "fin de grado", warning: "Premio a trabajos académicos (TFG/TFM), no financia proyectos de una ONG.", penalty: 40 },
   { term: "fin de estudios", warning: "Premio a trabajos académicos (TFG/TFM), no financia proyectos de una ONG.", penalty: 40 },
   { term: "tesis doctoral", warning: "Premio a trabajos académicos, no financia proyectos de una ONG.", penalty: 40 },
-  { term: "becas", warning: "Becas de formación para personas físicas.", penalty: 30 },
+  { term: "beca de", warning: "Becas de formación para personas físicas.", penalty: 30 },
+    { term: "becas", warning: "Becas de formación para personas físicas.", penalty: 30 },
   { term: "vehiculo", warning: "Ayuda a vehículos/movilidad, fuera del ámbito de Reforesta.", penalty: 30 },
   { term: "eficiencia energetica", warning: "Eficiencia energética, fuera de las líneas de Reforesta.", penalty: 20 },
   { term: "autoconsumo", warning: "Energía/autoconsumo, fuera de las líneas de Reforesta.", penalty: 25 },
@@ -212,7 +222,8 @@ export const DEALBREAKER_TERMS: { term: string; warning: string; penalty: number
   { term: "ampas", warning: "Dirigida a AMPAS/centros educativos.", penalty: 20 },
   { term: "afas", warning: "Dirigida a AMPAS/centros educativos.", penalty: 20 },
   { term: "asociaciones de madres y padres", warning: "Dirigida a AMPAS/centros educativos.", penalty: 20 },
-  { term: "centros educativos", warning: "Dirigida a centros educativos.", penalty: 15 },
+  { term: "centros de educacion ambiental", warning: "Programa para grupos escolares (alumnado y profesorado de centros educativos), no para ONG.", penalty: 30 },
+    { term: "centros educativos", warning: "Dirigida a centros educativos.", penalty: 15 },
   { term: "formacion profesional", warning: "Formación profesional, fuera de las líneas de Reforesta.", penalty: 20 },
   { term: "clubes", warning: "Convocatoria genérica municipal (deporte/cultura) con línea ambiental menor.", penalty: 12 },
   { term: "deportivas", warning: "Convocatoria genérica municipal (deporte/cultura) con línea ambiental menor.", penalty: 12 },
@@ -229,11 +240,12 @@ export const GEO_FIT = {
   regions: {
     "Comunidad de Madrid": { delta: 12, reason: "Comunidad de Madrid: vuestro territorio de trabajo." },
     Estatal: { delta: 10, reason: "Ámbito estatal: podéis presentaros desde Madrid." },
-    // tiny nudge: open to Spanish entities, but mostly consortium research (Horizon) — don't lift those to "alto"
-    "Unión Europea": { delta: 1, reason: "Ámbito europeo: abierta a entidades españolas." },
-    "Castilla y León": { delta: 3, reason: "Castilla y León: comparte el Sistema Central con Madrid; actuar allí es plausible." },
-    "Castilla-La Mancha": { delta: 3, reason: "Castilla-La Mancha: región vecina donde una ONG madrileña puede actuar." },
-  } as Record<string, { delta: number; reason: string }>,
+    // Horizon research topics are capped separately (KIND_FIT.horizonCap), so this mainly lifts LIFE
+    "Unión Europea": { delta: 4, reason: "Ámbito europeo: abierta a entidades españolas." },
+    // neighbours: plausible but usually require acting there, so capped below the core territory's best calls
+    "Castilla y León": { delta: 3, cap: 70, reason: "Castilla y León: comparte el Sistema Central con Madrid; actuar allí es plausible." },
+    "Castilla-La Mancha": { delta: 3, cap: 70, reason: "Castilla-La Mancha: región vecina donde una ONG madrileña puede actuar." },
+  } as Record<string, { delta: number; reason: string; cap?: number }>,
   /** Ayuntamientos inside Comunidad de Madrid (Reforesta works with them). */
   madridMunicipal: { delta: 4, reason: "Ayuntamiento de la Comunidad de Madrid: trabajáis con ayuntamientos de vuestro territorio." },
   /** Regional government, diputación or university of another autonomous community. */
@@ -242,6 +254,25 @@ export const GEO_FIT = {
   otherMunicipal: -22,
   /** Out-of-territory calls stay "medio" at most, below closed in-territory calls (next edition). */
   outOfTerritoryCap: 50,
-  /** Closed calls (next edition) stay below "alto" even with a territory bonus. */
-  closedCap: 55,
+  /** Closed calls in territory other than competitive grants for non-profits (those keep their fit). */
+  closedCap: 52,
+};
+
+/**
+ * Actionability by kind of publication, applied after GEO_FIT (see `kindFit` in scoring.ts).
+ * A grant Reforesta can apply to must always outrank a tender, a bulletin notice or a research consortium.
+ */
+export const KIND_FIT = {
+  /** Bulletin entries that are not a call (resolutions, plan approvals, notices). */
+  bulletinCap: 45,
+  /** Tenders: service contracts, a secondary route for an NGO; at most top "medio", below the closed-grant pipeline. */
+  tenderPenalty: 15,
+  tenderCap: 57,
+  /** Horizon Europe topics need an international research consortium. */
+  horizonCap: 48,
+  /** Tenders/notices whose TITLE barely touches Reforesta's topics (e.g. "aves frescas" for a hospital kitchen). */
+  minTitleTopic: 12,
+  offTopicCap: 30,
+  /** Calls issued by a university usually target its own students/staff. */
+  universityCap: 45,
 };
