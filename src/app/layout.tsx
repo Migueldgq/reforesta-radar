@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { AppShell } from "@/components/radar/AppShell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Reforesta Radar — Detector y priorizador de convocatorias",
+  title: "Reforesta Radar",
   description:
     "Encuentra y prioriza convocatorias públicas, boletines y programas RSC para Reforesta. Menos horas leyendo bases, más horas en el monte.",
 };
@@ -24,8 +25,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-[#F7F6F2] text-stone-900 font-sans">
-        {children}
+      <body className="min-h-full flex flex-col bg-background text-stone-900 font-sans">
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

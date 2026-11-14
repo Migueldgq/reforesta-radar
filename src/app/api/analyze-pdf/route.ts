@@ -14,6 +14,15 @@ const SAMPLE_FILES: Record<string, { file: string; label: string }> = {
   },
 };
 
+const NOT_PDF_ERROR =
+  "El documento oficial no es un PDF con texto (puede ser un Word, una imagen o un enlace). Ábrelo desde la web oficial.";
+
+function isPdf(bytes: Uint8Array): boolean {
+  // "%PDF" may be preceded by a few junk bytes
+  const head = new TextDecoder("latin1").decode(bytes.slice(0, 1024));
+  return head.includes("%PDF");
+}
+
 export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get("content-type") || "";
@@ -51,7 +60,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.docId) {
-      const url = `https://www.infosubvenciones.es/bdnstrans/api/convocatorias/documentos?idDoc=${encodeURIComponent(
+      const url = `https://www.infosubvenciones.es/bdnstrans/api/convocatorias/documentos?vpd=GE&idDocumento=${encodeURIComponent(
         String(body.docId)
       )}`;
       const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
@@ -61,11 +70,11 @@ export async function POST(req: NextRequest) {
           { status: 502 }
         );
       }
-      const arrayBuffer = await res.arrayBuffer();
-      const result = await analyzePdfBuffer(
-        new Uint8Array(arrayBuffer),
-        body.fileName || `BDNS-doc-${body.docId}.pdf`
-      );
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (!isPdf(bytes)) {
+        return NextResponse.json({ error: NOT_PDF_ERROR }, { status: 415 });
+      }
+      const result = await analyzePdfBuffer(bytes, body.fileName || `BDNS-doc-${body.docId}.pdf`);
       return NextResponse.json(result);
     }
 
@@ -78,6 +87,18 @@ export async function POST(req: NextRequest) {
         "www.bocm.es",
         "bocm.es",
         "www.xunta.gal",
+        "xunta.gal",
+        "fundacion-biodiversidad.es",
+        "www.fundacion-biodiversidad.es",
+        "ec.europa.eu",
+        "api.tech.ec.europa.eu",
+        "ted.europa.eu",
+        "www.juntadeandalucia.es",
+        "bocyl.jcyl.es",
+        "www.bocyl.jcyl.es",
+        "contrataciondelestado.es",
+        "www.contrataciondelestado.es",
+        "www.fundacionmontemadrid.es",
       ];
       if (!allowedHosts.includes(parsed.hostname)) {
         return NextResponse.json(
@@ -92,9 +113,12 @@ export async function POST(req: NextRequest) {
           { status: 502 }
         );
       }
-      const arrayBuffer = await res.arrayBuffer();
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (!isPdf(bytes)) {
+        return NextResponse.json({ error: NOT_PDF_ERROR }, { status: 415 });
+      }
       const result = await analyzePdfBuffer(
-        new Uint8Array(arrayBuffer),
+        bytes,
         body.fileName || parsed.pathname.split("/").pop() || "documento.pdf"
       );
       return NextResponse.json(result);
