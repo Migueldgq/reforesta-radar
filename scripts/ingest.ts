@@ -19,9 +19,14 @@ const dryRun = process.argv.includes("--dry-run");
 const only = arg("source")?.split(",").map((s) => s.trim()).filter(Boolean);
 const trigger = arg("trigger") || process.env.INGEST_TRIGGER || process.env.GITHUB_EVENT_NAME || "manual";
 
+// The web timeouts in SOURCES are tuned for an interactive request; a cold batch run (no memo, BDNS doing
+// ~68 searches + ~230 details) needs far longer. Sources run in parallel, so the whole fetch phase is
+// bounded by this one value: 8 min leaves room for setup and the DB write inside the 15-min workflow limit.
+const BATCH_TIMEOUT_MS = 8 * 60 * 1000;
+
 type Job = { id: string; name: string; timeoutMs: number; fn: () => Promise<SourceResult> };
 const jobs: Job[] = [
-  ...SOURCES.map(([id, name, , timeoutMs, fn]) => ({ id, name, timeoutMs, fn })),
+  ...SOURCES.map(([id, name, , timeoutMs, fn]) => ({ id, name, timeoutMs: Math.max(timeoutMs, BATCH_TIMEOUT_MS), fn })),
   {
     id: "rsc",
     name: RSC_HEALTH.name,
@@ -33,7 +38,7 @@ const jobs: Job[] = [
   },
 ].filter((j) => !only?.length || only.includes(j.id));
 
-/** Same timeout as the web cache path; a timed-out or thrown source becomes an "error" run (rows untouched). */
+/** Batch timeout per source (BATCH_TIMEOUT_MS, not the web one); a timed-out or thrown source becomes an "error" run (rows untouched). */
 async function runSource(j: Job): Promise<SourceRunInput> {
   const startedAt = new Date();
   let timer: ReturnType<typeof setTimeout> | undefined;

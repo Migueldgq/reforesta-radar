@@ -11,7 +11,7 @@ import type { SourceHealth } from "./types";
 const HOUR = 60 * 60 * 1000;
 
 // [id, name, TTL, timeout, fetcher] — TTL matches how often each source publishes.
-// Also run by scripts/ingest.ts (same timeouts) when the Postgres store is configured.
+// Also run by scripts/ingest.ts (with its own longer timeouts) when the Postgres store is configured.
 export const SOURCES: [string, string, number, number, () => Promise<SourceResult>][] = [
   ["bdns", "BDNS", 2 * HOUR, 35000, getBdnsOpportunities],
   ["boe", "BOE", 3 * HOUR, 25000, () => getBoeRadar(true)],
