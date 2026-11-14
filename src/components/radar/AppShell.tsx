@@ -39,13 +39,6 @@ const TOOLS = [
   { href: "/analizar", label: "Analizar PDF", icon: FileSearch },
   { href: "/fuentes", label: "Fuentes", icon: Database },
 ];
-const TITLES: Record<string, string> = {
-  "/": "Convocatorias",
-  "/seguimiento": "Seguimiento",
-  "/empresas": "Empresas y fundaciones",
-  "/analizar": "Analizar PDF",
-  "/fuentes": "Fuentes",
-};
 
 type QuickKey = "abierta" | "30d" | "alto" | "fuera";
 const QUICK: { key: QuickKey; label: string; icon: typeof House }[] = [
@@ -92,13 +85,29 @@ function Header() {
     <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4 sm:px-6">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
-      <h1 className="truncate text-sm font-medium">{TITLES[path] ?? "Reforesta Radar"}</h1>
+      <Crumb path={path} />
       {refreshing && (
         <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
           <Loader2 className="size-3.5 animate-spin" aria-hidden /> Actualizando…
         </span>
       )}
     </header>
+  );
+}
+
+/** Quiet "Section / Page" label; the page's own h1 carries the title. */
+function Crumb({ path }: { path: string }) {
+  const tool = TOOLS.find((n) => path.startsWith(n.href));
+  const item = tool ?? RADAR.find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)));
+  if (!item) return null;
+  return (
+    <nav aria-label="Ruta" className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+      <span>{tool ? "Herramientas" : "Radar"}</span>
+      <ChevronRight className="size-3.5 shrink-0 opacity-60" aria-hidden />
+      <span className="truncate" aria-current="page">
+        {item.label}
+      </span>
+    </nav>
   );
 }
 

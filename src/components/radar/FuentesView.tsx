@@ -58,9 +58,9 @@ export function FuentesView() {
   const sources = data?.sources ?? [];
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+    <div className="flex w-full max-w-4xl flex-col gap-8">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">Fuentes</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Fuentes</h1>
         <p className="text-sm text-muted-foreground">De dónde salen los datos y cuándo se consultaron por última vez.</p>
       </header>
 

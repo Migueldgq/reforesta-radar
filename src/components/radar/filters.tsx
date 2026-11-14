@@ -126,7 +126,7 @@ export function FilterBar({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:w-56">
+        <div className="relative w-full sm:w-52">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input
             type="search"
@@ -147,7 +147,13 @@ export function FilterBar({
             onClear={() => setFilters((f) => ({ ...f, dims: { ...f.dims, [d.dim]: [] } }))}
           />
         ))}
-        <div className="flex h-9 items-center gap-2 px-1">
+        {chips.length > 0 && (
+          <Button variant="ghost" size="sm" className="h-9" onClick={clear}>
+            Limpiar
+            <X aria-hidden />
+          </Button>
+        )}
+        <div className="ml-auto flex h-9 items-center gap-2 pl-1">
           <Switch
             id={switchId}
             checked={fuera}
@@ -157,12 +163,6 @@ export function FilterBar({
             Fuera de tus 4 fuentes <span className="text-muted-foreground tabular-nums">{fueraCount}</span>
           </label>
         </div>
-        {chips.length > 0 && (
-          <Button variant="ghost" size="sm" className="h-9" onClick={clear}>
-            Limpiar
-            <X aria-hidden />
-          </Button>
-        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
