@@ -1,89 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import {
-  AlarmClock,
-  ArrowRight,
-  CalendarClock,
-  CalendarDays,
-  CircleCheck,
-  CircleDashed,
-  CircleDot,
-  CircleSlash,
-  GripVertical,
-  ListChecks,
-} from "lucide-react";
+import { ArrowRight, CalendarDays, GripVertical, ListChecks } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Opportunity } from "@/lib/opportunity";
-import type { FitAnalysis } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { daysLeft, fmtDate, isClosed, parseDay, tidy, TIER_LABELS, todayUTC, TRIAGE_LABELS, TRIAGE_ORDER, type Triage } from "./model";
+import { daysLeft, fmtDate, tidy, TRIAGE_LABELS, type Triage } from "./model";
 import { useRadar, type TriageEntry } from "./store";
-
-/* ---------- Small shared pieces (also used by EmpresasView) ---------- */
-
-export function StatusSelect({ o, className }: { o: Pick<Opportunity, "id" | "titulo" | "organismo" | "deadline">; className?: string }) {
-  const { triageOf, setTriage } = useRadar();
-  return (
-    <Select value={triageOf(o.id)} onValueChange={(v) => setTriage(o, v as Triage)}>
-      <SelectTrigger size="sm" aria-label="Estado de seguimiento" className={cn("shadow-none", className)}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {TRIAGE_ORDER.map((t) => (
-          <SelectItem key={t} value={t}>
-            {TRIAGE_LABELS[t]}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-export function DeadlineBadge({ o }: { o: Opportunity }) {
-  const d = daysLeft(o);
-  const opens = parseDay(o.opensAt);
-  if (isClosed(o))
-    return (
-      <Badge variant="secondary" className="text-muted-foreground">
-        <CircleSlash aria-hidden /> Cerrada
-      </Badge>
-    );
-  if (opens != null && opens > todayUTC())
-    return (
-      <Badge variant="outline" title={`Abre el ${fmtDate(o.opensAt)}`}>
-        <CalendarClock aria-hidden /> Abre el {fmtDate(o.opensAt)?.replace(/ de \d{4}$/, "")}
-      </Badge>
-    );
-  if (d == null)
-    return (
-      <Badge variant="outline" className="text-muted-foreground" title={o.deadlineText ?? undefined}>
-        <CalendarDays aria-hidden /> {o.kind === "empresa" ? "Todo el año" : "Sin fecha fija"}
-      </Badge>
-    );
-  const text = d === 0 ? "Cierra hoy" : d === 1 ? "Cierra mañana" : `Quedan ${d} días`;
-  const urgent = d <= 7;
-  return (
-    <Badge variant="outline" className={cn(urgent && "border-destructive/40 text-destructive")} title={`Cierra el ${fmtDate(o.deadline)}`}>
-      {urgent ? <AlarmClock aria-hidden /> : <CalendarDays aria-hidden />} {text}
-    </Badge>
-  );
-}
-
-export function ScoreBadge({ fit }: { fit: FitAnalysis }) {
-  const Icon = fit.tier === "alto" ? CircleCheck : fit.tier === "medio" ? CircleDot : CircleDashed;
-  return (
-    <Badge variant="secondary" title={`${TIER_LABELS[fit.tier]} · ${fit.score} de 100`}>
-      <Icon aria-hidden />
-      <span className="tabular-nums">{fit.score}</span>
-      <span className="sr-only">{TIER_LABELS[fit.tier]}</span>
-    </Badge>
-  );
-}
+import { DeadlineChip, ScoreChip, TriageSelect } from "./ui";
 
 /* ---------- Seguimiento ---------- */
 
@@ -118,7 +45,7 @@ export function PipelineView() {
   const next = active.find((r) => dl(r) !== Infinity);
 
   return (
-    <div className="flex flex-col gap-6 text-sm">
+    <div className="flex flex-col gap-8">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Seguimiento</h1>
         <p className="text-muted-foreground">Lo que estáis mirando, por fecha de cierre. Arrastra una tarjeta o cambia su estado. Se guarda en este navegador.</p>
@@ -359,12 +286,12 @@ function TrackCard({
         <p className="truncate text-xs text-muted-foreground">{tidy(o.organismo)}</p>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
-        {row.o ? <DeadlineBadge o={row.o} /> : <span className="text-xs text-muted-foreground">Ya no aparece en las fuentes</span>}
-        {row.o && <ScoreBadge fit={row.o.fit} />}
+        {row.o ? <DeadlineChip o={row.o} /> : <span className="text-xs text-muted-foreground">Ya no aparece en las fuentes</span>}
+        {row.o && <ScoreChip fit={row.o.fit} size="sm" />}
       </div>
       <div className="flex items-center justify-between gap-2">
         <div className="relative z-10">
-          <StatusSelect o={o} />
+          <TriageSelect o={o} />
         </div>
         <span
           data-handle

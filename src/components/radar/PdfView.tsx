@@ -189,9 +189,9 @@ export function PdfView() {
   const showPicker = !result && !loading;
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+    <div className="flex w-full max-w-3xl flex-col gap-8">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">Analizar PDF</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Analizar PDF</h1>
         <p className="text-sm text-muted-foreground">Sube las bases en PDF y te decimos en 30 segundos si merece la pena leerlas.</p>
       </header>
 

@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { daysLeft, fmtDate, fmtEuros, KIND_LABELS, tidy, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel } from "./model";
 import { useRadar } from "./store";
 import { analyzePdf, PdfResult } from "./PdfView";
-import { DeadlineChip } from "./ui";
+import { DeadlineChip, ScoreChip } from "./ui";
 
 export function DetailDrawer() {
   const { selectedId, byId, closeDetail } = useRadar();
@@ -43,14 +43,7 @@ function DrawerBody({ o }: { o: Opportunity }) {
   const sections = [
     <section key="fit" aria-label="¿Encaja?" className="space-y-4">
       <div className="flex items-center gap-4">
-        <div
-          className={cn(
-            "grid size-12 shrink-0 place-items-center rounded-lg text-lg font-semibold tabular-nums",
-            fit.tier === "alto" ? "bg-primary text-primary-foreground" : fit.tier === "medio" ? "bg-secondary text-foreground" : "border text-muted-foreground",
-          )}
-        >
-          {fit.score}
-        </div>
+        <ScoreChip fit={fit} size="lg" />
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">¿Encaja? · {TIER_LABELS[fit.tier]}</p>
           <p className="font-medium">{VERDICT[fit.tier]}</p>

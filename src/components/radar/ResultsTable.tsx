@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { daysLeft, fmtEuros, parseDay, tidy, TIER_LABELS, TRIAGE_ORDER, type Triage } from "./model";
+import { daysLeft, fmtEuros, parseDay, tidy, TRIAGE_ORDER, type Triage } from "./model";
 import { useRadar } from "./store";
-import { DeadlineChip, EmptyState, TriageSelect } from "./ui";
+import { DeadlineChip, EmptyState, ScoreChip, TriageSelect } from "./ui";
 
 export const KIND_SHORT: Record<OpportunityKind, string> = {
   subvencion: "Subvención",
@@ -128,14 +128,14 @@ export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[
           <caption className="sr-only">Convocatorias filtradas. Pulsa una fila para ver el detalle.</caption>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              {th("score", "Encaje", "w-[76px] pl-3")}
+              {th("score", "Encaje", "w-[68px] pl-2")}
               {th("titulo", "Convocatoria")}
-              {th("kind", "Tipo", "hidden w-[108px] xl:table-cell")}
-              {th("source", "Fuente", "w-[112px]")}
-              {th("region", "Territorio", "hidden w-[120px] lg:table-cell")}
-              {th("deadline", "Plazo", "w-[148px]")}
-              {th("budget", "Importe", "w-[104px]", "right")}
-              {th("triage", "Seguimiento", "w-[156px] pr-4")}
+              {th("kind", "Tipo", "hidden w-[100px] xl:table-cell")}
+              {th("source", "Fuente", "w-[104px]")}
+              {th("region", "Territorio", "hidden w-[112px] lg:table-cell")}
+              {th("deadline", "Plazo", "w-[132px]")}
+              {th("budget", "Importe", "w-[96px]", "right")}
+              {th("triage", "Seguimiento", "w-[148px] pr-4")}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -168,22 +168,6 @@ export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[
   );
 }
 
-function Score({ o }: { o: Opportunity }) {
-  const t = o.fit.tier;
-  return (
-    <span
-      title={`${TIER_LABELS[t]}: ${o.fit.score} de 100`}
-      className={cn(
-        "inline-grid size-8 shrink-0 place-items-center rounded-md text-[13px] font-semibold tabular-nums",
-        t === "alto" ? "bg-primary text-primary-foreground" : t === "medio" ? "bg-secondary text-foreground" : "border text-muted-foreground",
-      )}
-    >
-      {o.fit.score}
-      <span className="sr-only"> · {TIER_LABELS[t]}</span>
-    </span>
-  );
-}
-
 function Amount({ o }: { o: Opportunity }) {
   const a = fmtEuros(o.budget);
   if (a) return <span className="tabular-nums">{a}</span>;
@@ -202,9 +186,9 @@ function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
   return (
     <TableRow onClick={onOpen} className="cursor-pointer">
       <TableCell className="py-3 pl-4">
-        <Score o={o} />
+        <ScoreChip fit={o.fit} />
       </TableCell>
-      <TableCell className="py-3">
+      <TableCell className="py-3 whitespace-normal">
         <button
           type="button"
           title={title}
@@ -214,7 +198,7 @@ function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
           }}
           className="block w-full cursor-pointer rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
-          <span className="block truncate font-medium">{title}</span>
+          <span className="line-clamp-2 leading-snug font-medium break-words">{title}</span>
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">{tidy(o.organismo)}</span>
         </button>
       </TableCell>
@@ -248,7 +232,7 @@ function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
 function MobileCard({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
   return (
     <li className="relative flex gap-3 px-4 py-4">
-      <Score o={o} />
+      <ScoreChip fit={o.fit} />
       <div className="min-w-0 flex-1 space-y-2">
         <p className="truncate text-xs text-muted-foreground">
           {KIND_SHORT[o.kind]} · {o.sourceLabel} · {o.region}

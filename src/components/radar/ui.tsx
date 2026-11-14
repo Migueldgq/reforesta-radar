@@ -4,9 +4,6 @@ import {
   AlarmClock,
   CalendarClock,
   CalendarDays,
-  CircleCheck,
-  CircleDashed,
-  CircleDot,
   CircleSlash,
   Clock,
   RotateCw,
@@ -18,29 +15,35 @@ import type { Opportunity } from "@/lib/opportunity";
 import type { FitAnalysis } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Button as UIButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { daysLeft, fmtDate, fmtDayShort, isClosed, parseDay, todayUTC, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel, type Triage } from "./model";
 import { useRadar } from "./store";
 
-/** @deprecated use `cn` from "@/lib/utils". Kept while other views migrate. */
-export const cx = (...c: (string | false | null | undefined)[]) => cn(...c);
-
 const badge = "gap-1 font-medium whitespace-nowrap [&>svg]:size-3.5";
 
-export function FitChip({ fit, compact = false }: { fit: FitAnalysis; compact?: boolean }) {
-  const Icon = fit.tier === "alto" ? CircleCheck : fit.tier === "medio" ? CircleDot : CircleDashed;
+const SCORE_SIZE = {
+  sm: "h-5 min-w-7 rounded-md px-1.5 text-xs",
+  md: "size-8 rounded-md text-[13px]",
+  lg: "size-12 rounded-lg text-lg",
+} as const;
+
+/** The fit score, same look everywhere: solid primary for high fit, grey for medium, outlined for low. */
+export function ScoreChip({ fit, size = "md" }: { fit: FitAnalysis; size?: keyof typeof SCORE_SIZE }) {
+  const t = fit.tier;
   return (
-    <Badge
-      variant={fit.tier === "alto" ? "default" : fit.tier === "medio" ? "secondary" : "outline"}
-      className={cn(badge, fit.tier === "bajo" && "text-muted-foreground")}
-      title={`${TIER_LABELS[fit.tier]} · ${fit.score} de 100`}
+    <span
+      title={`${TIER_LABELS[t]}: ${fit.score} de 100`}
+      className={cn(
+        "inline-grid shrink-0 place-items-center font-semibold tabular-nums",
+        SCORE_SIZE[size],
+        t === "alto" ? "bg-primary text-primary-foreground" : t === "medio" ? "bg-secondary text-foreground" : "border text-muted-foreground",
+      )}
     >
-      <Icon aria-hidden />
-      <span className="tabular-nums">{fit.score}</span>
-      {!compact && <span className="font-normal">{TIER_LABELS[fit.tier].replace("Encaje ", "")}</span>}
-    </Badge>
+      {fit.score}
+      <span className="sr-only"> · {TIER_LABELS[t]}</span>
+    </span>
   );
 }
 
@@ -96,17 +99,17 @@ export function WorkLines({ lines }: { lines: string[] }) {
   return <span className="text-xs text-muted-foreground">{lines.map((l) => workLineLabel(l)).join(" · ")}</span>;
 }
 
-export function TriageSelect({ o, size = "sm" }: { o: Opportunity; size?: "sm" | "md" }) {
+export function TriageSelect({ o, className }: { o: Pick<Opportunity, "id" | "titulo" | "organismo" | "deadline">; className?: string }) {
   const { triageOf, setTriage } = useRadar();
   const value = triageOf(o.id);
   return (
     <Select value={value} onValueChange={(v) => setTriage(o, v as Triage)}>
       <SelectTrigger
-        size={size === "sm" ? "sm" : "default"}
+        size="sm"
         aria-label="Estado de seguimiento"
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
-        className={cn("w-[136px] bg-background", value !== "nueva" && "border-primary/40 text-primary font-medium")}
+        className={cn("w-[128px] bg-background shadow-none", value !== "nueva" && "border-primary/40 font-medium text-primary", className)}
       >
         <SelectValue />
       </SelectTrigger>
@@ -119,11 +122,6 @@ export function TriageSelect({ o, size = "sm" }: { o: Opportunity; size?: "sm" |
       </SelectContent>
     </Select>
   );
-}
-
-/** @deprecated use shadcn Card. Kept while other views migrate. */
-export function Panel({ children, className }: { children: ReactNode; className?: string }) {
-  return <Card className={cn("gap-0 py-0 shadow-none", className)}>{children}</Card>;
 }
 
 export function EmptyState({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
@@ -149,20 +147,12 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry: () 
           <p className="text-sm text-muted-foreground">Puede que alguna fuente oficial esté tardando en responder. Vuelve a intentarlo en unos segundos.</p>
           <p className="text-xs text-muted-foreground">Detalle técnico: {message}</p>
         </div>
-        <UIButton onClick={onRetry}>
+        <Button onClick={onRetry}>
           <RotateCw aria-hidden /> Reintentar
-        </UIButton>
+        </Button>
       </div>
     </Card>
   );
-}
-
-/** @deprecated use shadcn Button. Kept while other views migrate. */
-export function Button({
-  variant = "primary",
-  ...rest
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" }) {
-  return <UIButton type="button" variant={variant === "primary" ? "default" : variant === "secondary" ? "outline" : "ghost"} {...rest} />;
 }
 
 export function PageHeader({ title, sub, actions }: { title: string; sub?: ReactNode; actions?: ReactNode }) {

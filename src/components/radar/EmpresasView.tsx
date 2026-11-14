@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fmtEuros } from "./model";
-import { ScoreBadge, StatusSelect } from "./PipelineView";
+import { ScoreChip, TriageSelect } from "./ui";
 import { useRadar } from "./store";
 
 const STEPS = [
@@ -25,7 +25,7 @@ export function EmpresasView() {
   const inPipeline = items.filter((o) => triageOf(o.id) !== "nueva" && triageOf(o.id) !== "descartada").length;
 
   return (
-    <div className="flex flex-col gap-8 text-sm">
+    <div className="flex flex-col gap-8">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Empresas y fundaciones</h1>
         <p className="max-w-3xl text-muted-foreground">
@@ -94,7 +94,7 @@ export function EmpresasView() {
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
                         {o.tipo && <Badge variant="outline">{o.tipo}</Badge>}
-                        <ScoreBadge fit={o.fit} />
+                        <ScoreChip fit={o.fit} size="sm" />
                       </div>
                     </div>
 
@@ -127,7 +127,7 @@ export function EmpresasView() {
                     )}
 
                     <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-4">
-                      <StatusSelect o={o} />
+                      <TriageSelect o={o} />
                       <Button asChild variant="outline" size="sm">
                         <a href={o.url} target="_blank" rel="noreferrer">
                           Abrir web <ExternalLink aria-hidden />
