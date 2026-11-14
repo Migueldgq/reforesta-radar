@@ -1,17 +1,96 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, GripVertical, ListChecks } from "lucide-react";
+import {
+  AlarmClock,
+  ArrowRight,
+  CalendarClock,
+  CalendarDays,
+  CircleCheck,
+  CircleDashed,
+  CircleDot,
+  CircleSlash,
+  GripVertical,
+  ListChecks,
+} from "lucide-react";
 import { useRef, useState } from "react";
 import type { Opportunity } from "@/lib/opportunity";
-import { daysLeft, fmtDate, tidy, TRIAGE_LABELS, type Triage } from "./model";
+import type { FitAnalysis } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { daysLeft, fmtDate, isClosed, parseDay, tidy, TIER_LABELS, todayUTC, TRIAGE_LABELS, TRIAGE_ORDER, type Triage } from "./model";
 import { useRadar, type TriageEntry } from "./store";
-import { cx, DeadlineChip, FitChip, PageHeader, Panel, TriageSelect } from "./ui";
+
+/* ---------- Small shared pieces (also used by EmpresasView) ---------- */
+
+export function StatusSelect({ o, className }: { o: Pick<Opportunity, "id" | "titulo" | "organismo" | "deadline">; className?: string }) {
+  const { triageOf, setTriage } = useRadar();
+  return (
+    <Select value={triageOf(o.id)} onValueChange={(v) => setTriage(o, v as Triage)}>
+      <SelectTrigger size="sm" aria-label="Estado de seguimiento" className={cn("shadow-none", className)}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {TRIAGE_ORDER.map((t) => (
+          <SelectItem key={t} value={t}>
+            {TRIAGE_LABELS[t]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+export function DeadlineBadge({ o }: { o: Opportunity }) {
+  const d = daysLeft(o);
+  const opens = parseDay(o.opensAt);
+  if (isClosed(o))
+    return (
+      <Badge variant="secondary" className="text-muted-foreground">
+        <CircleSlash aria-hidden /> Cerrada
+      </Badge>
+    );
+  if (opens != null && opens > todayUTC())
+    return (
+      <Badge variant="outline" title={`Abre el ${fmtDate(o.opensAt)}`}>
+        <CalendarClock aria-hidden /> Abre el {fmtDate(o.opensAt)?.replace(/ de \d{4}$/, "")}
+      </Badge>
+    );
+  if (d == null)
+    return (
+      <Badge variant="outline" className="text-muted-foreground" title={o.deadlineText ?? undefined}>
+        <CalendarDays aria-hidden /> {o.kind === "empresa" ? "Todo el año" : "Sin fecha fija"}
+      </Badge>
+    );
+  const text = d === 0 ? "Cierra hoy" : d === 1 ? "Cierra mañana" : `Quedan ${d} días`;
+  const urgent = d <= 7;
+  return (
+    <Badge variant="outline" className={cn(urgent && "border-destructive/40 text-destructive")} title={`Cierra el ${fmtDate(o.deadline)}`}>
+      {urgent ? <AlarmClock aria-hidden /> : <CalendarDays aria-hidden />} {text}
+    </Badge>
+  );
+}
+
+export function ScoreBadge({ fit }: { fit: FitAnalysis }) {
+  const Icon = fit.tier === "alto" ? CircleCheck : fit.tier === "medio" ? CircleDot : CircleDashed;
+  return (
+    <Badge variant="secondary" title={`${TIER_LABELS[fit.tier]} · ${fit.score} de 100`}>
+      <Icon aria-hidden />
+      <span className="tabular-nums">{fit.score}</span>
+      <span className="sr-only">{TIER_LABELS[fit.tier]}</span>
+    </Badge>
+  );
+}
+
+/* ---------- Seguimiento ---------- */
 
 const COLUMNS: { key: Triage; hint: string }[] = [
   { key: "estudio", hint: "Alguien la está leyendo" },
   { key: "presentar", hint: "Decidido: vamos a por ella" },
-  { key: "presentada", hint: "Ya enviada, a la espera" },
+  { key: "presentada", hint: "Enviada, a la espera" },
   { key: "descartada", hint: "No encaja o no llegamos" },
 ];
 
@@ -39,27 +118,26 @@ export function PipelineView() {
   const next = active.find((r) => dl(r) !== Infinity);
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Seguimiento" sub="Las convocatorias que habéis decidido mirar, ordenadas por fecha de cierre. Se guarda en este navegador." />
+    <div className="flex flex-col gap-6 text-sm">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Seguimiento</h1>
+        <p className="text-muted-foreground">Lo que estáis mirando, por fecha de cierre. Arrastra una tarjeta o cambia su estado. Se guarda en este navegador.</p>
+      </div>
 
       {rows.length === 0 ? (
-        <Panel>
-          <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
-            <ListChecks className="h-6 w-6 text-stone-400" aria-hidden />
-            <p className="font-medium text-stone-900">Todavía no seguís ninguna convocatoria</p>
-            <p className="max-w-md text-sm text-stone-500">
-              En Inicio, cambia el estado de cualquier convocatoria a «En estudio» o «A presentar» y aparecerá aquí.
-            </p>
-            <Link href="/" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand-800 px-3.5 text-sm font-medium text-white hover:bg-brand-900">
-              Ir a convocatorias <ArrowRight className="h-4 w-4" aria-hidden />
+        <Card className="items-center gap-3 border-dashed px-6 py-16 text-center shadow-none">
+          <ListChecks className="size-6 text-muted-foreground" aria-hidden />
+          <p className="font-medium">Todavía no seguís ninguna convocatoria</p>
+          <p className="max-w-md text-muted-foreground">En Inicio, cambia el estado de una convocatoria a «En estudio» o «A presentar» y aparecerá aquí.</p>
+          <Button asChild size="sm" className="mt-2">
+            <Link href="/">
+              Ir a Inicio <ArrowRight aria-hidden />
             </Link>
-          </div>
-        </Panel>
+          </Button>
+        </Card>
       ) : (
         <>
-          {next && (
-            <NextUp row={next} />
-          )}
+          {next && <NextUp row={next} />}
           <Board rows={rows} />
         </>
       )}
@@ -70,23 +148,32 @@ export function PipelineView() {
 function NextUp({ row }: { row: Row }) {
   const { openDetail } = useRadar();
   const o = row.o!;
+  const d = daysLeft(o) ?? 0;
   return (
-    <button
-      type="button"
-      onClick={() => openDetail(o.id)}
-      className="flex cursor-pointer flex-col gap-2 rounded-2xl bg-brand-800 p-5 text-left text-white shadow-[0_10px_30px_-16px_rgba(27,67,50,0.7)] transition-colors hover:bg-brand-900 sm:flex-row sm:items-center sm:justify-between"
-    >
-      <div className="min-w-0 space-y-1">
-        <p className="text-xs font-medium tracking-wide text-brand-200 uppercase">Lo siguiente que cierra · {TRIAGE_LABELS[row.entry.status]}</p>
-        <p className="line-clamp-2 text-base font-semibold">{tidy(o.titulo)}</p>
-        <p className="text-sm text-brand-100">
-          {tidy(o.organismo)} · cierra el {fmtDate(o.deadline)}
-        </p>
+    <Card className="relative flex-row items-center gap-4 px-5 py-4 shadow-none transition-colors hover:bg-muted/40">
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <p className="text-xs text-muted-foreground">Lo siguiente que cierra · {TRIAGE_LABELS[row.entry.status]}</p>
+        <h2 className="font-medium leading-snug">
+          <button
+            type="button"
+            onClick={() => openDetail(o.id)}
+            className="cursor-pointer text-left outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50"
+          >
+            <span className="line-clamp-2">{tidy(o.titulo)}</span>
+          </button>
+        </h2>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+          <span className="truncate">{tidy(o.organismo)}</span>
+          <Badge variant="outline">
+            <CalendarDays aria-hidden /> {fmtDate(o.deadline)}
+          </Badge>
+        </div>
       </div>
-      <span className="shrink-0 text-3xl font-semibold tabular-nums">
-        {daysLeft(o)} <span className="text-base font-normal text-brand-100">días</span>
-      </span>
-    </button>
+      <div className="shrink-0 text-right">
+        <p className="text-3xl font-semibold tabular-nums leading-none">{d}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{d === 1 ? "día" : "días"}</p>
+      </div>
+    </Card>
   );
 }
 
@@ -119,9 +206,10 @@ function Board({ rows }: { rows: Row[] }) {
   const onPointerDown = (e: React.PointerEvent<HTMLElement>, row: Row) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
+    if (!e.currentTarget.contains(target)) return; // events bubbling from the portalled select menu
     const onHandle = !!target.closest("[data-handle]");
     if (e.pointerType !== "mouse" && !onHandle) return; // touch: only the handle drags, so the page still scrolls
-    if (!onHandle && target.closest("select, a")) return;
+    if (!onHandle && target.closest("select, a, [data-slot=select-trigger]")) return;
     pending.current = { id: row.id, from: row.entry.status, x: e.clientX, y: e.clientY, el: e.currentTarget, pointerId: e.pointerId };
   };
 
@@ -160,7 +248,7 @@ function Board({ rows }: { rows: Row[] }) {
 
   return (
     <div
-      className="grid gap-6 md:grid-cols-2 xl:grid-cols-4"
+      className="-mx-1 grid gap-6 px-1 pb-2 md:auto-cols-[minmax(250px,1fr)] md:grid-flow-col md:gap-4 md:overflow-x-auto"
       onPointerMove={onPointerMove}
       onPointerUp={end}
       onPointerCancel={end}
@@ -176,33 +264,32 @@ function Board({ rows }: { rows: Row[] }) {
         const list = rows.filter((r) => r.entry.status === c.key);
         const isOver = !!drag && over === c.key && drag.from !== c.key;
         return (
-          <section key={c.key} data-col={c.key} aria-labelledby={`col-${c.key}`} className="flex flex-col gap-3">
-            <header className="flex items-baseline justify-between border-b border-stone-200 pb-2">
-              <div>
-                <h2 id={`col-${c.key}`} className="text-sm font-semibold text-stone-900">
+          <section key={c.key} data-col={c.key} aria-labelledby={`col-${c.key}`} className="flex min-w-0 flex-col gap-3">
+            <header className="space-y-0.5 px-1">
+              <div className="flex items-center gap-2">
+                <h2 id={`col-${c.key}`} className="font-medium">
                   {TRIAGE_LABELS[c.key]}
                 </h2>
-                <p className="text-xs text-stone-500">{c.hint}</p>
+                <Badge variant="secondary" className="tabular-nums">
+                  {list.length}
+                </Badge>
               </div>
-              <span className="text-sm font-semibold tabular-nums text-stone-500">{list.length}</span>
+              <p className="text-xs text-muted-foreground">{c.hint}</p>
             </header>
             <div
-              className={cx(
-                "flex min-h-24 flex-1 flex-col gap-3 rounded-xl transition-colors",
-                drag && "outline-2 outline-offset-4 outline-transparent outline-dashed",
-                isOver && "bg-brand-50/70 outline-brand-400",
+              className={cn(
+                "flex min-h-28 flex-1 flex-col gap-2 rounded-xl border border-transparent p-1 transition-colors",
+                isOver && "border-dashed border-border bg-muted",
               )}
             >
               {isOver && (
-                <p className="rounded-xl border border-dashed border-brand-400 px-3 py-4 text-center text-xs font-medium text-brand-800">Suelta aquí</p>
+                <p className={cn("py-2 text-center text-xs text-muted-foreground", list.length === 0 && "grid flex-1 place-items-center")}>Suelta aquí</p>
               )}
               {list.length === 0 && !isOver && (
-                <p className="rounded-xl border border-dashed border-stone-200 px-3 py-6 text-center text-xs text-stone-400">
-                  {drag ? "Suelta aquí" : "Vacío"}
-                </p>
+                <p className="rounded-lg border border-dashed px-3 py-8 text-center text-xs text-muted-foreground">{drag ? "Suelta aquí" : "Vacío"}</p>
               )}
               {list.map((r) => (
-                <Card
+                <TrackCard
                   key={r.id}
                   row={r}
                   muted={c.key === "descartada"}
@@ -220,8 +307,8 @@ function Board({ rows }: { rows: Row[] }) {
           className="pointer-events-none fixed top-0 left-0 z-50"
           style={{ width: drag.w, transform: `translate(${drag.x - drag.dx}px, ${drag.y - drag.dy}px)` }}
         >
-          <div className="rounded-xl shadow-[0_18px_40px_-12px_rgba(28,25,23,0.35)] motion-safe:rotate-[1.5deg]">
-            <Card row={dragged} muted={false} ghost={false} floating />
+          <div className="rounded-xl shadow-lg">
+            <TrackCard row={dragged} muted={false} ghost={false} floating />
           </div>
         </div>
       )}
@@ -229,7 +316,7 @@ function Board({ rows }: { rows: Row[] }) {
   );
 }
 
-function Card({
+function TrackCard({
   row,
   muted,
   ghost,
@@ -245,44 +332,48 @@ function Card({
   const { openDetail } = useRadar();
   const o = row.o ?? stub(row.id, row.entry);
   return (
-    <article
+    <Card
       onPointerDown={onPointerDown}
-      className={cx(
-        "group relative space-y-2.5 rounded-xl border border-stone-200/80 bg-white p-3.5 pl-3 transition-[box-shadow,opacity] select-none md:cursor-grab",
-        !floating && "hover:shadow-sm",
+      className={cn(
+        "group relative gap-3 p-3.5 shadow-none transition-[background-color,opacity] select-none md:cursor-grab",
+        !floating && "hover:bg-muted/40",
         muted && "opacity-70",
         ghost && "opacity-30",
         floating && "cursor-grabbing",
       )}
     >
-      <div className="flex gap-2">
+      <div className="space-y-1">
+        <h3 className="leading-snug font-medium">
+          {row.o ? (
+            <button
+              type="button"
+              onClick={() => openDetail(o.id)}
+              className="cursor-pointer text-left outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50"
+            >
+              <span className="line-clamp-2">{tidy(o.titulo)}</span>
+            </button>
+          ) : (
+            <span className="line-clamp-2">{tidy(o.titulo)}</span>
+          )}
+        </h3>
+        <p className="truncate text-xs text-muted-foreground">{tidy(o.organismo)}</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {row.o ? <DeadlineBadge o={row.o} /> : <span className="text-xs text-muted-foreground">Ya no aparece en las fuentes</span>}
+        {row.o && <ScoreBadge fit={row.o.fit} />}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="relative z-10">
+          <StatusSelect o={o} />
+        </div>
         <span
           data-handle
           title="Arrastra para cambiar de columna"
-          className="relative z-10 -my-1 grid w-5 shrink-0 cursor-grab touch-none place-items-start pt-1 text-stone-300 group-hover:text-stone-500"
+          className="relative z-10 -mr-1 grid size-8 cursor-grab touch-none place-items-center rounded-md text-muted-foreground/60 group-hover:text-muted-foreground"
         >
-          <GripVertical className="h-4 w-4" aria-hidden />
+          <GripVertical className="size-4" aria-hidden />
         </span>
-        <div className="min-w-0 flex-1 space-y-2.5">
-          <h3 className="text-sm leading-snug font-medium text-stone-900">
-            {row.o ? (
-              <button type="button" onClick={() => openDetail(o.id)} className="cursor-pointer text-left after:absolute after:inset-0 after:content-[''] hover:text-brand-900">
-                <span className="line-clamp-3">{tidy(o.titulo)}</span>
-              </button>
-            ) : (
-              <span className="line-clamp-3">{tidy(o.titulo)}</span>
-            )}
-          </h3>
-          <p className="truncate text-xs text-stone-500">{tidy(o.organismo)}</p>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {row.o ? <DeadlineChip o={row.o} /> : <span className="text-xs text-stone-400">Ya no aparece en las fuentes</span>}
-            {row.o && <FitChip fit={row.o.fit} compact />}
-          </div>
-          <div className="relative z-10">
-            <TriageSelect o={o} />
-          </div>
-        </div>
       </div>
-    </article>
+    </Card>
   );
 }
