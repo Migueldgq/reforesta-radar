@@ -1,58 +1,48 @@
 # Demo video pipeline
 
-Builds the short demo video the hackathon asks for ("un vídeo corto explicando el proyecto") from the live app.
+Builds the short demo video the hackathon asks for ("un vídeo corto explicando el proyecto") from the live app, with [HyperFrames](https://hyperframes.heygen.com/) rendering locally (no account, no API key, nothing uploaded).
 
 ```
-scenes.mjs ──► capture.mjs ──► composition/assets/scenes/<id>.mp4 ─┐
-   │            (puppeteer-core + local Chrome, records the app)    │
-   └─────────► compose.mjs ──► composition/index.html ──────────────┴─► hyperframes render ─► out/demo-draft.mp4
+scenes.mjs ─► capture.mjs ─► composition/assets/scenes/<id>.mp4   (2880×1620, speed-ramped, trimmed)
+                        └──► captures/<id>.json                    (clicks, zooms, captions, lower thirds — output time)
+           ─► compose.mjs ─► composition/index.html + assets/sfx/mix.wav ─► hyperframes render ─► out/demo-final.mp4
 ```
 
-- `scenes.mjs` — scene order, durations and captions (the single source of truth; mirrors `GUION.md`).
-- `capture.mjs` — opens each route at 1920×1080 (deviceScaleFactor 2), performs the scene's clicks/scrolls/drag with a visible cursor, records it with `page.screencast()` and transcodes to an exact-length H.264 clip. **All selectors are in the `CONFIG` object at the top.** A scene that fails is skipped with a warning.
-- `compose.mjs` — writes the [HyperFrames](https://hyperframes.heygen.com/) composition: intro and outro cards, each clip in a soft frame with its caption, 0.5 s crossfades. Missing clips become a grey placeholder, so a render always works.
-- `GUION.md` — script in Spanish, scene by scene, with an optional voice-over.
-
-Everything runs locally. No HeyGen account, API key or upload is involved.
+- `scenes.mjs` — scene order, captions (≤6 words) and lower-third text. Screen scenes take their length from the recording; cards have a fixed `duration`.
+- `capture.mjs` — drives local Chrome (puppeteer-core) at **1440×810, deviceScaleFactor 2** and records the CDP screencast at native 2× pixels, so zooms stay sharp. Each scene's actions log their interactions; cursor travel and scrolling are **speed-ramped** (×2.5–3), waits for loads are cut, and the moment that matters plays at 1×. The fake cursor is enlarged and draws a click ripple. **All selectors are in `CONFIG` at the top.** A failing scene is retried once, then skipped (placeholder in the video).
+- `compose.mjs` — writes the HyperFrames composition from the logs: near-hard cuts (0.12 s), **punch-in zooms** (×1.35–1.9, 0.3 s ease, origin at the interaction and shifted so the target stays in frame), numbered kinetic captions, lower thirds for the challenge's two example calls, intro/outro cards. It also builds one sound-effects stem: a click on every logged click (≈ −18 dBFS), a soft whoosh on cuts and a quieter one on zooms, limited at −3 dBFS.
+- `GUION.md` — the script, scene by scene, with an optional voice-over.
 
 ## Prerequisites
 
-- Node.js 22+ (`node -v`), FFmpeg (`ffmpeg -version`; macOS: `brew install ffmpeg`), Google Chrome installed (or set `CHROME_PATH`).
-- The app running at http://localhost:3000 (`npm run dev` in the repo root), with its data cache warm (open it once).
-- Once: `cd demo-video && npm install`. HyperFrames downloads its own headless Chrome on the first render (`npx hyperframes browser ensure`). Check with `npx hyperframes doctor`.
+- Node.js 22+, FFmpeg (`brew install ffmpeg`), Google Chrome (or set `CHROME_PATH`).
+- The app at http://localhost:3000 (`npm run dev` in the repo root) with its data cache warm.
+- Once: `cd demo-video && npm install`. Check with `npx hyperframes doctor`.
 
-Telemetry: the npm scripts set `HYPERFRAMES_NO_TELEMETRY=1`. To turn it off for good: `npx hyperframes telemetry disable`.
-
-## Re-run (when the UI is final)
+## Re-run
 
 ```bash
 cd demo-video
-npm run capture            # record every screen scene (~2–3 min)
-npm run render             # compose + render → out/demo-draft.mp4
+npm run capture      # record all screen scenes (~1.5 min)
+npm run render       # compose + render → out/demo-final.mp4 (~1.5 min)
 # or both:
 npm run all
 ```
 
-Useful variants:
+Variants:
 
 ```bash
-node capture.mjs encaja ejemplos     # re-record only some scenes
-HEADFUL=1 node capture.mjs inicio    # watch Chrome while it records
-VIEWPORT=1440x810 node capture.mjs   # bigger, more legible UI in the 1080p video
-DSF=1 node capture.mjs               # faster capture if the cursor stutters
-npm run preview                      # HyperFrames browser editor for the composition
-npm run render:final                 # highest quality → out/demo-final.mp4
+node capture.mjs perfil analizar   # re-record some scenes ("ejemplos" alone rebuilds its start state from the URL)
+HEADFUL=1 node capture.mjs mapa    # watch Chrome while it records
+npm run render:draft               # faster, lower-quality check → out/demo-draft.mp4
+npm run preview                    # HyperFrames browser editor
+npm run lint
 ```
 
-If a scene prints `⚠ … skipped: not found: …`, fix that selector in `CONFIG.sel` (capture.mjs). If it prints `actions took Xs, clip is cut`, raise that scene's `duration` in `scenes.mjs` (and in `GUION.md`) or shorten its pauses in `ACTIONS`.
+To change pacing: hold times are the `sleep(...)` calls inside each scene in `capture.mjs` (`ACTIONS`); ramp speeds are `CONFIG.travelSpeed` / `CONFIG.scrollSpeed`. To change wording: `scenes.mjs` (no re-capture needed, just `npm run render`).
 
-## Optional: voice-over and music
+## Sound
 
-Not included by default. Options, all local and free:
+The click and whoosh come from the sound effects bundled with the `hyperframes` CLI (`node_modules/hyperframes/dist/skills/media-use/audio/assets/sfx/`, from Pixabay under the [Pixabay Content License](https://pixabay.com/service/license-summary/): free commercial use in derivative works such as a rendered video, no attribution required). They are mixed into the rendered video only; the files and the generated `composition/assets/sfx/mix.wav` are git-ignored, so the repo does not redistribute them on their own. No music: HyperFrames bundles no music track.
 
-- **Your own voice** (recommended for Spanish): record `composition/assets/voz.wav`, then add to the composition (in `compose.mjs` markup) `<audio id="voz" src="assets/voz.wav" data-start="0" data-track-index="4"></audio>`.
-- **Local TTS** (Kokoro-82M; per the docs no API key and nothing leaves the machine; not tested here): `pip install kokoro-onnx soundfile`, then e.g. `npx hyperframes tts locucion.txt --voice ef_dora --output composition/assets/voz.wav` (`ef_*`/`em_*` voices are Spanish). Listen before using it: quality in Spanish is acceptable, not natural.
-- HeyGen voices, music catalogue and avatars need a HeyGen account/API key (`npx hyperframes auth login`) and may be billed: not used here.
-- Music: only tracks you have a licence for, placed as `<audio … data-volume="0.15">`.
-
-If narration is added, its length sets the pace: adjust the durations in `scenes.mjs` to match.
+Voice-over is optional (not included): record your own (`composition/assets/voz.wav`) or try local Kokoro TTS (`pip install kokoro-onnx soundfile`, then `npx hyperframes tts locucion.txt --voice ef_dora --output composition/assets/voz.wav`); then add an `<audio>` element in `compose.mjs` and lengthen the holds to fit the voice. HeyGen voices need an account/API key.
