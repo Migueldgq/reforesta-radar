@@ -1,4 +1,5 @@
 import { deadlineFromDays, parseDeadline } from "./boe";
+import { memo } from "./cache";
 import { fetchJson as fetchJsonShared, mapLimit } from "./http";
 import type { NivelAdmin, Opportunity } from "./opportunity";
 import { inferComunidadAutonoma } from "./regions";
@@ -520,10 +521,18 @@ export async function getBdnsOpportunities(): Promise<{ items: Opportunity[]; he
   const toEnrich = ranked.slice(0, MAX_ENRICH);
   const notEnriched = ranked.slice(MAX_ENRICH);
 
+  // Details of a published call rarely change: cache by number (24 h; 3 h while it has no deadline yet),
+  // so a refresh only hits the API for calls not seen before.
   const details = await mapLimit(toEnrich, 8, ({ raw }) =>
-    fetchJsonShared<BDNSDetailResponse>(
-      `${BDNS_BASE}/convocatorias?numConv=${encodeURIComponent(raw.numeroConvocatoria)}&vpd=GE`,
-      { timeoutMs: 8000 }
+    memo<BDNSDetailResponse>(
+      `bdns:detail:${raw.numeroConvocatoria}`,
+      (d) => (d.fechaFinSolicitud ? 24 : 3) * 3600000,
+      () =>
+        fetchJsonShared<BDNSDetailResponse>(
+          `${BDNS_BASE}/convocatorias?numConv=${encodeURIComponent(raw.numeroConvocatoria)}&vpd=GE`,
+          { timeoutMs: 8000 }
+        ),
+      { persist: true }
     )
   );
 

@@ -145,7 +145,9 @@ export function scoreConvocatoria(input: ScoreInput): FitAnalysis {
   // 4. Eligibility for an NGO
   let isOngEligible: boolean | null = null;
   const ongInBenef = ONG_POSITIVE_TERMS.some((t) => hasTerm(benefText, t));
-  const ongInText = ONG_POSITIVE_TERMS.some((t) => hasTerm(topicText, t));
+  // "interés general/social" and "IRPF" also appear in bases of unrelated aid: only trust them in the title
+  const titleOnly = new Set(["interes general", "interes social", "irpf"]);
+  const ongInText = ONG_POSITIVE_TERMS.some((t) => hasTerm(titleOnly.has(t) ? titleNorm : topicText, t));
   if (input.kind === "empresa") {
     isOngEligible = true;
   } else if (ongInText) {

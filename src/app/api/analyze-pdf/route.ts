@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { analyzePdfBuffer } from "@/lib/pdf-analyzer";
+import { downloadPdf, MAX_PDF_BYTES, pdfCacheGet, pdfCacheSet } from "@/lib/pdf-cache";
 
 const SAMPLE_FILES: Record<string, { file: string; label: string }> = {
   madrid: {
@@ -63,19 +64,7 @@ export async function POST(req: NextRequest) {
       const url = `https://www.infosubvenciones.es/bdnstrans/api/convocatorias/documentos?vpd=GE&idDocumento=${encodeURIComponent(
         String(body.docId)
       )}`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-      if (!res.ok) {
-        return NextResponse.json(
-          { error: "No se pudo descargar el PDF desde la BDNS." },
-          { status: 502 }
-        );
-      }
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      if (!isPdf(bytes)) {
-        return NextResponse.json({ error: NOT_PDF_ERROR }, { status: 415 });
-      }
-      const result = await analyzePdfBuffer(bytes, body.fileName || `BDNS-doc-${body.docId}.pdf`);
-      return NextResponse.json(result);
+      return analyzeRemote(url, body.fileName || `BDNS-doc-${body.docId}.pdf`, "No se pudo descargar el PDF desde la BDNS.");
     }
 
     if (body.pdfUrl) {
@@ -106,22 +95,11 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      const res = await fetch(body.pdfUrl, { signal: AbortSignal.timeout(15000) });
-      if (!res.ok) {
-        return NextResponse.json(
-          { error: "No se pudo descargar el PDF oficial." },
-          { status: 502 }
-        );
-      }
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      if (!isPdf(bytes)) {
-        return NextResponse.json({ error: NOT_PDF_ERROR }, { status: 415 });
-      }
-      const result = await analyzePdfBuffer(
-        bytes,
-        body.fileName || parsed.pathname.split("/").pop() || "documento.pdf"
+      return analyzeRemote(
+        body.pdfUrl,
+        body.fileName || parsed.pathname.split("/").pop() || "documento.pdf",
+        "No se pudo descargar el PDF oficial."
       );
-      return NextResponse.json(result);
     }
 
     return NextResponse.json(
@@ -135,4 +113,23 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Download (15 s timeout, size cap) + analyze a remote PDF; results cached by URL so re-opening is instant.
+async function analyzeRemote(url: string, fileName: string, failMsg: string) {
+  const key = `${url}|${fileName}`;
+  const hit = pdfCacheGet<Awaited<ReturnType<typeof analyzePdfBuffer>>>(key);
+  if (hit) return NextResponse.json(hit);
+  const bytes = await downloadPdf(url);
+  if (bytes === "too-large") {
+    return NextResponse.json(
+      { error: `El PDF supera ${MAX_PDF_BYTES / 1024 / 1024} MB; ábrelo en la web oficial.` },
+      { status: 413 }
+    );
+  }
+  if (!bytes) return NextResponse.json({ error: failMsg }, { status: 502 });
+  if (!isPdf(bytes)) return NextResponse.json({ error: NOT_PDF_ERROR }, { status: 415 });
+  const result = await analyzePdfBuffer(bytes, fileName);
+  pdfCacheSet(key, result);
+  return NextResponse.json(result);
 }

@@ -6,6 +6,7 @@
 import type { Opportunity, OpportunityKind, NivelAdmin } from "../opportunity";
 import type { SourceHealth } from "../types";
 import { normalizeText, scoreConvocatoria } from "../scoring";
+import { memo } from "../cache";
 
 const UA = "Mozilla/5.0 ReforestaRadar/1.0";
 const MIN_SCORE = 35;
@@ -252,12 +253,15 @@ export async function fetchBocyl(): Promise<Result> {
     let ok = 0;
     let scanned = 0;
     const pages = await Promise.all(
-      days.map(async (d) => {
+      days.map(async (d, i) => {
         const dd = String(d.getUTCDate()).padStart(2, "0");
         const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
         const yyyy = d.getUTCFullYear();
         try {
-          const html = await (await get(`${home}boletin.do?fechaBoletin=${dd}/${mm}/${yyyy}`)).text();
+          // Past bulletins are immutable: cache them by date (in memory); today's is always refetched.
+          const fetchPage = async () => (await get(`${home}boletin.do?fechaBoletin=${dd}/${mm}/${yyyy}`)).text();
+          const html = i === 0 ? await fetchPage() : await memo(`bocyl:${yyyy}${mm}${dd}`, 7 * 86400000, fetchPage);
+          if (html === null) throw new Error("sumario no disponible");
           ok++;
           return { html, date: `${yyyy}-${mm}-${dd}`, stamp: `${dd}${mm}${yyyy}` };
         } catch {

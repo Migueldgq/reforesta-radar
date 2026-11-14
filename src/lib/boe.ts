@@ -1,5 +1,8 @@
+import { memo } from "./cache";
 import { decodeHtml, fetchJson, fetchText, mapLimit } from "./http";
 import type { Opportunity } from "./opportunity";
+
+const DAY_MS = 86400000;
 import { hasTerm, normalizeText, scoreConvocatoria } from "./scoring";
 import type { BoeItem, SourceHealth } from "./types";
 
@@ -68,7 +71,17 @@ export function isOpenTender(t: string): boolean {
   return t.includes("licitacion") || t.includes("convocatoria del contrato") || t.includes("procedimiento abierto");
 }
 
+// Past daily summaries are immutable: cache them by date; only today's is always refetched.
 async function fetchDay(date: Date): Promise<{ entries: RawBoeEntry[]; ok: boolean }> {
+  if (ymd(date) === ymd(new Date())) return fetchDayUncached(date);
+  const r = await memo(`boe:day:${ymd(date)}`, 7 * DAY_MS, async () => {
+    const d = await fetchDayUncached(date);
+    return d.ok ? d : null;
+  }, { persist: true });
+  return r ?? { entries: [], ok: false };
+}
+
+async function fetchDayUncached(date: Date): Promise<{ entries: RawBoeEntry[]; ok: boolean }> {
   const key = ymd(date);
   const json = await fetchJson<BoeSumarioResponse>(`${BOE_API_BASE}/${key}`, { timeoutMs: 9000 });
   if (!json) return { entries: [], ok: false };
@@ -152,10 +165,14 @@ export function extractNoticeDetails(text: string): { deadlineText: string | nul
 }
 
 async function fetchNoticeDetails(e: RawBoeEntry): Promise<{ deadlineText: string | null; summary: string | null }> {
-  const html = await fetchText(`https://www.boe.es/diario_boe/txt.php?id=${e.identificador}`, { timeoutMs: 8000 });
-  if (!html) return { deadlineText: null, summary: null };
-  const bodyMatch = html.match(/<div id="textoxslt"[\s\S]*$/);
-  return extractNoticeDetails(decodeHtml(bodyMatch ? bodyMatch[0] : html).slice(0, 12000));
+  // Published notices never change: cache the extracted details for 30 days.
+  const r = await memo(`boe:notice:${e.identificador}`, 30 * DAY_MS, async () => {
+    const html = await fetchText(`https://www.boe.es/diario_boe/txt.php?id=${e.identificador}`, { timeoutMs: 8000 });
+    if (!html) return null;
+    const bodyMatch = html.match(/<div id="textoxslt"[\s\S]*$/);
+    return extractNoticeDetails(decodeHtml(bodyMatch ? bodyMatch[0] : html).slice(0, 12000));
+  }, { persist: true });
+  return r ?? { deadlineText: null, summary: null };
 }
 
 export function parseDeadline(text: string | null): string | null {
