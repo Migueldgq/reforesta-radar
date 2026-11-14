@@ -80,6 +80,11 @@ export function isClosed(o: Opportunity): boolean {
   return o.fit.deadlineState === "cerrada";
 }
 
+/** Closed competitive grant open to non-profits: likely to come back, so it is a lead for the next edition (mirrors scoring.ts). */
+export function isNextEdition(o: Opportunity): boolean {
+  return isClosed(o) && o.kind === "subvencion" && o.fit.isCompetitive && o.fit.isOngEligible !== false;
+}
+
 export function isOpenNow(o: Opportunity): boolean {
   if (isClosed(o)) return false;
   const open = parseDay(o.opensAt);
@@ -200,17 +205,18 @@ export function dimValues(o: Opportunity, dim: Dim, triage: Triage): string[] {
   }
 }
 
-export const PLAZO_KEYS = ["abierta", "30d", "proxima", "sin_fecha", "cerrada"] as const;
+export const PLAZO_KEYS = ["abierta", "30d", "proxima", "sin_fecha", "cerrada", "edicion"] as const;
 export const PLAZO_LABELS: Record<string, string> = {
   abierta: "Abiertas ahora",
   "30d": "Cierran en 30 días o menos",
   proxima: "Abren pronto",
   sin_fecha: "Sin fecha fija",
   cerrada: "Cerradas",
+  edicion: "Próximas ediciones",
 };
 
 export function plazoValues(o: Opportunity): string[] {
-  if (isClosed(o)) return ["cerrada"];
+  if (isClosed(o)) return isNextEdition(o) ? ["cerrada", "edicion"] : ["cerrada"];
   const d = daysLeft(o);
   const v: string[] = [];
   const open = isOpenNow(o);
@@ -234,7 +240,7 @@ export function matches(
   haystack: string,
   skip: Skip = null,
 ): boolean {
-  if (f.hideClosed && skip !== "plazo" && !f.dims.plazo.includes("cerrada") && isClosed(o)) return false;
+  if (f.hideClosed && skip !== "plazo" && !f.dims.plazo.some((k) => k === "cerrada" || k === "edicion") && isClosed(o)) return false;
   for (const fl of f.flags) if (fl !== skip && !flagMatch(o, fl)) return false;
   if (f.week != null && skip !== "week") {
     const d = parseDay(o.deadline);
@@ -293,6 +299,27 @@ export function tidy(s: string): string {
   if (upper / letters.length < 0.7) return s;
   const low = s.toLowerCase();
   return low.replace(/(^|[.·]\s*)(\p{L})/gu, (_m, p: string, c: string) => p + c.toUpperCase());
+}
+
+/* ---------- Plazo view: the segmented control above the table ---------- */
+
+export type PlazoView = "ahora" | "ediciones" | "todas";
+
+export const PLAZO_VIEW_LABELS: Record<PlazoView, string> = {
+  ahora: "Para pedir ahora",
+  ediciones: "Próximas ediciones",
+  todas: "Todas",
+};
+
+export function plazoViewOf(f: Filters): PlazoView {
+  if (f.dims.plazo.includes("edicion")) return "ediciones";
+  return f.hideClosed && !f.dims.plazo.includes("cerrada") ? "ahora" : "todas";
+}
+
+export function withPlazoView(f: Filters, v: PlazoView): Filters {
+  const rest = f.dims.plazo.filter((k) => k !== "cerrada" && k !== "edicion");
+  const plazo = v === "ediciones" ? ["edicion"] : v === "todas" ? [] : rest;
+  return { ...f, hideClosed: v === "ahora", dims: { ...f.dims, plazo } };
 }
 
 /* ---------- Filters <-> URL query (shareable links) ---------- */

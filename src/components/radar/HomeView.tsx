@@ -14,25 +14,33 @@ import {
   fmtAgo,
   fmtDayShort,
   haystackOf,
+  isClosed,
+  isNextEdition,
+  isOpenNow,
   KIND_LABELS,
   matches,
   NO_LINE,
   parseDay,
   PLAZO_KEYS,
   PLAZO_LABELS,
+  PLAZO_VIEW_LABELS,
+  plazoViewOf,
   tidy,
   TIER_LABELS,
   TRIAGE_LABELS,
   TRIAGE_ORDER,
   WEEK_MS,
   weekStarts,
+  withPlazoView,
   workLineLabel,
   type Dim,
+  type PlazoView,
   type Skip,
   type Triage,
 } from "./model";
 import { useRadar } from "./store";
 import { BarList, WeekBars, type BarRow, type WeekBin } from "./charts";
+import { TerritoryPanel } from "./SpainMap";
 import { FilterBar, weekChipLabel, type BarDim } from "./filters";
 import { ResultsTable } from "./ResultsTable";
 import { ErrorState, PageHeader } from "./ui";
@@ -41,9 +49,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const WORK_LINE_KEYS = ["restauracion", "conservacion", "educacion", "agroambiental", NO_LINE];
 const KIND_KEYS: OpportunityKind[] = ["subvencion", "europa", "boletin", "licitacion", "empresa"];
+
+const SHORT_VIEW_LABELS: Record<PlazoView, string> = { ahora: "Pedir ahora", ediciones: "Ediciones", todas: "Todas" };
 
 const DIM_TITLES: Record<Dim, string> = {
   plazo: "Plazo",
@@ -130,6 +141,8 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
   };
   const countOf = (r: BarRow[], k: string) => r.find((x) => x.key === k)?.count ?? 0;
   const fueraCount = subset("fuera").filter((o) => o.fit.outsideManualSources).length;
+  const openByRegion = new Map<string, number>();
+  for (const o of subset("region")) if (isOpenNow(o)) for (const v of dimValues(o, "region", triageOf(o.id))) openByRegion.set(v, (openByRegion.get(v) ?? 0) + 1);
 
   // Weekly deadline bins
   const weeks = weekStarts(12);
@@ -166,10 +179,31 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
   for (const dim of Object.keys(filters.dims) as Dim[])
     for (const k of filters.dims[dim]) chips.push({ key: `${dim}:${k}`, label: `${DIM_TITLES[dim]}: ${dimLabel(dim, k)}`, remove: () => toggleDim(dim, k) });
 
+  // Plazo view (segmented control above the table): counts ignore the current plazo choice.
+  const anyPlazo = subset("plazo");
+  const view = plazoViewOf(filters);
+  const viewCounts: Record<PlazoView, number> = {
+    ahora: anyPlazo.filter((o) => !isClosed(o)).length,
+    ediciones: anyPlazo.filter(isNextEdition).length,
+    todas: anyPlazo.length,
+  };
+  const setView = (v: PlazoView) => setFilters((f) => withPlazoView(f, v));
+  // High fit across every deadline state: today the strongest matches may all be closed recurring grants.
+  const allPlazo = withPlazoView(filters, "todas");
+  const altoAll = items.filter((o) => o.fit.tier === "alto" && matches(o, allPlazo, triageOf(o.id), hay.get(o.id)!, "tier"));
+  const altoOpen = altoAll.filter((o) => !isClosed(o)).length;
+  const altoNext = altoAll.filter(isNextEdition).length;
+  const toggleAlto = () =>
+    setFilters((f) =>
+      f.dims.tier.includes("alto")
+        ? withPlazoView({ ...f, dims: { ...f.dims, tier: f.dims.tier.filter((k) => k !== "alto") } }, "ahora")
+        : withPlazoView({ ...f, dims: { ...f.dims, tier: [...f.dims.tier, "alto"] } }, "todas"),
+    );
+
   const stats = [
     { label: "Abiertas ahora", icon: DoorOpen, value: countOf(rows.plazo, "abierta"), caption: "Se pueden pedir hoy", on: filters.dims.plazo.includes("abierta"), toggle: () => toggleDim("plazo", "abierta") },
     { label: "Cierran en ≤30 días", icon: AlarmClock, value: countOf(rows.plazo, "30d"), caption: "Hay que decidir pronto", on: filters.dims.plazo.includes("30d"), toggle: () => toggleDim("plazo", "30d") },
-    { label: "Encaje alto", icon: Target, value: countOf(rows.tier, "alto"), caption: "Se parecen a lo que hacéis", on: filters.dims.tier.includes("alto"), toggle: () => toggleDim("tier", "alto") },
+    { label: "Encaje alto", icon: Target, value: altoAll.length, caption: altoOpen ? "Se parecen a lo que hacéis" : "Ninguna abierta hoy · ver próximas ediciones", on: filters.dims.tier.includes("alto"), toggle: toggleAlto },
     { label: "Fuera de tus 4 fuentes", icon: Compass, value: fueraCount, caption: "Lo que hoy no estáis viendo", on: filters.flags.includes("fuera"), toggle: toggleFuera },
   ];
 
@@ -211,10 +245,10 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
       </div>
 
       <Card className="gap-0 py-0" aria-label="Resumen gráfico">
-        <div className="grid divide-y lg:grid-cols-[1.6fr_1fr_1fr] lg:divide-x lg:divide-y-0">
+        <div className="grid divide-y lg:grid-cols-[1.6fr_1fr_1.5fr] lg:divide-x lg:divide-y-0">
           <WeekBars bins={bins} later={later} selected={filters.week} onSelect={(w) => setFilters((f) => ({ ...f, week: w }))} />
           <BarList title="Línea de trabajo" rows={rows.workLine} selected={filters.dims.workLine} onToggle={(k) => toggleDim("workLine", k)} total={total} maxRows={4} />
-          <BarList title="Territorio" rows={rows.region} selected={filters.dims.region} onToggle={(k) => toggleDim("region", k)} total={total} maxRows={4} />
+          <TerritoryPanel rows={rows.region} open={openByRegion} selected={filters.dims.region} onToggle={(k) => toggleDim("region", k)} total={total} />
         </div>
         <Collapsible open={more} onOpenChange={setMore}>
           <CollapsibleContent>
@@ -237,6 +271,32 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
       </Card>
 
       <section aria-label="Convocatorias" className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <Tabs value={view} onValueChange={(v) => setView(v as PlazoView)} className="max-w-full overflow-x-auto">
+            <TabsList aria-label="Plazo">
+              {(Object.keys(PLAZO_VIEW_LABELS) as PlazoView[]).map((v) => (
+                <TabsTrigger key={v} value={v} className="px-2 sm:px-3">
+                  <span className="max-sm:hidden">{PLAZO_VIEW_LABELS[v]}</span>
+                  <span className="sm:hidden">{SHORT_VIEW_LABELS[v]}</span>
+                  <span className="text-muted-foreground tabular-nums">{viewCounts[v]}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          {view === "ahora" && altoOpen === 0 && altoNext > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Hoy no hay convocatorias abiertas de encaje alto.{" "}
+              <button
+                type="button"
+                onClick={() => setFilters((f) => withPlazoView({ ...f, dims: { ...f.dims, tier: ["alto"] } }, "ediciones"))}
+                className="cursor-pointer font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Mira las próximas ediciones ({altoNext})
+              </button>{" "}
+              para prepararlas con tiempo.
+            </p>
+          )}
+        </div>
         <FilterBar dims={barDims} chips={chips} total={total} fueraCount={fueraCount} />
         <div className={cn("transition-opacity", refreshing && "opacity-90")}>
           <ResultsTable items={visible} onClear={clearAll} resetKey={JSON.stringify(filters)} />
