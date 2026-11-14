@@ -2,6 +2,7 @@ import {
   DEALBREAKER_TERMS,
   GEO_FIT,
   KEYWORD_RULES,
+  KIND_FIT,
   ONG_POSITIVE_TERMS,
   REFORESTA_PROFILE,
 } from "./reforesta-profile";
@@ -222,8 +223,12 @@ export function scoreConvocatoria(input: ScoreInput): FitAnalysis {
     deadlineState = "cerrada";
   }
 
+  // Closed competitive grant open to non-profits = next year's pipeline: keep its fit, small timing
+  // penalty only (an open equivalent gets +10, so it always ranks above). Anything else closed sinks.
+  const recurringGrant =
+    input.kind === "subvencion" && isCompetitive && !hardBlock && !isDirect && isOngEligible !== false;
   if (deadlineState === "cerrada") {
-    raw -= 15;
+    raw += recurringGrant ? 4 : -15;
     const closedOn = end ? end.toLocaleDateString("es-ES") : null;
     if (isCompetitive && !hardBlock) {
       reasons.push(
@@ -255,7 +260,7 @@ export function scoreConvocatoria(input: ScoreInput): FitAnalysis {
   let score = Math.round(raw);
   if (matchedLabels.size === 0) score = Math.min(score, 35);
   if (hardBlock || isDirect) score = Math.min(score, 25);
-  if (deadlineState === "cerrada") score = Math.min(score, 50);
+  if (deadlineState === "cerrada" && !recurringGrant) score = Math.min(score, 50);
   if (isOngEligible === false) score = Math.min(score, 45);
   score = Math.max(0, Math.min(100, score));
 
@@ -294,7 +299,7 @@ function titleCase(s: string): string {
  * Pure: returns a new FitAnalysis and never mutates `base`, so it is safe to apply to cached items
  * (always pass the stored base fit, never an already-adjusted one). Table: GEO_FIT in reforesta-profile.ts.
  */
-export function geographicFit(o: { region: string; nivelAdmin: string; organismo: string; fit: FitAnalysis }): FitAnalysis {
+export function geographicFit(o: { region: string; nivelAdmin: string; organismo: string; kind: string; fit: FitAnalysis }): FitAnalysis {
   const base = o.fit;
   const region = o.region === "Principado de Asturias" ? "Asturias" : o.region;
   const entity = o.organismo.split(" · ")[0].trim();
@@ -305,6 +310,7 @@ export function geographicFit(o: { region: string; nivelAdmin: string; organismo
   let delta = 0;
   let reason: string | null = null;
   let warning: string | null = null;
+  let cap = 100;
   if (o.nivelAdmin === "Privada" && (region === "Estatal" || !known)) {
     // nationwide private/RSC programme: no territorial restriction
   } else if (region === "Comunidad de Madrid") {
@@ -318,15 +324,18 @@ export function geographicFit(o: { region: string; nivelAdmin: string; organismo
   } else if (GEO_FIT.regions[region] && (o.nivelAdmin !== "Estatal" || region === "Estatal")) {
     delta = GEO_FIT.regions[region].delta;
     reason = GEO_FIT.regions[region].reason;
+    cap = GEO_FIT.regions[region].cap ?? 100;
   } else if (known && region !== "Estatal" && o.nivelAdmin !== "Estatal" && o.nivelAdmin !== "UE") {
     delta = GEO_FIT.otherRegion;
     warning = `Convocatoria de ${region}: suele exigir sede o actuación allí.`;
   }
   if (delta === 0) return base;
 
-  let score = Math.max(0, Math.min(100, base.score + delta));
+  let score = Math.max(0, Math.min(cap, base.score + delta));
   if (delta < 0) score = Math.min(score, GEO_FIT.outOfTerritoryCap);
-  if (base.deadlineState === "cerrada") score = Math.min(score, Math.max(base.score, GEO_FIT.closedCap));
+  // closed competitive grants for non-profits keep their fit (timing is shown by deadlineState, not the tier)
+  const recurringGrant = o.kind === "subvencion" && base.isCompetitive && base.isOngEligible !== false;
+  if (base.deadlineState === "cerrada" && !recurringGrant) score = Math.min(score, Math.max(base.score, GEO_FIT.closedCap));
   return {
     ...base,
     score,
@@ -334,6 +343,47 @@ export function geographicFit(o: { region: string; nivelAdmin: string; organismo
     reasons: reason ? [reason, ...base.reasons] : base.reasons,
     warnings: warning ? [warning, ...base.warnings] : base.warnings,
   };
+}
+
+function titleTopic(titulo: string): number {
+  const t = normalizeText(titulo);
+  let sum = 0;
+  for (const group of KEYWORD_RULES) for (const kw of group.keywords) if (hasTerm(t, kw.term)) sum += kw.weight;
+  return sum;
+}
+
+const CALL_IN_TITLE = /(convoca|extracto|bases reguladoras)/;
+const GRANT_IN_TITLE = /(subvenc|ayuda|premio)/;
+
+/**
+ * Actionability by kind (table KIND_FIT): a grant Reforesta can apply to outranks tenders, informative
+ * bulletin entries and research-consortium topics. Pure, applied after geographicFit on the cached base fit.
+ */
+export function kindFit(o: { kind: string; titulo: string; organismo: string; fit: FitAnalysis }): FitAnalysis {
+  const fit = o.fit;
+  const titleNorm = normalizeText(o.titulo);
+  let score = fit.score;
+  const warnings: string[] = [];
+  const weakTopic = o.kind !== "europa" && titleTopic(o.titulo) < KIND_FIT.minTitleTopic;
+
+  if (o.kind === "licitacion") {
+    score = Math.min(score - KIND_FIT.tenderPenalty, KIND_FIT.tenderCap);
+    warnings.push("Licitación: es un contrato de servicios; exige solvencia técnica y oferta económica.");
+    if (weakTopic) score = Math.min(score, KIND_FIT.offTopicCap);
+  } else if (o.kind === "boletin" && !(CALL_IN_TITLE.test(titleNorm) && GRANT_IN_TITLE.test(titleNorm))) {
+    score = Math.min(score, KIND_FIT.bulletinCap);
+    warnings.push("Publicación informativa: no es una convocatoria a la que presentarse.");
+    if (weakTopic) score = Math.min(score, KIND_FIT.offTopicCap);
+  } else if (o.kind === "europa" && o.organismo.includes("Horizon Europe")) {
+    score = Math.min(score, KIND_FIT.horizonCap);
+  }
+  if (/^(universidad|universitat|universidade)/.test(normalizeText(o.organismo))) {
+    score = Math.min(score, KIND_FIT.universityCap);
+    warnings.push("Convocatoria de una universidad: suele dirigirse a su propia comunidad universitaria.");
+  }
+  if (score === fit.score && warnings.length === 0) return fit;
+  score = Math.max(0, score);
+  return { ...fit, score, tier: tierFor(score), warnings: [...warnings, ...fit.warnings.filter((w) => !warnings.includes(w))] };
 }
 
 /** Fit for hand-curated private (RSC) programmes. */

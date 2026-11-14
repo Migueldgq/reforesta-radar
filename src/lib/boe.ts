@@ -233,7 +233,6 @@ export async function getBoeRadar(refresh = false): Promise<{ items: Opportunity
       kind: e.esLicitacion ? "licitacion" : "boletin",
     });
     if (deadline && !explicit) fit.warnings.push("Fecha límite estimada a partir del plazo en días: confirmar en el texto oficial.");
-    if (e.esLicitacion) fit.warnings.push("Licitación (contrato público): Reforesta tendría que presentarse como empresa/entidad licitadora.");
     return {
       id: `boe:${e.identificador}`,
       source: "boe",

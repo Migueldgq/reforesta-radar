@@ -47,7 +47,7 @@ const CACHE_FILE = path.join(process.cwd(), ".cache", "oportunidades.json");
  * Bump when base scoring (scoring.ts / source mappers) changes: cached source results and the aggregate
  * hold scored items and are discarded on mismatch (memo keeps raw upstream data and survives).
  */
-const SCORING_VERSION = 4;
+const SCORING_VERSION = 10;
 
 // ---------------------------------------------------------------- disk
 

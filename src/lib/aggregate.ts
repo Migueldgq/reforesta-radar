@@ -3,7 +3,7 @@ import { getBoeRadar } from "./boe";
 import { cachedSource, getAggregate, warmUp, type AggregateData, type SourceResult } from "./cache";
 import type { OpportunitiesResponse, Opportunity } from "./opportunity";
 import { RSC_OPPORTUNITIES } from "./rsc-opportunities";
-import { geographicFit, scoreRsc } from "./scoring";
+import { geographicFit, kindFit, scoreRsc } from "./scoring";
 import { fetchBocyl, fetchBoja, fetchMontemadrid, fetchTed } from "./sources/extra";
 import { scrapeBocm, scrapeDog, scrapeEu, scrapeFundacionBiodiversidad } from "./sources/multi-source";
 import type { SourceHealth } from "./types";
@@ -87,12 +87,12 @@ async function build(force: boolean): Promise<AggregateData> {
 }
 
 /**
- * Geographic fit on top of the cached base fit, then sort. Cached items are never mutated, so this is
+ * Geographic fit, then actionability by kind, on top of the cached base fit; then sort. Cached items are never mutated, so this is
  * idempotent and a change to GEO_FIT applies to the next response without rebuilding any source.
  */
 function rank(items: Opportunity[]): Opportunity[] {
   return items
-    .map((o) => ({ ...o, fit: geographicFit(o) }))
+    .map((o) => ({ ...o, fit: kindFit({ ...o, fit: geographicFit(o) }) }))
     .sort((a, b) => {
       if (b.fit.score !== a.fit.score) return b.fit.score - a.fit.score;
       return (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999");
