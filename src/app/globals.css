@@ -3,7 +3,7 @@
 :root {
   --background: #f6f5f1;
   --foreground: #1c1917;
-  --header-h: 57px;
+  --header-h: 57px; /* mobile: brand row only; nav lives in the bottom tab bar */
 }
 @media (min-width: 640px) {
   :root {

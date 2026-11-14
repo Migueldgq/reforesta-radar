@@ -284,15 +284,15 @@ export function StatTile({
           : "border-stone-200/80 bg-white hover:border-stone-300 hover:shadow-sm",
       )}
     >
-      <span className={cx("flex items-center justify-between gap-2 text-[13px] font-medium", on ? "text-brand-100" : "text-stone-600")}>
-        <span className="flex items-center gap-1.5">
+      <span className={cx("flex items-center justify-between gap-2 text-xs font-medium sm:text-[13px]", on ? "text-brand-100" : "text-stone-600")}>
+        <span className="flex items-center gap-1.5 [&>svg]:max-sm:hidden">
           {icon}
           {label}
         </span>
         {on && <Check className="h-4 w-4" strokeWidth={3} aria-hidden />}
       </span>
       <span className={cx("text-[28px] leading-none font-semibold tabular-nums tracking-tight sm:text-[32px]", on ? "text-white" : "text-stone-900")}>{value}</span>
-      <span className={cx("text-xs", on ? "text-brand-100" : "text-stone-500")}>{on ? "Filtro activo · pulsa para quitarlo" : caption}</span>
+      <span className={cx("text-xs leading-snug", on ? "text-brand-100" : "text-stone-500")}>{on ? "Filtro activo · pulsa para quitarlo" : caption}</span>
     </button>
   );
 }

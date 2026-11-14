@@ -166,7 +166,7 @@ export function FilterBar({
             type="search"
             value={filters.q}
             onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-            placeholder="Buscar: charcas, ailanto, Guadarrama…"
+            placeholder="Buscar: charcas, ailanto…"
             className="h-9 w-full rounded-lg border border-stone-200 bg-white pr-3 pl-9 text-sm placeholder:text-stone-400 hover:border-stone-300 focus:border-brand-600 focus:outline-none focus-visible:outline-2"
           />
         </label>
