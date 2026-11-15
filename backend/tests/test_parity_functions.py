@@ -15,9 +15,14 @@ import pytest
 from app.config import settings
 from app.ingest.hashing import content_hash, dedupe_key
 from app.models import FitAnalysis, Opportunity
-from app.scoring.rank import geographic_fit, kind_fit
+from app.scoring.rank import FACILITY_WARNING, geographic_fit, kind_fit
 from app.scoring.regions import infer_comunidad_autonoma
-from app.scoring.score import ScoreInput, score_convocatoria
+from app.scoring.score import (
+    LEADER_GROUPS_WARNING,
+    SECTOR_ASSOCIATIONS_WARNING,
+    ScoreInput,
+    score_convocatoria,
+)
 from app.scoring.text import normalize_text
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -36,8 +41,18 @@ def _opp(item: dict[str, Any]) -> Opportunity:
     )
 
 
+# Rules added after the TS (SCORING_VERSION 16): a case that differs only because one of them fired carries its
+# warning, and is checked by its own tests (tests/test_scoring_rules.py) instead.
+INTENDED = (LEADER_GROUPS_WARNING, SECTOR_ASSOCIATIONS_WARNING, FACILITY_WARNING)
+
+
+def _warnings(got: Any) -> list[str]:
+    fits = got if isinstance(got, tuple) else (got,)
+    return [w for f in fits for w in f.get("warnings", [])]
+
+
 def _mismatches(pairs: list[tuple[Any, Any, Any]]) -> list[Any]:
-    return [(case, want, got) for case, want, got in pairs if want != got]
+    return [(case, want, got) for case, want, got in pairs if want != got and not set(_warnings(got)) & set(INTENDED)]
 
 
 def test_score_convocatoria_matches_ts() -> None:
@@ -100,9 +115,9 @@ def test_profile_tables_match_ts() -> None:
 
     p = TS["profile"]
     # frozen golden at v12; v13-14 added and tuned the BDNS history signal (app/scoring/history.py), v15 the deadline
-    # estimate of undated calls (score.estimated_end), v16 one estimated-deadline mechanism flagged as such (ADR 0029);
-    # none of them is in these tables
-    assert p["scoringVersion"] + 4 == SCORING_VERSION
+    # estimate of undated calls (score.estimated_end), v16 one estimated-deadline mechanism flagged as such (ADR 0029),
+    # v17 sector associations, LEADER groups and facility-service tenders (ADR 0032); none of them is in these tables
+    assert p["scoringVersion"] + 5 == SCORING_VERSION
     assert [{"line": g.line, "keywords": [k._asdict() for k in g.keywords]} for g in KEYWORD_RULES] == p["keywordRules"]
     assert list(ONG_POSITIVE_TERMS) == p["ongPositiveTerms"]
     assert [d._asdict() for d in DEALBREAKER_TERMS] == p["dealbreakerTerms"]

@@ -23,7 +23,14 @@ ITEMS: list[dict[str, Any]] = [i for i in GOLDEN["items"] if i["source"] != "rsc
 
 # Items whose TS fit cannot be reproduced from the API fields alone (inputs missing from the API output, see
 # GAPS). Keep this list explicit: a new mismatch fails the test until it is explained here.
-KNOWN_GAPS: dict[str, str] = {}
+KNOWN_GAPS: dict[str, str] = {
+    # SCORING_VERSION 16: running costs of LEADER groups, only those groups can apply (tests/test_scoring_rules.py)
+    "bdns:920464": "leader-groups",
+    "bdns:910261": "leader-groups",
+    "bdns:913981": "leader-groups",
+    "boe:BOE-B-2026-34894": "facility-tender",  # CENEAM security and upkeep tenders: off-topic cap (ADR 0032)
+    "boe:BOE-B-2026-36150": "facility-tender",
+}
 
 
 def _python_fit(item: dict[str, Any]) -> tuple[FitAnalysis, str]:
@@ -79,7 +86,8 @@ def test_rank_order_matches_ts() -> None:
     ranked = rank(base)
     by_id = {i["id"]: i for i in ITEMS}
     assert all(isinstance(o, Opportunity) for o in ranked)
-    assert [(o.fit.score, o.deadline or "9999") for o in ranked] == [
-        (by_id[o.id]["fit"]["score"], by_id[o.id]["deadline"] or "9999") for o in ranked
+    kept = [o for o in ranked if o.id not in KNOWN_GAPS]
+    assert [(o.fit.score, o.deadline or "9999") for o in kept] == [
+        (by_id[o.id]["fit"]["score"], by_id[o.id]["deadline"] or "9999") for o in kept
     ]
     assert [o.fit.score for o in ranked] == sorted((o.fit.score for o in ranked), reverse=True)

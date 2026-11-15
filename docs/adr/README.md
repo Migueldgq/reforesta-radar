@@ -82,3 +82,4 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0029](0029-plazo-estimado-guardado-y-marcado.md) | Plazo estimado: se guarda como fecha de cierre, marcado como estimado | Aceptada | 2026-11-15 |
 | [0030](0030-nombres-de-organismos-normalizados.md) | Nombres de organismos normalizados al ingestar | Aceptada | 2026-11-15 |
 | [0031](0031-programas-de-empresas-territorio-y-caducidad.md) | Programas de empresas: su territorio, su etiqueta y aviso de lista caducada | Aceptada | 2026-11-15 |
+| [0032](0032-reglas-de-sector-leader-y-licitaciones-de-instalaciones.md) | Asociaciones del sector, grupos LEADER y licitaciones de instalaciones | Aceptada | 2026-11-15 |

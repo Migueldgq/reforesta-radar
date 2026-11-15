@@ -56,6 +56,9 @@ class FitAnalysis(Contract):
     warnings: list[str]
     days_remaining: int | None
     deadline_state: DeadlineState
+    # Ceiling for any bonus added on top of this fit (the team's Perfil): the kind caps of tenders, bulletin notices,
+    # Horizon topics and university calls (app.scoring.rank.kind_ceiling). Absent when the kind has no cap.
+    score_cap: int | None = Field(default=None, exclude_if=_absent_if_none)
 
 
 class OpportunityDocument(Contract):

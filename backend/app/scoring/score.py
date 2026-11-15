@@ -42,6 +42,29 @@ ENV_ORGANISM_TERMS = (
 
 # "interés general/social" and "IRPF" also appear in bases of unrelated aid: only trust them in the title
 _TITLE_ONLY_ONG_TERMS = frozenset({"interes general", "interes social", "irpf"})
+# Terms that name non-profits as such. The rest of ONG_POSITIVE_TERMS ("asociaciones", "entitats"...) and the BDNS
+# beneficiary category "personas jurídicas que no desarrollan actividad económica" also cover sector associations.
+_EXPLICIT_NON_PROFIT = frozenset({
+    "sin animo de lucro", "sin fines de lucro", "sense anim de lucre", "sen animo de lucro", "sen fins de lucro", "ong",
+    "ongs", "organizaciones no gubernamentales", "entidades no lucrativas", "entidades sin animo", "tercer sector",
+    "entidades de custodia",
+})  # fmt: skip
+# Dealbreakers that name an economic sector (livestock, farming, hunting, fishing): when one fires, an association or
+# a non-economic legal person among the beneficiaries is that sector's (livestock health groups, hunters' clubs).
+SECTOR_WARNINGS = frozenset({
+    "Relacionada con actividad cinegética.", "Orientada al sector pesquero.", "Orientada a acuicultura.",
+    "Orientada a regadíos/explotaciones agrarias.", "Orientada a explotaciones ganaderas.",
+    "Orientada a explotaciones agrarias.",
+})  # fmt: skip
+SECTOR_ASSOCIATIONS_WARNING = (
+    "Las asociaciones a las que se dirige son del propio sector (ganadero, agrario, de caza o pesca), no ONG "
+    "ambientales."
+)
+# Running costs of the LEADER local action groups: only those groups can apply (not "solicitantes que no son grupos").
+_LEADER_GROUPS = re.compile(r"grupos? de (desarrollo rural|accion local)")
+_LEADER_RUNNING = re.compile(r"funcionamiento|animacion|apoyo a los grupos|gestores de la estrategia")
+LEADER_GROUPS_WARNING = "Para los Grupos de Desarrollo Rural (LEADER) de la zona: solo ellos pueden pedirla."
+LEADER_GROUPS_PENALTY = 30
 _PERSONAS_FISICAS = re.compile("personas fisicas que desarrollan")
 
 
@@ -218,9 +241,25 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
     # 4. Eligibility for an NGO
     is_ong_eligible: bool | None = None
     ong_in_benef = any(has_term(benef_text, t) for t in ONG_POSITIVE_TERMS)
-    ong_in_text = any(has_term(title_norm if t in _TITLE_ONLY_ONG_TERMS else topic_text, t) for t in ONG_POSITIVE_TERMS)
+    ong_text_terms = {
+        t for t in ONG_POSITIVE_TERMS if has_term(title_norm if t in _TITLE_ONLY_ONG_TERMS else topic_text, t)
+    }
+    ong_in_text = bool(ong_text_terms)
+    sector = not ong_text_terms & _EXPLICIT_NON_PROFIT and any(w in SECTOR_WARNINGS for w in warnings)
+    leader_groups = (
+        _LEADER_GROUPS.search(title_norm) is not None
+        and _LEADER_RUNNING.search(title_norm) is not None
+        and "no son grupos" not in title_norm
+    )
     if inp.kind == "empresa":
         is_ong_eligible = True
+    elif leader_groups:
+        is_ong_eligible = False
+        raw -= LEADER_GROUPS_PENALTY
+        warnings.append(LEADER_GROUPS_WARNING)
+    elif sector and (ong_in_text or ong_in_benef):
+        # the generic signal is the sector's associations: no NGO bonus, eligibility unknown
+        warnings.append(SECTOR_ASSOCIATIONS_WARNING)
     elif ong_in_text:
         is_ong_eligible = True
         raw += 14

@@ -84,6 +84,9 @@ def apply_profile(o: Opportunity, p: "TeamProfile", hay: str) -> Opportunity:
     # like the server: closed calls (next edition) never climb into "alto" through a bonus
     if o.fit.deadline_state == "cerrada" and score > o.fit.score:
         score = max(o.fit.score, min(score, GeoFit.closed_cap))
+    # nor does a bonus lift a call above the cap of its kind (tenders, bulletin notices…: fit.score_cap)
+    if o.fit.score_cap is not None and score > o.fit.score:
+        score = max(o.fit.score, min(score, o.fit.score_cap))
     fit = o.fit.model_copy(
         update={
             "score": score,

@@ -255,6 +255,7 @@ or the team profile.
 // GET /api/oportunidades and GET /api/public/oportunidades
 type OpportunitiesResponse = { /* …as before… */ ingest: { running: boolean; startedAt: string | null } };
 type Opportunity = { /* …as before… */ deadlineEstimated: boolean };
+type FitAnalysis = { /* …as before… */ scoreCap?: number }; // absent when the kind has no cap
 // SourceHealth.status in both responses and in GET /api/fuentes
 type HealthStatus = "ok" | "partial" | "error" | "disabled";
 ```
@@ -271,5 +272,10 @@ type HealthStatus = "ok" | "partial" | "error" | "disabled";
   programme's territory when the funder limits it (e.g. «Andalucía o provincia de Ciudad Real», same as
   `rsc.territory`), «Estatal» only when it takes projects anywhere in Spain. That region may be free text, not an
   autonomous community.
+- `fit.scoreCap`: the kind cap the server applied (tenders 57, or 30 when off topic or for running a building;
+  bulletin notices 45; Horizon topics 48; university calls 45; [ADR 0032](adr/0032-reglas-de-sector-leader-y-licitaciones-de-instalaciones.md)).
+  The Perfil step in `src/components/radar/profile.ts` must clamp any increase the same way `team_profile.py` does:
+  `if (score > fit.score && fit.scoreCap != null) score = Math.max(fit.score, Math.min(score, fit.scoreCap))`, or a
+  CENEAM security tender climbs from 30 to "alto" on an Educación bonus.
 - `"disabled"`: the source is switched off with `RADAR_DISABLED_SOURCES` (show «Desactivada»; `count` is 0 and
   `note` explains it). Its calls are left out of `items`.

@@ -9,7 +9,7 @@ import pytest
 
 from app.config import settings
 from app.http import Http
-from app.scoring.rank import adjusted_fit
+from app.scoring.rank import FACILITY_WARNING, adjusted_fit
 from app.sources import boe
 from app.sources.base import SourceContext, score_raw
 from app.sources.memo import Memo
@@ -53,7 +53,13 @@ async def test_boe_fetch_maps_and_scores_like_ts(monkeypatch: pytest.MonkeyPatch
     for field in ("titulo", "organismo", "kind", "sourceLabel", "publishedAt", "deadline", "deadlineText", "url",
                   "documents", "summary", "tipo"):  # fmt: skip
         assert got[field] == want[field], field
-    assert adjusted_fit(o).to_json() == want["fit"]
+    fit = adjusted_fit(o).to_json()
+    # the TS scored this CENEAM security tender 57 "medio" on the centre's name; ADR 0032 caps such tenders at 30
+    assert {k: v for k, v in fit.items() if k not in ("score", "tier", "warnings", "scoreCap")} == {
+        k: v for k, v in want["fit"].items() if k not in ("score", "tier", "warnings")
+    }
+    assert (fit["score"], fit["tier"], fit["scoreCap"]) == (30, "bajo", 30)
+    assert fit["warnings"] == [want["fit"]["warnings"][0], FACILITY_WARNING, *want["fit"]["warnings"][1:]]
     assert boe.BoeSource().keep(o)
     # the past day and the notice are memoised for the next run (fetch_cache)
     assert {m.key for m in memo.persisted_since(0)} == {"boe:day:20261026", "boe:notice:BOE-B-2026-34894"}
