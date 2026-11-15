@@ -9,6 +9,9 @@ services:
   api:
     environment:
       RADAR_E2E: "1" # lets backend/tests/e2e_seed.py empty this database
+      # Turns the «Revisión por IA» on so the API shows the seeded verdicts. Not a key: this stack never ingests, so
+      # nothing is ever sent to Google.
+      GEMINI_API_KEY: e2e-not-a-key
     volumes:
       - ./backend/tests:/app/tests:ro
 

@@ -8,7 +8,10 @@ scoring, app/ingest/store.py):
   numbers, titles and dates relative to today (open now), so the list always has open calls whatever the day;
 - the previous editions of BDNS 904719 from tests/fixtures/bdns_history/ (Reforesta won 2025, 2024 and 2022);
 - the company programmes of app/sources/rsc.py;
-- a call the team follows that a later run no longer returns (`gone`), with its board row.
+- a call the team follows that a later run no longer returns (`gone`), with its board row;
+- «Revisión por IA» verdicts written straight into ai_reviews (no model is ever called): «si» for BDNS 904719,
+  «dudoso» for BDNS 923042 and «no» for a social-volunteering call (`discarded`), which leaves the default list. The
+  API shows them only with a GEMINI_API_KEY set (any value: the e2e stack never ingests).
 No network access. Accounts are created afterwards by the caller (e2e/global-setup.ts) through the CLI and the API.
 Prints one JSON line with the ids the tests use.
 """
@@ -25,12 +28,13 @@ from typing import Any
 import httpx
 from sqlalchemy import insert, text
 
-from app.config import local_today
+from app.config import local_today, settings
 from app.db.session import make_engine
-from app.db.tables import metadata, tracking
+from app.db.tables import ai_reviews, metadata, tracking
 from app.http import Http
 from app.ingest.store import SourceRun, write_history, write_ingest
 from app.models import Opportunity, SourceHealth
+from app.review import input_hash
 from app.scoring import SCORING_VERSION
 from app.sources import bdns
 from app.sources import bdns_history as h
@@ -45,6 +49,13 @@ WON = "904719"  # Comunidad de Madrid, proyectos ambientales: Reforesta won past
 SEARCH = "990001"  # open, unique word «anfibios» (search, drawer, deep link, accessibility)
 TRACK = "990002"  # open, changed by the tracking tests only
 GONE = "990009"  # on the board, gone from the sources
+DISCARDED = "990003"  # open, the AI review says "no": only under «Descartadas por la IA» (inicio.spec.ts)
+DOUBT = "923042"  # the AI review says "dudoso"
+AI_VERDICTS = {
+    WON: ("si", "Proyectos ambientales de entidades sin ánimo de lucro: encaja con vuestro trabajo."),
+    DOUBT: ("dudoso", "Programas para jóvenes; no está claro que tengan una parte ambiental."),
+    DISCARDED: ("no", "Es voluntariado social, no ambiental."),
+}
 
 
 def _detail(numero: str) -> dict[str, Any]:
@@ -75,6 +86,7 @@ def _items(now: datetime) -> list[Opportunity]:
         (SEARCH, _open_copy(WON, SEARCH, "Ayudas para restaurar charcas y humedales para anfibios 2027", today, 20)),
         (TRACK, _open_copy(WON, TRACK, "Subvenciones para plantar bosque autóctono en riberas 2027", today, 40)),
         (GONE, _open_copy(WON, GONE, "Convocatoria de reforestación urbana retirada 2027", today, 30)),
+        (DISCARDED, _open_copy(WON, DISCARDED, "Subvenciones a entidades de voluntariado social 2027", today, 25)),
     ]
     return real + [_bdns(n, d, now) for n, d in copies]
 
@@ -145,6 +157,13 @@ async def seed() -> dict[str, Any]:
             )
         await ingest([o for o in items if o.id != gone.id])  # a later run no longer returns it: gone
         await write_history(engine, {WON: await _history()}, [])
+        async with engine.begin() as conn:
+            await conn.execute(insert(ai_reviews), [
+                {"opportunity_id": o.id, "input_hash": input_hash(o), "verdict": v, "reason": reason,
+                 "model": settings.ai_model}
+                for o in items if (n := o.id.removeprefix("bdns:")) in AI_VERDICTS
+                for v, reason in [AI_VERDICTS[n]]
+            ])  # fmt: skip
     finally:
         await engine.dispose()
     titles = {o.id: o.titulo for o in items}
@@ -153,6 +172,8 @@ async def seed() -> dict[str, Any]:
         "search": f"bdns:{SEARCH}",
         "track": f"bdns:{TRACK}",
         "gone": f"bdns:{GONE}",
+        "discarded": f"bdns:{DISCARDED}",
+        "doubt": f"bdns:{DOUBT}",
         "titles": titles,
         "rsc": [o.titulo for o in rsc],
     }

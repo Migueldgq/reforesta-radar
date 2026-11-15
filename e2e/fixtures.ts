@@ -18,7 +18,7 @@ export type AccountKey = keyof typeof ACCOUNTS;
 
 export interface Run {
   runId: string;
-  seed: { won: string; search: string; track: string; gone: string; titles: Record<string, string>; rsc: string[] };
+  seed: { won: string; search: string; track: string; gone: string; discarded: string; doubt: string; titles: Record<string, string>; rsc: string[] };
   accounts: Record<AccountKey, { email: string; password: string; name: string }>;
 }
 
