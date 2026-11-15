@@ -75,8 +75,13 @@ async def test_rsc_programmes_carry_checked_facts_and_real_deadlines() -> None:
 
     unicaja, fit = by_id["rsc:rsc-unicaja-medioambiente"]
     assert (fit.deadline_state, fit.days_remaining) == ("abierta", 19)
-    assert unicaja.rsc and unicaja.rsc.territory == "Andalucía o provincia de Ciudad Real"
-    assert any("Andalucía" in w for w in fit.warnings)
+    assert unicaja.rsc and unicaja.rsc.territory == unicaja.region == "Andalucía o provincia de Ciudad Real"
+    assert fit == unicaja.fit  # its territory is one curated limit: no second, geographic penalty
+    assert sum("Andalucía" in w for w in fit.warnings) == 1
+    assert {o.region for i, (o, _) in by_id.items() if i != unicaja.id} == {"Estatal"}  # the rest: all of Spain
+    assert {(o.kind, o.source_label, o.nivel_admin) for o, _ in by_id.values()} == {
+        ("empresa", "Programa de empresa/fundación", "Privada")
+    }
     closed = [f for i, (_, f) in by_id.items() if i != "rsc:rsc-unicaja-medioambiente"]
     assert all(f.deadline_state == "cerrada" for f in closed)
     assert all(fit.score > f.score for f in closed)  # the open call ranks first
@@ -87,6 +92,24 @@ async def test_rsc_programmes_carry_checked_facts_and_real_deadlines() -> None:
     bbva = by_id["rsc:rsc-bbva-futuro"][0]
     assert bbva.rsc and bbva.rsc.unverified and bbva.bases_url is None
     assert by_id["rsc:rsc-fbbva-premio-biodiversidad"][0].rsc.kind == "premio"  # type: ignore[union-attr]
+    from app.sources.rsc import rsc_health
+
+    health = rsc_health(NOW.date())
+    assert health.status == "ok" and health.note.endswith("comprobada en la web de cada entidad el 15 nov 2026.")
+
+
+def test_rsc_list_goes_stale_after_180_days() -> None:
+    from datetime import date
+
+    from app.sources.rsc import RSC_PROGRAMMES, rsc_health, to_raw
+
+    assert rsc_health(date(2027, 5, 14)).status == "ok"  # 180 days after the check
+    stale = rsc_health(date(2027, 6, 20))  # 217 days: 7 months
+    assert stale.status == "partial"
+    assert stale.note.startswith("Lista comprobada hace 7 meses: toca revisarla. ")
+    fit = score_raw(to_raw(RSC_PROGRAMMES[0], date(2027, 6, 20)), date(2027, 6, 20)).fit
+    assert fit.warnings[-1] == "Datos comprobados hace 7 meses: pueden haber cambiado; revisa la web de la entidad."
+    assert fit.score == score_raw(to_raw(RSC_PROGRAMMES[0]), date(2027, 6, 20)).fit.score  # a warning, no penalty
 
 
 async def test_http_retries_5xx_then_succeeds() -> None:

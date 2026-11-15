@@ -38,8 +38,10 @@ def geographic_fit(o: Opportunity) -> FitAnalysis:
     warning: str | None = None
     cap = 100
     g = GeoFit.regions.get(region)
-    if o.nivel_admin == "Privada" and (region == "Estatal" or not known):
-        pass  # nationwide private/RSC programme: no territorial restriction
+    if o.kind == "empresa" or (o.nivel_admin == "Privada" and (region == "Estatal" or not known)):
+        # nationwide private programme; a company programme limited to a territory already has that as one of its
+        # curated limits (app/sources/rsc.py), so its region (the territory) is not penalised twice
+        pass
     elif region == "Comunidad de Madrid":
         g = GeoFit.madrid_municipal if is_municipal else GeoFit.regions[region]
         delta, reason = g.delta, g.reason

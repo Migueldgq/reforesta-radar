@@ -19,8 +19,8 @@ Los comandos de este documento se ejecutan en la carpeta del repositorio, con el
 ## Si nadie lo mantiene, qué se estropea primero
 
 1. **Programas de empresas** (semanas). Las fechas son las de la última edición comprobada. Cuando una edición cierra
-   pasa a «próxima edición»; cuando abre una nueva, el radar no se entera. Nada avisa de que la comprobación es
-   antigua: la app sigue diciendo «Comprobado el 15 nov 2026».
+   pasa a «próxima edición»; cuando abre una nueva, el radar no se entera. A los 180 días de la última comprobación,
+   Fuentes avisa «Lista comprobada hace N meses: toca revisarla» y cada programa lleva un aviso igual.
 2. **Fuentes leídas en HTML** (meses). DOG y Fundación Biodiversidad se leen de la web; si cambian su diseño, la
    fuente sale como «Error» o «Parcial» en Fuentes y sus convocatorias se quedan congeladas en la última carga buena.
    BOE, BOCM, BDNS y la UE usan APIs o XML oficiales, más estables, pero también pueden cambiar.
@@ -38,16 +38,19 @@ Los comandos de este documento se ejecutan en la carpeta del repositorio, con el
 - **Dónde está la lista:** `backend/app/sources/rsc.py`, tupla `RSC_PROGRAMMES` (hoy seis: Fundación Unicaja,
   Fundación Ibercaja, BBVA Asset Management, Fundación Endesa, Fundación BBVA y PreZero). Es la única copia: la web la
   lee de la API.
-- **Fecha de comprobación:** la constante `VERIFIED_ON` (`"2026-11-15"`), una para toda la lista. La app la enseña como
-  «Comprobado el…» en Empresas y en cada ficha, y el servidor MCP como `verifiedOn`. La nota de la vista Fuentes
-  repite la fecha escrita a mano en `RSC_HEALTH` (`note=`): cámbiala también.
+- **Fecha de comprobación:** la constante `VERIFIED_ON` (`"2026-11-15"`), una para toda la lista y la única que hay
+  que cambiar. La app la enseña como «Comprobado el…» en Empresas y en cada ficha, el servidor MCP como `verifiedOn`
+  y la nota de Fuentes la toma de ahí. Pasados 180 días (`STALE_AFTER_DAYS`) sin cambiarla, Fuentes marca la lista
+  como parcial y cada programa avisa de que sus datos pueden haber cambiado.
+- **Territorio:** si la entidad limita dónde se hace el proyecto, ponlo en `territory` (sale como territorio del
+  programa) y añade un `Limit` que lo explique; sin `territory`, el programa sale como «Estatal».
 - **Cómo revisarla:**
   1. Para cada programa, abre `url` y `bases_url` y compara con `opens_at`, `deadline`, `window`, `amount`,
      `beneficiarios`, `requirements`, `territory` y `limits`. Copia los importes y fechas tal como se publican.
   2. Si abrió una edición nueva, cambia `opens_at`, `deadline` y `window` (el estado abierta/cerrada sale de esas
      fechas). Si lo que no se pudo comprobar cambia, actualiza `unverified`.
   3. Si un programa desaparece, quítalo; para añadir uno, copia la estructura de otro.
-  4. Cambia `VERIFIED_ON` y la fecha de `RSC_HEALTH` a la fecha de la revisión.
+  4. Cambia `VERIFIED_ON` a la fecha de la revisión.
   5. Comprueba y aplica:
 
      ```bash

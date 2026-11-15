@@ -267,5 +267,9 @@ type HealthStatus = "ok" | "partial" | "error" | "disabled";
   publicación"), not stated by it ([ADR 0029](adr/0029-plazo-estimado-guardado-y-marcado.md)). Keep using it to sort
   and count days, but never show it as exact: «hacia el 18 nov · fecha estimada», «quedan unos 3 días». The fit
   reasons and warnings already say so.
+- Company programmes (`kind: "empresa"`): `sourceLabel` is «Programa de empresa/fundación»; `region` is the
+  programme's territory when the funder limits it (e.g. «Andalucía o provincia de Ciudad Real», same as
+  `rsc.territory`), «Estatal» only when it takes projects anywhere in Spain. That region may be free text, not an
+  autonomous community.
 - `"disabled"`: the source is switched off with `RADAR_DISABLED_SOURCES` (show «Desactivada»; `count` is 0 and
   `note` explains it). Its calls are left out of `items`.

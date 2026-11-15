@@ -81,3 +81,4 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0028](0028-plazo-estimado-de-las-convocatorias-sin-fecha.md) | Plazo estimado de las convocatorias BDNS sin fecha de cierre | Sustituida por 0029 | 2026-11-15 |
 | [0029](0029-plazo-estimado-guardado-y-marcado.md) | Plazo estimado: se guarda como fecha de cierre, marcado como estimado | Aceptada | 2026-11-15 |
 | [0030](0030-nombres-de-organismos-normalizados.md) | Nombres de organismos normalizados al ingestar | Aceptada | 2026-11-15 |
+| [0031](0031-programas-de-empresas-territorio-y-caducidad.md) | Programas de empresas: su territorio, su etiqueta y aviso de lista caducada | Aceptada | 2026-11-15 |
