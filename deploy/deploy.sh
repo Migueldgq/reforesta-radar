@@ -90,6 +90,7 @@ healthy() {
     lines=$(docker ps -a --filter "label=com.docker.compose.project=$RADAR_APP" --filter label=com.docker.compose.oneoff=False \
       --format '{{.Names}} {{.Status}}')
     if [ "$(grep -c . <<< "$lines")" -ge 4 ] && ! grep -v '(healthy)' <<< "$lines" > /dev/null; then break; fi
+    if grep -q '(unhealthy)' <<< "$lines"; then echo "Unhealthy:" >&2; grep '(unhealthy)' <<< "$lines" >&2; return 1; fi
     [ "$i" -lt 60 ] || { echo "Containers not healthy after 5 min:" >&2; echo "$lines" >&2; return 1; }
     sleep 5
   done
