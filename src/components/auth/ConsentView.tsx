@@ -91,7 +91,7 @@ export function ConsentView() {
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2.5">
                   <dt className="text-muted-foreground">El permiso se envía a</dt>
-                  <dd className="font-mono text-xs break-all">{info.redirectHost}</dd>
+                  <dd className="min-w-0 font-mono text-xs break-words">{info.redirectHost}</dd>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2.5">
                   <dt className="text-muted-foreground">Tu cuenta</dt>
@@ -163,7 +163,7 @@ function KindNote({ kind, host }: { kind: ConsentInfo["kind"]; host: string }) {
         <CircleAlert className="size-4 shrink-0" aria-hidden /> No reconocemos este asistente
       </p>
       <p>
-        Su nombre lo ha escrito él mismo. Permite solo si acabas de conectarlo tú y reconoces la dirección <span className="font-mono text-xs break-all">{host}</span>.
+        Su nombre lo ha escrito él mismo. Permite solo si acabas de conectarlo tú y reconoces la dirección <span className="font-mono text-xs break-words">{host}</span>.
       </p>
     </div>
   );

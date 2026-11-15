@@ -208,18 +208,18 @@ function AssistantRow({ assistant: a, onChange }: { assistant: ConnectedAssistan
 
   return (
     <li className="space-y-2 p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 space-y-1">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1 space-y-1">
           <p className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium">{a.name}</span>
             <AssistantKindChip kind={a.kind} />
           </p>
           <p className="text-xs text-muted-foreground">
-            Conectado {fmtWhenShort(a.createdAt)} · {a.lastUsedAt ? `usado ${fmtWhenShort(a.lastUsedAt)}` : "sin usar"} · <span className="font-mono">{a.redirectHost}</span>
+            Conectado {fmtWhenShort(a.createdAt)} · {a.lastUsedAt ? `usado ${fmtWhenShort(a.lastUsedAt)}` : "sin usar"} · <span className="font-mono break-words">{a.redirectHost}</span>
           </p>
         </div>
         {!confirming && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(true)} aria-label={`Desconectar ${a.name}`}>
+          <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => setConfirming(true)} aria-label={`Desconectar ${a.name}`}>
             Desconectar
           </Button>
         )}
