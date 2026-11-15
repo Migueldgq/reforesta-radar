@@ -12,7 +12,8 @@
     "preview": "HYPERFRAMES_NO_TELEMETRY=1 hyperframes preview composition",
     "render": "node compose.mjs && HYPERFRAMES_NO_TELEMETRY=1 hyperframes render composition --output out/demo-final.mp4",
     "render:draft": "node compose.mjs && HYPERFRAMES_NO_TELEMETRY=1 hyperframes render composition --quality draft --output out/demo-draft.mp4",
-    "all": "npm run capture && npm run render"
+    "all": "npm run capture && npm run render",
+    "render:nomusic": "MUSIC=0 node compose.mjs && HYPERFRAMES_NO_TELEMETRY=1 hyperframes render composition --output out/demo-final-nomusic.mp4"
   },
   "devDependencies": {
     "hyperframes": "0.9.46",

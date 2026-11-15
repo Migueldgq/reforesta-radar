@@ -1,16 +1,16 @@
 #!/usr/bin/env node
-// Records each "screen" scene of the demo from the live app with local Chrome (puppeteer-core).
+// Records each "screen" beat of the demo from the live app with local Chrome (puppeteer-core).
 //
-//   node capture.mjs                  # all screen scenes, in order (some continue from the previous page)
-//   node capture.mjs perfil analizar  # only these scene ids
+//   node capture.mjs                  # all screen beats, in order
+//   node capture.mjs perfil analizar  # only these beat ids
 //
 // Env: BASE_URL (default http://localhost:3000), CHROME_PATH, VIEWPORT (default 1440x810), DSF (default 2), HEADFUL=1.
 //
-// For every scene it writes:
+// For every beat it writes:
 //   composition/assets/scenes/<id>.mp4  H.264 at native 2x pixels (2880x1620), speed-ramped and trimmed to the action
-//   captures/<id>.json                  interaction log in OUTPUT time: clicks, zooms, captions, lower thirds
-// compose.mjs turns that log into zooms, click sounds and captions, so they stay in sync after a re-capture.
-// A scene that fails is retried once, then skipped with a warning (compose.mjs shows a placeholder).
+//   captures/<id>.json                  event log in OUTPUT time: camera targets, clicks, headline changes
+// compose.mjs turns that log into the camera moves (crop/push/pan on the white canvas), click sounds and headlines,
+// so everything stays in sync after a re-capture. A beat that fails is retried once, then skipped with a warning.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -42,40 +42,47 @@ const CONFIG = {
   ],
   // Hide dev-only chrome (Next.js dev indicator) and scrollbars in the recording.
   hideCss: `nextjs-portal{display:none!important} *::-webkit-scrollbar{display:none} *{scrollbar-width:none}`,
+  // The app's own collapsed-sidebar state (shadcn cookie): more room for the content we crop.
+  cookies: [{ name: "sidebar_state", value: "false" }],
   captureDir: path.join(HERE, "captures"),
   clipDir: path.join(HERE, "composition/assets/scenes"),
   waitTimeout: 20000,
   // Speed-ramps for non-essential motion (output = real time / speed).
-  travelSpeed: 2.5,
-  scrollSpeed: 3,
+  travelSpeed: 2.2,
+  scrollSpeed: 2.5,
+  // Output seconds a camera move takes (compose.mjs uses the same value per event).
+  camMove: 0.7,
   triageStorageKey: "reforesta-radar:seguimiento:v1",
   apiPath: "/api/oportunidades",
   examples: {
     madrid: { id: "bdns:904719", row: /proyectos ambientales 2026/i },
-    miteco: { id: "bdns:923290", row: /actividades inter[eé]s general/i },
   },
   sel: {
     homeReady: [{ css: "tbody tr" }],
-    landingReady: [{ css: "h1" }],
+    statTiles: [{ css: "main button", text: /^Abiertas ahora/ }, { css: "main button", text: /^Fuera de tus/ }],
+    chartCard: [{ css: "main [data-slot=card]", text: /^Cuándo cierran/ }],
+    chartTitle: [{ css: "main *", text: /^Cuándo cierran$/, smallest: true }],
+    weekBar: [{ css: "main button", attr: ["aria-label", /^Semana del .*: [1-9]\d* convocatorias/] }],
+    mapTitle: [{ css: "main *", text: /^Territorio$/, smallest: true }],
     mapMadrid: [{ css: "[aria-label^='Comunidad de Madrid']" }, { css: "path", attr: ["aria-label", /Madrid/] }],
     tableTop: [{ css: "main table thead" }, { css: "main table" }],
-    statEncajeAlto: [{ css: "main button", text: /^Encaje alto/ }],
-    tabProximas: [{ css: "[role=tab]", text: /^Próximas ediciones/ }, { css: "main button", text: /^Próximas ediciones/ }],
     row: (re) => [{ css: "tbody tr", text: re }, { css: "[role=row]", text: re }],
-    rowBadge: /^Cerró el/, // inside the row
     drawerFit: [{ css: "[role=dialog] [aria-label='¿Encaja?']" }, { css: "[role=dialog] section", text: /¿Encaja\?/, smallest: true }],
     triageEstudio: [{ css: "[role=dialog] [role=radio]", text: /^En estudio$/ }, { css: "[role=dialog] button", text: /^En estudio$/ }],
-    sourcesTable: [{ css: "main table tbody" }, { css: "main table" }],
+    sourcesSummary: [{ css: "main *", text: /^11 fuentes · \d+ convocatorias/, smallest: true }, { css: "main p", text: /fuentes ·/ }],
+    sourcesTable: [{ css: "main table" }],
     boardReady: [{ css: "[data-col]" }],
     boardCard: (col, re) => [{ css: `[data-col='${col}'] [data-slot=card]`, text: re }, { css: `[data-col='${col}'] [data-slot=card]` }],
     boardColumn: (col) => [{ css: `[data-col='${col}']` }],
     perfilLine: "Educación ambiental",
     perfilOption: "Mucho más",
-    perfilEffect: [{ css: "main div, main section, main aside", text: /^Efecto de vuestros ajustes/, smallest: true }],
-    empresasReady: [{ css: "main h1" }],
+    // the whole panel (title + numbers + top-5 list), not just its title row
+    perfilEffect: [{ css: "main div, main section, main aside", text: /^Efecto de vuestros ajustes[\s\S]*primeras/, smallest: true }, { css: "main div, main section, main aside", text: /^Efecto de vuestros ajustes/, smallest: true }],
     empresasCard: [{ css: "main [data-slot=card]", text: /Santander|Iberdrola|Caixa|Fundaci/ }, { css: "main article" }],
+    pdfDrop: [{ css: "main *", text: /^Arrastra un PDF/, smallest: true }],
     pdfSample: [{ css: "button", text: /Orden 1689\/2026/ }, { css: "button", text: /BDNS 923290/ }],
-    pdfVerdict: [{ css: "[aria-live=polite] *", text: /\d+\s*\/\s*100/, smallest: true }, { css: "main *", text: /\d+\s*\/\s*100/, smallest: true }],
+    pdfVerdict: [{ css: "main *", text: /^\d+\s*\/\s*100$/, smallest: true }, { css: "main *", text: /\d+\s*\/\s*100/, smallest: true }],
+    pdfMotivos: [{ css: "main *", text: /^Motivos$/, smallest: true }],
   },
 };
 
@@ -155,7 +162,7 @@ async function must(page, specs, what, opts) {
 
 /* ---------- Recording + interaction log ---------- */
 
-/** One scene's recording: CDP screencast frames at native device pixels, plus an event log (wall clock). */
+/** One beat's recording: CDP screencast frames at native device pixels, plus an event log (wall clock). */
 class Take {
   constructor(page, dir) {
     this.page = page;
@@ -211,35 +218,38 @@ async function ramp(speed, fn) {
   }
 }
 const skip = (fn) => ramp(Infinity, fn);
-const caption = (i) => ev("caption", { i });
-const lowerThird = (i) => ev("lower", { i });
-const lowerThirdOff = () => ev("lowerOff");
+/** Headline i of this beat starts typing (text lives in scenes.mjs). */
+const headline = (i) => ev("head", { i });
+
+/** Union of boxes, padded. */
+function region(boxes, pad = 20) {
+  const bs = [boxes].flat();
+  const x = Math.min(...bs.map((b) => b.x)) - pad;
+  const y = Math.min(...bs.map((b) => b.y)) - pad;
+  const r = Math.max(...bs.map((b) => b.x + b.width)) + pad;
+  const btm = Math.max(...bs.map((b) => b.y + b.height)) + pad;
+  return { x: Math.round(x), y: Math.round(y), w: Math.round(r - x), h: Math.round(btm - y) };
+}
 
 /**
- * Zoom the final video onto viewport point (x, y) while fn runs. With `keep` (a box in viewport px) the scale is
- * capped and the origin shifted so that the whole box stays inside the frame once zoomed.
+ * Camera: from now on the composition frames region `r` (viewport CSS px) on the white canvas, moving there over
+ * `dur` output seconds (0 = cut). Waits for the move unless `wait` is false.
  */
-async function zoom(x, y, scale, fn, keep = null) {
-  if (keep) {
-    const { width: VWp, height: VHp } = CONFIG.viewport;
-    scale = Math.max(1.15, Math.min(scale, (0.97 * VWp) / keep.width, (0.97 * VHp) / keep.height));
-    const fit = (p, lo0, hi0, size) => {
-      const lo = (scale * hi0 - size) / (scale - 1); // keeps the far edge inside
-      const hi = (scale * lo0) / (scale - 1); // keeps the near edge inside
-      return lo > hi ? (lo + hi) / 2 : Math.min(Math.max(p, lo), hi);
-    };
-    x = fit(x, keep.x, keep.x + keep.width, VWp);
-    y = fit(y, keep.y, keep.y + keep.height, VHp);
-    scale = Math.round(scale * 100) / 100;
-  }
-  ev("zoomIn", { x, y, scale });
-  await sleep(350); // the zoom-in eases over ~0.3 s of output time
-  try {
-    await fn?.();
-  } finally {
-    ev("zoomOut");
-    await sleep(300);
-  }
+async function cam(r, { dur = CONFIG.camMove, wait = true, max = null } = {}) {
+  ev("cam", { ...r, dur, ...(max ? { max } : {}) });
+  if (wait && dur > 0) await sleep(dur * 1000 + 60);
+}
+
+/** The results-count line above the table ("N convocatorias"); the map card can show a same-looking label. */
+async function tableCount(page) {
+  const h = await page.evaluateHandle(() => {
+    const els = [...document.querySelectorAll("main span, main div, main p")].filter((e) => /^\d+ convocatorias$/.test(e.innerText?.trim() ?? ""));
+    const tableTop = document.querySelector("main table")?.getBoundingClientRect().top ?? Infinity;
+    return els.filter((e) => e.getBoundingClientRect().top < tableTop).sort((a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top || a.innerText.length - b.innerText.length)[0] ?? null;
+  });
+  const el = h.asElement();
+  if (!el) throw new Error("not found: table count");
+  return el;
 }
 
 /** Smooth, eased, time-based mouse move; ramped (fast) in the output. */
@@ -271,28 +281,19 @@ async function click(page, x, y, pause = 250) {
   await sleep(pause);
 }
 
-async function clickEl(page, el, { pause = 250, dy = 0 } = {}) {
-  const b = await box(el);
-  const y = b.y + Math.min(b.height / 2, 22) + dy;
-  await glide(page, b.cx, y);
-  await click(page, b.cx, y, pause);
-}
-
-/** Smooth-scroll the largest scrollable area (inside `rootCss` if given) so `el` (or dy) moves into view. Ramped. */
-async function scroll(page, { dy = null, el = null, rootCss = null, ms = 900 } = {}) {
+/** Smooth-scroll the page's main scroller by dy (or so that `el` sits at `at` of the viewport height). Ramped. */
+async function scroll(page, { dy = null, el = null, at = 0.3, ms = 900 } = {}) {
   await ramp(CONFIG.scrollSpeed, () =>
     page.evaluate(
-      async (dy, el, rootCss, ms) => {
-        const root = rootCss ? document.querySelector(rootCss) : document;
-        if (!root) return;
-        const cands = [...root.querySelectorAll("*")].filter((e) => {
+      async (dy, el, at, ms) => {
+        const cands = [...document.querySelectorAll("*")].filter((e) => {
           const cs = getComputedStyle(e);
           return /(auto|scroll)/.test(cs.overflowY) && e.scrollHeight > e.clientHeight + 4;
         });
-        if (!rootCss && document.scrollingElement.scrollHeight > innerHeight + 4) cands.push(document.scrollingElement);
+        if (document.scrollingElement.scrollHeight > innerHeight + 4) cands.push(document.scrollingElement);
         const target = cands.sort((a, b) => b.clientHeight - a.clientHeight)[0];
         if (!target) return;
-        if (el) dy = el.getBoundingClientRect().top - innerHeight * 0.35;
+        if (el) dy = el.getBoundingClientRect().top - innerHeight * at;
         const start = target.scrollTop;
         const t0 = performance.now();
         await new Promise((done) => {
@@ -307,31 +308,31 @@ async function scroll(page, { dy = null, el = null, rootCss = null, ms = 900 } =
       },
       dy,
       el,
-      rootCss,
+      at,
       ms,
     ),
   );
-  await sleep(120);
+  await sleep(100);
 }
 
-// Fake cursor (headless Chrome paints none) with a click ripple.
+// Fake cursor (headless Chrome paints none) with a click ripple. Sized for a 1.5–2x crop.
 const CURSOR_SCRIPT = (hideCss) => {
   const install = () => {
     if (document.getElementById("__demo_cursor")) return;
     const st = document.createElement("style");
     st.textContent = hideCss + `
-      #__demo_cursor{position:fixed;left:0;top:0;width:30px;height:30px;z-index:2147483647;pointer-events:none;
+      #__demo_cursor{position:fixed;left:0;top:0;width:20px;height:20px;z-index:2147483647;pointer-events:none;
         transform:translate(-100px,-100px)}
-      #__demo_cursor svg{transform-origin:3px 3px;transition:transform 120ms ease;filter:drop-shadow(0 2px 3px rgba(0,0,0,.28))}
-      #__demo_cursor.down svg{transform:scale(.86)}
-      .__demo_ripple{position:fixed;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;pointer-events:none;
-        z-index:2147483646;border:2px solid oklch(0.37 0.07 158);background:oklch(0.37 0.07 158 / .14);
-        animation:__demo_rip 520ms cubic-bezier(.2,.7,.3,1) forwards}
-      @keyframes __demo_rip{from{transform:scale(.25);opacity:1}to{transform:scale(1.35);opacity:0}}`;
+      #__demo_cursor svg{transform-origin:3px 3px;transition:transform 120ms ease;filter:drop-shadow(0 1px 2px rgba(0,0,0,.28))}
+      #__demo_cursor.down svg{transform:scale(.85)}
+      .__demo_ripple{position:fixed;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;pointer-events:none;
+        z-index:2147483646;border:1.5px solid oklch(0.37 0.07 158);background:oklch(0.37 0.07 158 / .12);
+        animation:__demo_rip 480ms cubic-bezier(.2,.7,.3,1) forwards}
+      @keyframes __demo_rip{from{transform:scale(.25);opacity:1}to{transform:scale(1.3);opacity:0}}`;
     document.head.appendChild(st);
     const c = document.createElement("div");
     c.id = "__demo_cursor";
-    c.innerHTML = `<svg width="30" height="30" viewBox="0 0 22 22"><path d="M3 2 L3 17 L7.2 13.2 L10 19.5 L12.6 18.4 L9.9 12.3 L15.5 12.3 Z" fill="#111" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+    c.innerHTML = `<svg width="20" height="20" viewBox="0 0 22 22"><path d="M3 2 L3 17 L7.2 13.2 L10 19.5 L12.6 18.4 L9.9 12.3 L15.5 12.3 Z" fill="#111" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
     document.documentElement.appendChild(c);
     const move = (e) => (c.style.transform = `translate(${e.clientX}px,${e.clientY}px)`);
     addEventListener("mousemove", move, true);
@@ -343,7 +344,7 @@ const CURSOR_SCRIPT = (hideCss) => {
       r.style.left = e.clientX + "px";
       r.style.top = e.clientY + "px";
       document.documentElement.appendChild(r);
-      setTimeout(() => r.remove(), 600);
+      setTimeout(() => r.remove(), 560);
     }, true);
     addEventListener("mouseup", () => c.classList.remove("down"), true);
   };
@@ -355,136 +356,152 @@ async function goto(page, route, readySpecs) {
   await page.goto(CONFIG.baseUrl + route, { waitUntil: "networkidle2", timeout: 60000 });
   if (readySpecs) await must(page, readySpecs, `ready marker for ${route}`, { timeout: 45000 });
   await page.mouse.move(mousePos.x, mousePos.y);
-  await sleep(500); // charts/fonts settle before recording starts
+  await sleep(600); // charts/fonts settle before recording starts
 }
 
 /* ------------------------------------------------------------------ */
-/* Scenes: `run` executes while recording; READY is awaited before.   */
+/* Beats: `run` executes while recording; READY is awaited before.    */
+/* Each starts with headline(0) and a camera target; compose.mjs adds */
+/* a slow push-in while the headline types (~1 s), so hold for it.    */
 /* ------------------------------------------------------------------ */
 const S = CONFIG.sel;
+const TYPE_HOLD = 1100; // ms the first headline needs to type in before the action starts
+
 const ACTIONS = {
-  // Cold open: the landing hero's own entrance animation, recorded from navigation.
-  async landing(page) {
-    await skip(async () => {
-      await page.goto(CONFIG.baseUrl + "/landing", { waitUntil: "domcontentloaded" });
-      await must(page, S.landingReady, "landing h1");
-    });
-    caption(0);
-    await sleep(3800);
+  async fuentes(page) {
+    const sum = await box(await must(page, S.sourcesSummary, "sources summary"), { scroll: false });
+    const tableEl = await must(page, S.sourcesTable, "sources table");
+    const table = await box(tableEl, { scroll: false });
+    headline(0);
+    await cam(region([sum, { ...table, height: 330 }], 24), { dur: 0 });
+    await glide(page, table.x + table.width * 0.45, table.y + 70, 500);
+    await sleep(TYPE_HOLD + 300);
+    // Pan down the list of sources.
+    await scroll(page, { dy: 320, ms: 1200 });
+    const t2 = await box(tableEl, { scroll: false });
+    await cam(region([{ x: t2.x, y: Math.max(70, t2.y + 330), width: t2.width, height: 360 }], 24), { dur: 0.9 });
+    await sleep(1200);
   },
 
-  async fuentes(page) {
-    caption(0);
-    const t = await must(page, S.sourcesTable, "sources table");
-    const b = await box(t, { scroll: false });
-    await glide(page, b.x + b.width * 0.42, b.y + 90, 700);
-    await zoom(b.x + b.width * 0.42, b.y + 120, 1.45, () => sleep(2000));
+  async inicio(page) {
+    const a = await box(await must(page, [S.statTiles[0]], "Abiertas ahora tile"), { scroll: false });
+    const d = await box(await must(page, [S.statTiles[1]], "Fuera de tus fuentes tile"), { scroll: false });
+    headline(0);
+    await cam(region([a, d], 28), { dur: 0 });
+    await sleep(TYPE_HOLD);
+    await glide(page, a.x + a.width * 0.5, a.y + a.height * 0.55, 500);
+    await sleep(700);
+    await glide(page, d.x + d.width * 0.45, d.y + d.height * 0.55, 700);
+    await sleep(900);
+  },
+
+  async semana(page) {
+    const card = await box(await must(page, S.chartTitle, "chart title"), { scroll: false });
+    const bars = [];
+    for (let i = 0; i < 12; i++) {
+      const el = await find(page, S.weekBar, { index: i, timeout: 500 });
+      if (!el) break;
+      bars.push({ el, b: await box(el, { scroll: false }) });
+    }
+    if (!bars.length) throw new Error("no week bars");
+    const left = bars[0].b;
+    const right = bars.at(-1).b;
+    const chart = { x: card.x, y: card.y, width: right.x + right.width - card.x, height: left.y + left.height + 30 - card.y };
+    headline(0);
+    await cam(region(chart, 24), { dur: 0 });
+    await sleep(TYPE_HOLD - 300);
+    // The tallest bar in the first weeks.
+    const target = bars.slice(0, 8).sort((p, q) => q.b.height - p.b.height)[0] ?? bars[0];
+    const pt = { x: target.b.cx, y: target.b.y + target.b.height - 60 };
+    await glide(page, pt.x, pt.y, 700);
+    await sleep(200);
+    await click(page, pt.x, pt.y, 600);
+    // The table below reacts: scroll to it and show the filtered count.
+    headline(1);
+    const count = await tableCount(page);
+    await scroll(page, { el: count, at: 0.12 });
+    const c = await box(count, { scroll: false });
+    const top = await box(await must(page, S.tableTop, "table head"), { scroll: false });
+    await cam(region([c, { x: top.x, y: c.y, width: top.width, height: 330 }], 20), { dur: 0.8 });
+    await sleep(1700);
   },
 
   async mapa(page) {
-    caption(0);
-    await sleep(1100);
+    const title = await box(await must(page, S.mapTitle, "map title"), { scroll: false });
     const madrid = await must(page, S.mapMadrid, "Madrid on the map");
     const m = await box(madrid, { scroll: false });
-    await glide(page, m.cx, m.cy, 700);
-    await zoom(m.cx, m.cy, 1.8, async () => {
-      await sleep(250);
-      await click(page, m.cx, m.cy, 700);
-    });
-    caption(1);
-    const top = await must(page, S.tableTop, "table");
-    await scroll(page, { el: top });
-    const tb = await box(top, { scroll: false });
-    await zoom(tb.x + tb.width * 0.35, tb.y + 140, 1.4, () => sleep(1900));
+    headline(0);
+    const mapBox = { x: title.x, y: title.y, width: 420, height: 380 };
+    await cam(region(mapBox, 16), { dur: 0 });
+    await glide(page, m.cx + 60, m.cy + 80, 400);
+    await sleep(TYPE_HOLD - 400);
+    await cam(region({ x: m.cx - 150, y: m.cy - 120, width: 300, height: 240 }, 0), { dur: 0.6 });
+    await glide(page, m.cx, m.cy, 600);
+    await sleep(150);
+    await click(page, m.cx, m.cy, 700);
+    headline(1);
+    const count = await tableCount(page);
+    await scroll(page, { el: count, at: 0.12 });
+    const c = await box(count, { scroll: false });
+    const top = await box(await must(page, S.tableTop, "table head"), { scroll: false });
+    await cam(region([c, { x: top.x, y: c.y, width: top.width, height: 330 }], 20), { dur: 0.8 });
+    await sleep(1700);
   },
 
   async encaje(page) {
-    caption(0);
-    const card = await must(page, S.statEncajeAlto, "Encaje alto stat card");
-    const c = await box(card, { scroll: false });
-    await glide(page, c.cx, c.cy, 700);
-    await zoom(c.cx, c.cy, 1.9, async () => {
-      await sleep(1700);
-      await click(page, c.cx, c.cy, 500);
-    });
-    caption(1);
-    const tab = await must(page, S.tabProximas, "Próximas ediciones tab");
-    const tbx = await box(tab);
-    await glide(page, tbx.cx, tbx.cy, 700);
-    await zoom(tbx.cx, tbx.cy, 1.6, async () => {
-      await sleep(200);
-      await click(page, tbx.cx, tbx.cy, 900);
-    });
-  },
-
-  async ejemplos(page) {
     const row = await must(page, S.row(CONFIG.examples.madrid.row), "row for BDNS 904719");
-    await scroll(page, { el: row });
-    const badge = await find(page, [{ css: "*", text: S.rowBadge, smallest: true }], { root: row, timeout: 2000 });
-    caption(0);
-    lowerThird(0);
-    if (badge) {
-      const b = await box(badge, { scroll: false });
-      await glide(page, b.cx, b.cy + 26, 700);
-      await zoom(b.cx, b.cy, 1.9, () => sleep(1700));
-    } else warn("ejemplos: no «Cerró el…» badge in the row");
-    lowerThirdOff();
-    await clickEl(page, row, { pause: 200 });
+    await skip(() => scroll(page, { el: row, at: 0.4, ms: 50 }));
+    const r = await box(row, { scroll: false });
+    headline(0);
+    await cam(region({ x: r.x, y: r.y - 90, width: r.width, height: r.height + 180 }, 10), { dur: 0 });
+    await glide(page, r.x + 300, r.cy, 600);
+    await sleep(TYPE_HOLD - 300);
+    await click(page, r.x + 300, r.cy, 150);
     await skip(() => must(page, [{ css: "[role=dialog]" }], "detail sheet"));
-    await skip(() => sleep(450)); // sheet slide-in
-    caption(1);
-    const fit = await must(page, S.drawerFit, "¿Encaja? section");
-    const f = await box(fit, { scroll: false });
-    await glide(page, f.x + 60, f.y + 40, 600);
-    await zoom(f.x, f.y, 1.6, () => sleep(3000), { x: f.x - 8, y: f.y - 8, width: f.width + 16, height: Math.min(f.height, 340) });
+    const dlg = await box(await must(page, [{ css: "[role=dialog]" }], "detail sheet"), { scroll: false });
+    const sheetX = CONFIG.viewport.width - dlg.width; // where the right-side sheet lands (it is still sliding in now)
+    await cam({ ...region({ x: sheetX, y: 0, width: dlg.width, height: 520 }, 0), curtain: sheetX }, { dur: 0.6, wait: false });
+    await sleep(500); // sheet slide-in, on camera
+    const fit = await box(await must(page, S.drawerFit, "¿Encaja? section"), { scroll: false });
+    await cam(region({ x: fit.x, y: fit.y, width: fit.width, height: 70 }, 18), { dur: 0.6 });
+    await glide(page, fit.x + 120, fit.y + 30, 400);
+    await sleep(700);
+    // Pan down the reasons.
+    await cam(region({ x: fit.x, y: fit.y + 60, width: fit.width, height: Math.min(fit.height - 60, 260) }, 16), { dur: 0.9 });
+    await sleep(1500);
     const estudio = await find(page, S.triageEstudio, { timeout: 3000 });
     if (estudio) {
-      caption(2);
-      const e = await box(estudio);
-      await glide(page, e.cx, e.cy, 600);
-      await zoom(e.cx, e.cy, 1.7, async () => {
-        await sleep(150);
-        await click(page, e.cx, e.cy, 800);
-      });
-    }
-    await page.keyboard.press("Escape");
-    await skip(() => sleep(450));
-    const other = await find(page, S.row(CONFIG.examples.miteco.row), { timeout: 3000 });
-    if (other) {
-      caption(3);
-      lowerThird(1);
-      const o = await box(other, { scroll: false });
-      await glide(page, o.x + o.width * 0.3, o.cy, 600);
-      await zoom(o.x + o.width * 0.3, o.cy, 1.6, () => sleep(2000));
-      lowerThirdOff();
-    } else warn("ejemplos: row for BDNS 923290 not found");
+      headline(1);
+      const e = await box(estudio, { scroll: false });
+      await cam(region({ x: fit.x, y: e.y - 40, width: fit.width, height: 120 }, 16), { dur: 0.7 });
+      await glide(page, e.cx, e.cy, 500);
+      await sleep(250);
+      await click(page, e.cx, e.cy, 1200);
+    } else warn("encaje: «En estudio» not found");
   },
 
   async seguimiento(page) {
-    caption(0);
-    await sleep(500);
     const card = await must(page, S.boardCard("estudio", CONFIG.examples.madrid.row), "card in En estudio");
-    const target = await must(page, S.boardColumn("presentar"), "A presentar column");
+    const colA = await box(await must(page, S.boardColumn("estudio"), "En estudio column"), { scroll: false });
+    const colB = await box(await must(page, S.boardColumn("presentar"), "A presentar column"), { scroll: false });
     const a = await box(card, { scroll: false });
-    const tb = await box(target, { scroll: false });
+    headline(0);
+    await cam(region([{ ...colA, height: Math.min(colA.height, 420) }, { ...colB, height: Math.min(colB.height, 420) }], 16), { dur: 0 });
     const start = { x: a.cx, y: a.y + 28 };
-    const end = { x: tb.cx, y: tb.y + 120 };
+    const end = { x: colB.cx, y: colB.y + 140 };
     await glide(page, start.x, start.y, 600);
-    const span = { x: a.x - 10, y: Math.min(a.y, tb.y) - 10, width: tb.x + tb.width - a.x + 20, height: a.height + 140 };
-    await zoom((start.x + end.x) / 2, (start.y + end.y) / 2, 1.35, async () => {
-      await page.mouse.down();
-      ev("click", { x: start.x, y: start.y });
-      await glide(page, start.x + 12, start.y + 6, 120, 1);
-      await glide(page, end.x, end.y, 1100, 1); // the drag is the moment that matters: real time
-      await sleep(150);
-      await page.mouse.up();
-      ev("click", { x: end.x, y: end.y, soft: true });
-      await sleep(1400);
-    }, span);
+    await sleep(TYPE_HOLD - 300);
+    await page.mouse.down();
+    ev("click", { x: start.x, y: start.y });
+    await glide(page, start.x + 12, start.y + 6, 120, 1);
+    await glide(page, end.x, end.y, 1000, 1); // the drag is the moment that matters: real time
+    await sleep(150);
+    await page.mouse.up();
+    ev("drop", { x: end.x, y: end.y });
+    await sleep(1500);
   },
 
   async perfil(page) {
-    caption(0);
     const btn = await page.evaluateHandle(
       (line, opt) => {
         const rows = [...document.querySelectorAll("main div")].filter((d) => d.innerText.trim().startsWith(line) && d.querySelector("[role=radio]"));
@@ -496,62 +513,72 @@ const ACTIONS = {
     );
     const el = btn.asElement();
     if (!el) throw new Error(`not found: «${S.perfilOption}» for ${S.perfilLine}`);
-    const b = await box(el);
+    await skip(() => scroll(page, { el, at: 0.45, ms: 50 }));
+    const b = await box(el, { scroll: false });
+    const rowBox = await page.evaluate((el) => {
+      let r = el;
+      while (r && r.getBoundingClientRect().width < 500) r = r.parentElement;
+      const q = r.getBoundingClientRect();
+      return { x: q.x, y: q.y, width: q.width, height: q.height };
+    }, el);
+    headline(0);
+    await cam(region({ ...rowBox, y: rowBox.y - 50, height: rowBox.height + 100 }, 12), { dur: 0 });
     await glide(page, b.cx, b.cy, 700);
-    await zoom(b.cx - 120, b.cy, 1.6, async () => {
-      await sleep(400);
-      await click(page, b.cx, b.cy, 500);
-    });
-    caption(1);
-    const eff = await must(page, S.perfilEffect, "Efecto de vuestros ajustes panel");
-    const e = await box(eff, { scroll: false });
-    await glide(page, e.x + e.width * 0.6, e.y + 90, 600);
-    await zoom(e.x, e.y, 1.6, () => sleep(2900), { x: e.x - 8, y: e.y - 8, width: e.width + 16, height: Math.min(e.height, 380) });
-  },
-
-  async empresas(page) {
-    caption(0);
-    await sleep(700);
-    const firstCard = await find(page, S.empresasCard, { timeout: 3000 });
-    if (firstCard) {
-      const k = await box(firstCard, { scroll: false });
-      await glide(page, k.x + k.width * 0.3, k.y + 40, 600);
-      await zoom(k.x, k.y, 1.5, () => sleep(1600), { x: k.x - 8, y: k.y - 8, width: k.width + 16, height: Math.min(k.height, 300) + 16 });
-    }
-    await scroll(page, { dy: 520, ms: 1200 });
-    await sleep(600);
+    await sleep(TYPE_HOLD - 500);
+    await click(page, b.cx, b.cy, 500);
+    headline(1);
+    await skip(() => sleep(700)); // the effect panel re-lays out after the change
+    const eff = await box(await must(page, S.perfilEffect, "Efecto de vuestros ajustes panel"), { scroll: false });
+    await cam(region({ ...eff, height: Math.min(eff.height, 340) }, 16), { dur: 0.8 });
+    await glide(page, eff.x + eff.width * 0.7, eff.y + 60, 500);
+    await sleep(2200);
   },
 
   async analizar(page) {
-    caption(0);
+    const drop = await box(await must(page, S.pdfDrop, "drop zone"), { scroll: false });
     const sample = await must(page, S.pdfSample, "sample PDF button");
-    const s = await box(sample);
+    const s = await box(sample, { scroll: false });
+    headline(0);
+    await cam(region([{ x: drop.x - 250, y: drop.y - 80, width: drop.width + 500, height: 120 }, s], 24), { dur: 0 });
     await glide(page, s.cx, s.cy, 700);
-    await zoom(s.cx, s.cy, 1.6, async () => {
-      await sleep(200);
-      await click(page, s.cx, s.cy, 300);
-    });
+    await sleep(TYPE_HOLD - 400);
+    await click(page, s.cx, s.cy, 300);
     const verdict = await skip(() => find(page, S.pdfVerdict, { timeout: 40000 }));
     if (!verdict) throw new Error("no PDF result after 40 s");
-    caption(1);
-    await sleep(300);
-    const v = await box(verdict);
-    await zoom(v.x, v.y, 1.7, () => sleep(3000), { x: v.x - 30, y: v.y - 40, width: 820, height: 360 });
+    headline(1);
+    await sleep(100);
+    const v = await box(verdict, { scroll: false });
+    const mot = await box(await must(page, S.pdfMotivos, "Motivos"), { scroll: false });
+    await cam(region({ x: v.x, y: v.y - 60, width: 720, height: 180 }, 20), { dur: 0.7 });
+    await glide(page, v.x + 300, v.y + 30, 500);
+    await sleep(1000);
+    await cam(region({ x: mot.x, y: mot.y - 10, width: 720, height: 200 }, 20), { dur: 0.9 });
+    await sleep(1500);
+  },
+
+  async empresas(page) {
+    const k = await box(await must(page, S.empresasCard, "first company card"), { scroll: false });
+    headline(0);
+    await cam(region(k, 0), { dur: 0 });
+    await glide(page, k.x + k.width * 0.55, k.y + k.height * 0.45, 600);
+    await sleep(TYPE_HOLD + 1600);
   },
 };
 
 const READY = {
   fuentes: S.sourcesTable,
+  inicio: S.homeReady,
+  semana: S.homeReady,
   mapa: S.homeReady,
   encaje: S.homeReady,
   seguimiento: S.boardReady,
   perfil: S.perfilEffect,
-  empresas: S.empresasReady,
+  empresas: S.empresasCard,
   analizar: S.pdfSample,
 };
 
-/** Puts a few real calls on the tracking board (the Madrid example is added during "ejemplos"). */
-async function seedBoard(page, withEjemplos) {
+/** Puts a few real calls on the tracking board (the Madrid example is added during "encaje"). */
+async function seedBoard(page, withEncaje) {
   let items;
   for (let i = 0; i < 5 && !items; i++) {
     try {
@@ -565,8 +592,8 @@ async function seedBoard(page, withEjemplos) {
   const status = ["estudio", "presentar", "presentada", "estudio"];
   const map = {};
   top.forEach((o, i) => (map[o.id] = { status: status[i], at: new Date().toISOString(), titulo: o.titulo, organismo: o.organismo, deadline: o.deadline ?? null }));
-  // If "ejemplos" (which marks it «En estudio» on camera) is not recorded in this run, put the Madrid example on the board.
-  const ex = withEjemplos ? null : items.find((o) => o.id === CONFIG.examples.madrid.id);
+  // If "encaje" (which marks it «En estudio» on camera) is not recorded in this run, put the Madrid example on the board.
+  const ex = withEncaje ? null : items.find((o) => o.id === CONFIG.examples.madrid.id);
   if (ex) map[ex.id] = { status: "estudio", at: new Date().toISOString(), titulo: ex.titulo, organismo: ex.organismo, deadline: ex.deadline ?? null };
   await page.goto(CONFIG.baseUrl + "/seguimiento", { waitUntil: "domcontentloaded" });
   await page.evaluate((k, v) => localStorage.setItem(k, v), CONFIG.triageStorageKey, JSON.stringify(map));
@@ -579,14 +606,15 @@ async function seedBoard(page, withEjemplos) {
 function segments(events, t0, tEnd) {
   const segs = [];
   let cur = { a: 0, speed: 1 };
-  const begin = events.find((e) => e.type === "begin").t - t0;
+  // The beat starts when its first headline does (lookups before that are cut).
+  const begin = (events.find((e) => e.type === "head") ?? events.find((e) => e.type === "begin")).t - t0;
   for (const e of events.filter((e) => e.type === "ramp")) {
     const t = Math.max(0, e.t - t0);
     if (t > cur.a) segs.push({ a: cur.a, b: t, speed: cur.speed });
     cur = { a: t, speed: e.speed };
   }
   segs.push({ a: cur.a, b: tEnd, speed: cur.speed });
-  // Drop everything before "begin" (the recorder warm-up).
+  // Drop everything before the start (recorder warm-up, element lookups).
   return segs.map((s) => ({ ...s, a: Math.max(s.a, begin) })).filter((s) => s.b - s.a > 0.02);
 }
 
@@ -641,7 +669,7 @@ function encode(id, take) {
 async function main() {
   const only = process.argv.slice(2);
   const scenes = SCENES.filter((s) => s.kind === "screen" && (only.length === 0 || only.includes(s.id)));
-  if (!scenes.length) return log("No matching screen scenes.");
+  if (!scenes.length) return log("No matching screen beats.");
 
   try {
     const r = await fetch(CONFIG.baseUrl, { method: "HEAD" });
@@ -668,23 +696,27 @@ async function main() {
   const ok = [];
   const failed = [];
   try {
-    const page = await browser.newPage();
-    await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }, { name: "prefers-reduced-motion", value: "no-preference" }]);
-    await page.evaluateOnNewDocument(CURSOR_SCRIPT, CONFIG.hideCss);
-    await seedBoard(page, scenes.some((s) => s.id === "ejemplos"));
+    // A fresh tab per beat (same browser profile, so cookies and the seeded board persist): a tab left with an open
+    // sheet could end up with a detached frame and fail every later beat.
+    const newPage = async () => {
+      const pg = await browser.newPage();
+      await pg.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }, { name: "prefers-reduced-motion", value: "no-preference" }]);
+      await pg.evaluateOnNewDocument(CURSOR_SCRIPT, CONFIG.hideCss);
+      await pg.setCookie(...CONFIG.cookies.map((c) => ({ ...c, url: CONFIG.baseUrl })));
+      return pg;
+    };
+    let page = await newPage();
+    await seedBoard(page, scenes.some((s) => s.id === "encaje"));
 
     for (const scene of scenes) {
-      log(`▶ ${scene.id} ${scene.route ?? "(same page)"}`);
+      log(`▶ ${scene.id} ${scene.route}`);
       for (let attempt = 1; attempt <= 2; attempt++) {
         take = null;
+        await page.close().catch(() => {});
+        page = await newPage();
         try {
-          mousePos = { x: CONFIG.viewport.width * 0.78, y: CONFIG.viewport.height * 0.62 };
-          // A scene with route null continues the previous page; when run alone, rebuild that state.
-          if (scene.route === null && (only.length || attempt > 1)) {
-            await goto(page, "/?tier=alto&cerradas=1", S.homeReady);
-          } else if (scene.route && scene.id !== "landing") {
-            await goto(page, scene.route, READY[scene.id]);
-          }
+          mousePos = { x: CONFIG.viewport.width * 0.72, y: CONFIG.viewport.height * 0.7 };
+          await goto(page, scene.route, READY[scene.id]);
           take = new Take(page, path.join(CONFIG.captureDir, "raw", scene.id));
           await take.start();
           await ACTIONS[scene.id](page);
@@ -706,7 +738,6 @@ async function main() {
           rmSync(path.join(CONFIG.captureDir, `${scene.id}.json`), { force: true });
         }
       }
-      if (scene.id !== "encaje") await page.keyboard.press("Escape").catch(() => {});
     }
   } finally {
     await browser.close();
