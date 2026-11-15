@@ -126,6 +126,16 @@ else
   echo "up to date"
 fi
 
+log "Panel not routed by Traefik"
+# Dokploy routes its panel on port 80 for `Host: dokploy.docker.localhost`, which anyone on the internet can send.
+# Keep the file (Dokploy recreates the route if it is missing) but without routes: the panel is tunnel-only.
+panel=/etc/dokploy/traefik/dynamic/dokploy.yml
+if [ ! -f "$panel" ] || grep -q 'dokploy.docker.localhost' "$panel"; then
+  printf '%s\n' '# No route to the Dokploy panel: reach it through an SSH tunnel to 127.0.0.1:3000 (docs/despliegue.md).' \
+    '# Giving the panel a domain in Settings -> Web Server rewrites this file (read ADR 0039 first).' 'http: {}' > "$panel"
+  echo "removed the dokploy.docker.localhost route"
+fi
+
 log "Network shared by the radar's web and Traefik"
 docker network inspect reforesta-radar-edge > /dev/null 2>&1 || docker network create --internal reforesta-radar-edge > /dev/null
 docker network inspect reforesta-radar-edge --format '{{range .Containers}}{{.Name}} {{end}}' | grep -qw dokploy-traefik \
