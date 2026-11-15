@@ -121,6 +121,7 @@ const CONFIG = {
     inviteCreate: [{ css: "[role=dialog] button", text: /^Crear invitación$/ }],
     inviteReady: [{ css: "[role=dialog]", text: /^Invitación lista/ }],
     inviteDone: [{ css: "[role=dialog] button", text: /^Hecho$/ }],
+    perfilSection: (re) => [{ css: "main section", text: re }],
   },
 };
 
@@ -284,6 +285,14 @@ async function say(k) {
   await voiceWait();
   ev("say", { k });
   vcur = { k, t: outNow() };
+}
+
+/** Waits (output time) until fraction `frac` of the playing line has been spoken: shots timed on its phrases. */
+async function voiceAt(frac) {
+  if (!vcur) return;
+  const start = vcur.k === 0 ? Math.max(TIMING.first, vcur.t + TIMING.lead) : vcur.t + TIMING.lead;
+  const remain = start + (voiceMs(vcur.k) / 1000) * frac - outNow();
+  if (remain > 0) await sleep(remain * 1000);
 }
 
 /** Union of boxes, padded. */
@@ -599,6 +608,53 @@ const ACTIONS = {
     await glide(page, fit.x + fit.width * 0.75, fit.y + 120, 900, 1.4);
   },
 
+  async perfil(page) {
+    // Read-only: the pointer only hovers, nothing is clicked (this is the team's real, shared profile).
+    // One line, shots timed on its phrases: the page title, the work-line weights, the keywords (wanted, then
+    // discarded), the territories.
+    const h1 = await box(await must(page, [{ css: "main header h1", text: /^Perfil$/ }], "Perfil title"), { scroll: false });
+    const desc = await box(await must(page, [{ css: "main header p", text: /^Así entiende el radar/ }], "Perfil intro"), { scroll: false });
+    const hd = { x: desc.x, y: h1.y, width: desc.width, height: desc.y + desc.height - h1.y }; // the title block is full-width
+    const lines = await must(page, S.perfilSection(/^Líneas de trabajo/), "Líneas de trabajo");
+    headline(0);
+    await say(0);
+    await cam(region(hd, 24), { dur: 0 });
+    await glide(page, hd.x + hd.width * 0.55, hd.y + hd.height * 0.62, 900, 1.4);
+    await voiceAt(0.1);
+    await scroll(page, { el: lines, at: 0.08, ms: 700 });
+    const l = await box(lines, { scroll: false });
+    await cam(region(l, 18), { dur: 0.8 });
+    const radios = await page.$$eval("main section [role=radio]", (els) => els.slice(0, 5).map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
+    if (radios.length === 5) {
+      await glide(page, radios[0].x, radios[0].y, 700, 1.4);
+      await glide(page, radios[4].x, radios[4].y, 1100, 1.4);
+    }
+    // Keywords: the input, weights and suggestions; the team's own chips below them stay out (`floor`).
+    await voiceAt(0.4);
+    const kw = await must(page, S.perfilSection(/^Palabras que os interesan/), "Palabras que os interesan");
+    // Scroll and cut in one cut-out stretch: a visible scroll would carry the chips through the previous shot.
+    await skip(async () => {
+      await scroll(page, { el: kw, at: 0.12, ms: 50, speed: null });
+      const k = await box(kw, { scroll: false });
+      const sug = await textBox(page, /^Sugerencias:/, "Sugerencias");
+      const kwBottom = sug.y + sug.height;
+      await cam({ ...region({ x: k.x, y: k.y, width: k.width, height: kwBottom - k.y }, 18), floor: kwBottom + 10 }, { dur: 0 });
+    });
+    const input = await box(await must(page, [{ css: "main section input" }], "keyword input"), { scroll: false });
+    await glide(page, input.x + input.width * 0.6, input.cy, 700, 1.4);
+    await voiceAt(0.6);
+    const no = await box(await must(page, S.perfilSection(/^Palabras que descartáis/), "Palabras que descartáis"), { scroll: false });
+    await cam({ ...region(no, 18), ceil: no.y - 8 }, { dur: 0.7 });
+    await glide(page, no.x + no.width * 0.35, no.y + no.height * 0.55, 700, 1.4);
+    // Territories: Madrid, Estatal, UE and the start of the rest.
+    await voiceAt(0.8);
+    const terr = await must(page, S.perfilSection(/^Territorio/), "Territorio");
+    await scroll(page, { el: terr, at: 0.08, ms: 700 });
+    const t = await box(terr, { scroll: false });
+    await cam(region({ x: t.x, y: t.y, width: t.width, height: Math.min(t.height, 420) }, 18), { dur: 0.8 });
+    await glide(page, t.x + t.width * 0.82, t.y + 250, 900, 1.4);
+  },
+
   async empresas(page) {
     // Line 0: the page says it in its own words — checked by hand, each card dated.
     const intro = await box(await must(page, [{ css: "main p", text: /^Esta lista no es automática/ }], "manual-list note"), { scroll: false });
@@ -852,6 +908,7 @@ const READY = {
   inicio: S.notice,
   ganasteis: S.notice,
   motivos: S.drawerFit,
+  perfil: S.perfilSection(/^Territorio/),
   empresas: S.empresasCard(CONFIG.examples.company),
   equipo: S.triage,
   seguimiento: S.boardReady,
