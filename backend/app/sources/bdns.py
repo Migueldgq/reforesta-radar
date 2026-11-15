@@ -30,6 +30,8 @@ DAY_S = 86400
 # BDNS answers bursts with HTTP 429. The TS retried once (fetchText default); a cold run (no memo) then lost ~15% of
 # the details to 429s, so the Python connector retries 429/5xx/network errors up to 3 times with the shared backoff.
 RETRIES = 3
+# Details in flight at once (the TS used 8): BDNS is a public service and already answers bursts with 429.
+DETAIL_CONCURRENCY = 4
 LITE_WARNING = "Ficha BDNS no cargada en este barrido: abre la convocatoria para ver plazo, tipo y beneficiarios."
 
 
@@ -382,7 +384,7 @@ class BdnsSource(Source):
                 persist=True,
             )
 
-        details = await map_limit(to_enrich, 8, detail)
+        details = await map_limit(to_enrich, DETAIL_CONCURRENCY, detail)
 
         items: list[RawOpportunity] = []
         failed = 0
