@@ -30,6 +30,7 @@ import { isPublicPath } from "@/lib/api";
 import { DEFAULT_FILTERS, EMPTY_DIMS, fmtFreshness, isClosed, plazoValues, type Filters } from "./model";
 import { RadarProvider, useRadar } from "./store";
 import { DetailDrawer } from "./Drawer";
+import { Notices } from "./Notices";
 
 const RADAR = [
   { href: "/", label: "Inicio", icon: House },
@@ -74,6 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">{children}</main>
             </SidebarInset>
             <DetailDrawer />
+            <Notices />
           </SidebarProvider>
         </TooltipProvider>
       </RadarProvider>
@@ -107,9 +109,9 @@ function MobileBar() {
 function AppSidebar() {
   const path = usePathname();
   const router = useRouter();
-  const { triage, data, filters, setFilters, loading } = useRadar();
+  const { board, data, filters, setFilters, loading } = useRadar();
   const { isMobile, setOpenMobile } = useSidebar();
-  const tracking = Object.values(triage).filter((t) => t.status === "estudio" || t.status === "presentar").length;
+  const tracking = Object.values(board).filter((t) => t.status === "estudio" || t.status === "presentar").length;
 
   const counts = useMemo(() => {
     const c: Record<QuickKey, number> = { abierta: 0, "30d": 0, alto: 0 };

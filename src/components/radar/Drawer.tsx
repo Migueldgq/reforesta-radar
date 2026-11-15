@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowUpRight, Award, CircleAlert, CircleCheck, FileText, Loader2, ScanSearch } from "lucide-react";
-import { Fragment, useState } from "react";
+import { ArrowUpRight, Award, CircleAlert, CircleCheck, FileText, Loader2, ScanSearch, Trash2 } from "lucide-react";
+import { Fragment, useState, type FormEvent } from "react";
 import type { AwardsSummary, History, Opportunity, OpportunityDocument } from "@/lib/opportunity";
 import type { PdfAnalysisResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -9,21 +9,66 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { daysLeft, fmtDate, fmtDayShort, fmtEuros, joinEs, KIND_LABELS, parseDay, tidy, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel } from "./model";
-import { useRadar } from "./store";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSession } from "@/components/auth/session";
+import { fmtWhenShort, type BoardItem } from "@/lib/team";
+import { stub, useRadar } from "./store";
 import { analyzePdf, PdfResult } from "./PdfView";
-import { DeadlineChip, ScoreChip } from "./ui";
+import { ConfirmDialog, DeadlineChip, GoneNote, PersonAvatar, ScoreChip, textareaClass } from "./ui";
+
+type Shown = { o: Opportunity; gone: BoardItem | null };
 
 export function DetailDrawer() {
-  const { selectedId, byId, closeDetail } = useRadar();
-  const o = selectedId ? byId.get(selectedId) : undefined;
+  const { selectedId, byId, board, closeDetail } = useRadar();
+  // Calls gone from the sources only live on the board: draw them from its snapshot.
+  const live = selectedId ? byId.get(selectedId) : undefined;
+  const item = selectedId ? board[selectedId] : undefined;
+  const cur: Shown | undefined = live ? { o: live, gone: null } : item ? { o: stub(item), gone: item } : undefined;
   // Keep the last opportunity rendered while the sheet animates out.
-  const [shown, setShown] = useState(o);
-  if (o && o !== shown) setShown(o);
+  const [shown, setShown] = useState(cur);
+  if (cur && (cur.o !== shown?.o || cur.gone !== shown?.gone)) setShown(cur);
 
   return (
-    <Sheet open={!!o} onOpenChange={(v) => !v && closeDetail()}>
-      <SheetContent className="w-full gap-0 p-0 sm:max-w-[520px]">{shown && <DrawerBody key={shown.id} o={shown} />}</SheetContent>
+    <Sheet open={!!cur} onOpenChange={(v) => !v && closeDetail()}>
+      <SheetContent className="w-full gap-0 p-0 sm:max-w-[520px]">
+        {shown && (shown.gone ? <GoneBody key={shown.o.id} o={shown.o} item={shown.gone} /> : <DrawerBody key={shown.o.id} o={shown.o} />)}
+      </SheetContent>
     </Sheet>
+  );
+}
+
+/** A board call that is no longer in the sources: what was saved, plus the team's decision, owner and notes. */
+function GoneBody({ o, item }: { o: Opportunity; item: BoardItem }) {
+  return (
+    <>
+      <SheetHeader className="gap-1.5 border-b px-6 py-5 pr-12">
+        <SheetDescription className="text-xs">Guardada en el tablero del equipo</SheetDescription>
+        <SheetTitle className="text-base leading-snug">{tidy(item.titulo)}</SheetTitle>
+        <p className="text-sm text-muted-foreground">{tidy(item.organismo)}</p>
+      </SheetHeader>
+      <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
+        <div className="space-y-2">
+          <GoneNote />
+          <p className="text-sm text-muted-foreground">
+            No salió en la última consulta a las fuentes: puede que la hayan retirado o que la fuente no responda. Se muestra lo que se guardó
+            {item.deadline ? `; el plazo era el ${fmtDate(item.deadline)}` : ""}.
+          </p>
+        </div>
+        <Separator />
+        <TriagePicker o={o} />
+        <Separator />
+        <TeamSection o={o} />
+      </div>
+      {item.url && (
+        <div className="flex flex-wrap gap-2 border-t px-6 py-4">
+          <Button asChild variant="outline">
+            <a href={item.url} target="_blank" rel="noreferrer">
+              Ver la última ficha oficial <ArrowUpRight aria-hidden />
+            </a>
+          </Button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -73,6 +118,7 @@ function DrawerBody({ o }: { o: Opportunity }) {
       </ul>
     </section>,
     <TriagePicker key="triage" o={o} />,
+    <TeamSection key="team" o={o} />,
     <section key="facts" className="space-y-3">
       <SectionTitle>Lo esencial</SectionTitle>
       <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
@@ -347,6 +393,139 @@ function TriagePicker({ o }: { o: Opportunity }) {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+/* ---------- Responsable and notes (shared with the team) ---------- */
+
+const NONE = "none";
+
+function TeamSection({ o }: { o: Opportunity }) {
+  return (
+    <div className="space-y-6">
+      <AssigneePicker o={o} />
+      <NotesSection o={o} />
+    </div>
+  );
+}
+
+function AssigneePicker({ o }: { o: Opportunity }) {
+  const { board, people, setAssignee } = useRadar();
+  const cur = board[o.id]?.assignee ?? null;
+  const active = people.filter((p) => p.active);
+  // An assignee who was deactivated stays visible (and only replaceable).
+  const options = cur && !active.some((p) => p.id === cur.id) ? [...active, { ...cur, active: false }] : active;
+  return (
+    <section className="space-y-2">
+      <SectionTitle id="assignee-h">Responsable</SectionTitle>
+      <Select
+        value={cur ? String(cur.id) : NONE}
+        onValueChange={(v) => {
+          const p = v === NONE ? null : options.find((x) => String(x.id) === v);
+          setAssignee(o, p ? { id: p.id, name: p.name } : null);
+        }}
+      >
+        <SelectTrigger className="w-full sm:w-64" aria-labelledby="assignee-h">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>Sin asignar</SelectItem>
+          {options.map((p) => (
+            <SelectItem key={p.id} value={String(p.id)} disabled={!p.active}>
+              {p.name || "Sin nombre"}
+              {!p.active && " (desactivada)"}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </section>
+  );
+}
+
+function NotesSection({ o }: { o: Opportunity }) {
+  const { board, addNote, deleteNote } = useRadar();
+  const { me, isAdmin } = useSession();
+  const notes = board[o.id]?.notes ?? [];
+  const [text, setText] = useState("");
+  const [pending, setPending] = useState(false);
+  const [toDelete, setToDelete] = useState<number | null>(null);
+
+  async function submit(e?: FormEvent) {
+    e?.preventDefault();
+    const body = text.trim();
+    if (!body || pending) return;
+    setPending(true);
+    if (await addNote(o, body)) setText("");
+    setPending(false);
+  }
+
+  return (
+    <section aria-labelledby="notes-h" className="space-y-3">
+      <SectionTitle id="notes-h">Notas{notes.length > 0 && ` · ${notes.length}`}</SectionTitle>
+      {notes.length > 0 ? (
+        <ol className="space-y-3">
+          {notes.map((n) => (
+            <li key={n.id} className="flex gap-2.5">
+              <PersonAvatar name={n.author?.name || "?"} className="mt-0.5" />
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">{n.author?.name || "Persona eliminada"}</span>
+                  <time dateTime={n.createdAt}>{fmtWhenShort(n.createdAt)}</time>
+                  {(isAdmin || n.author?.id === me.id) && (
+                    <button
+                      type="button"
+                      onClick={() => setToDelete(n.id)}
+                      aria-label="Borrar esta nota"
+                      title="Borrar nota"
+                      className="ml-auto grid size-6 place-items-center rounded-md text-muted-foreground/70 outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    >
+                      <Trash2 className="size-3.5" aria-hidden />
+                    </button>
+                  )}
+                </p>
+                {/* Plain text: React escapes it; line breaks are kept by CSS. */}
+                <p className="leading-relaxed break-words whitespace-pre-wrap">{n.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-sm text-muted-foreground">Nadie ha escrito nada todavía.</p>
+      )}
+      <form onSubmit={submit} className="space-y-2">
+        <label htmlFor={`note-${o.id}`} className="sr-only">
+          Nueva nota
+        </label>
+        <textarea
+          id={`note-${o.id}`}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submit();
+          }}
+          maxLength={4000}
+          rows={2}
+          placeholder="Escribe una nota para el equipo…"
+          className={cn(textareaClass, "min-h-16 resize-y")}
+        />
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">La verá todo el equipo.</span>
+          <Button type="submit" size="sm" variant="outline" disabled={!text.trim() || pending}>
+            {pending && <Loader2 className="animate-spin" aria-hidden />}
+            Añadir nota
+          </Button>
+        </div>
+      </form>
+      <ConfirmDialog
+        open={toDelete != null}
+        onOpenChange={(v) => !v && setToDelete(null)}
+        title="¿Borrar la nota?"
+        body="Desaparece para todo el equipo y no se puede recuperar."
+        confirm="Borrar nota"
+        destructive
+        onConfirm={() => toDelete != null && deleteNote(o.id, toDelete)}
+      />
     </section>
   );
 }

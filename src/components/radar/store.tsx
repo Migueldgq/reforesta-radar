@@ -13,6 +13,8 @@ import {
 } from "react";
 import { api, errorText } from "@/lib/api";
 import type { OpportunitiesResponse, Opportunity } from "@/lib/opportunity";
+import type { BoardItem, Note, PersonRef, TeamPerson } from "@/lib/team";
+import { useSession } from "@/components/auth/session";
 import { DEFAULT_FILTERS, filtersFromUrl, noOpenHighFit, urlPinsAhora, withPlazoView, type Filters, type Triage } from "./model";
 import { applyProfileAll, DEFAULT_USER_PROFILE, isNeutral, loadProfile, saveProfile, subscribeProfile, type UserProfile } from "./profile";
 
@@ -36,58 +38,6 @@ function writePayload(p: Payload) {
   } catch {
     /* quota or disabled storage: ignore */
   }
-}
-
-/* ---------- Triage persisted in localStorage ---------- */
-
-export interface TriageEntry {
-  status: Triage;
-  at: string;
-  titulo: string;
-  organismo: string;
-  deadline: string | null;
-}
-type TriageMap = Record<string, TriageEntry>;
-
-const KEY = "reforesta-radar:seguimiento:v1";
-const EMPTY: TriageMap = {};
-let cache: TriageMap | null = null;
-const listeners = new Set<() => void>();
-
-function readTriage(): TriageMap {
-  if (cache) return cache;
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    cache = raw ? (JSON.parse(raw) as TriageMap) : {};
-  } catch {
-    cache = {};
-  }
-  return cache;
-}
-
-function writeTriage(next: TriageMap) {
-  cache = next;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    /* storage unavailable: keep in memory */
-  }
-  listeners.forEach((l) => l());
-}
-
-function subscribe(l: () => void) {
-  listeners.add(l);
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === KEY) {
-      cache = null;
-      l();
-    }
-  };
-  window.addEventListener("storage", onStorage);
-  return () => {
-    listeners.delete(l);
-    window.removeEventListener("storage", onStorage);
-  };
 }
 
 /* ---------- Chosen convening bodies (Organismo filter) persisted in localStorage ---------- */
@@ -120,6 +70,33 @@ async function request(): Promise<{ data?: Payload; error?: string }> {
   }
 }
 
+/* ---------- Team board (shared through the API) ---------- */
+
+export type Board = Record<string, BoardItem>;
+type Snapshot = Pick<Opportunity, "id" | "titulo" | "organismo" | "deadline"> & Partial<Pick<Opportunity, "source" | "url">>;
+/** Fields changed locally and not yet confirmed by the API, laid over every refetch until they are. */
+type Pending = { patch: Partial<BoardItem>; count: number };
+
+const TEAM_POLL_MS = 60_000;
+
+function boardPath(id: string, rest = "") {
+  return `/api/board/${encodeURIComponent(id)}${rest}`;
+}
+
+/** Enough of an Opportunity to draw a card from the board's snapshot when the call is gone from the sources. */
+export function stub(e: BoardItem): Opportunity {
+  return {
+    id: e.opportunityId,
+    titulo: e.titulo,
+    organismo: e.organismo,
+    deadline: e.deadline,
+    source: e.source,
+    url: e.url,
+  } as Opportunity;
+}
+
+export type Notice = { id: number; text: string; tone: "info" | "error" };
+
 /* ---------- Context ---------- */
 
 interface RadarState {
@@ -136,9 +113,20 @@ interface RadarState {
   reload: () => void;
   byId: Map<string, Opportunity>;
 
-  triage: TriageMap;
+  /** The team's board: one row per call someone triaged, assigned or wrote a note on. */
+  board: Board;
+  boardLoaded: boolean;
+  /** Everyone, for names and the assignee picker (inactive people stay for old notes). */
+  people: TeamPerson[];
   triageOf: (id: string) => Triage;
-  setTriage: (o: Pick<Opportunity, "id" | "titulo" | "organismo" | "deadline">, status: Triage) => void;
+  setTriage: (o: Snapshot, status: Triage) => void;
+  setAssignee: (o: Snapshot, person: PersonRef | null) => void;
+  addNote: (o: Snapshot, body: string) => Promise<boolean>;
+  deleteNote: (id: string, noteId: number) => void;
+
+  notices: Notice[];
+  notify: (text: string, tone?: Notice["tone"]) => void;
+  dismiss: (id: number) => void;
 
   filters: Filters;
   setFilters: (f: Filters | ((prev: Filters) => Filters)) => void;
@@ -157,6 +145,7 @@ export function useRadar(): RadarState {
 }
 
 export function RadarProvider({ children }: { children: ReactNode }) {
+  const { me } = useSession();
   const [rawData, setData] = useState<Payload | null>(null);
   const profile = useSyncExternalStore(subscribeProfile, loadProfile, () => DEFAULT_USER_PROFILE);
   // Always derived from the raw server items, so changing the profile re-ranks without refetching.
@@ -237,23 +226,180 @@ export function RadarProvider({ children }: { children: ReactNode }) {
     void fetchData();
   }, [data, fetchData]);
 
-  const triage = useSyncExternalStore(subscribe, readTriage, () => EMPTY);
+  /* ----- Notices (small toasts) ----- */
 
-  const triageOf = useCallback((id: string): Triage => triage[id]?.status ?? "nueva", [triage]);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const noticeId = useRef(0);
+  const dismiss = useCallback((id: number) => setNotices((ns) => ns.filter((n) => n.id !== id)), []);
+  const notify = useCallback(
+    (text: string, tone: Notice["tone"] = "info") => {
+      const id = ++noticeId.current;
+      setNotices((ns) => [...ns.filter((n) => n.text !== text), { id, text, tone }].slice(-3));
+      setTimeout(() => dismiss(id), tone === "error" ? 9000 : 12000);
+    },
+    [dismiss],
+  );
 
-  const setTriage = useCallback<RadarState["setTriage"]>((o, status) => {
-    const next = { ...readTriage() };
-    if (status === "nueva") delete next[o.id];
-    else
-      next[o.id] = {
-        status,
-        at: new Date().toISOString(),
-        titulo: o.titulo,
-        organismo: o.organismo,
-        deadline: o.deadline,
-      };
-    writeTriage(next);
+  /* ----- Team board ----- */
+
+  const [board, setBoard] = useState<Board>({});
+  const [boardLoaded, setBoardLoaded] = useState(false);
+  const [people, setPeople] = useState<TeamPerson[]>([]);
+  const pending = useRef(new Map<string, Pending>());
+
+  const withPending = useCallback((items: BoardItem[]): Board => {
+    const next: Board = {};
+    for (const it of items) next[it.opportunityId] = it;
+    for (const [id, p] of pending.current) if (next[id]) next[id] = { ...next[id], ...p.patch };
+    return next;
   }, []);
+
+  const refreshBoard = useCallback(async () => {
+    try {
+      const r = await api<{ items: BoardItem[] }>("/api/board");
+      setBoard((prev) => {
+        const next = withPending(r.items);
+        // Keep optimistic rows the server does not have yet (first write on a call still in flight).
+        for (const id of pending.current.keys()) if (!next[id] && prev[id]) next[id] = prev[id];
+        return next;
+      });
+      setBoardLoaded(true);
+    } catch {
+      /* keep what we have; the next poll retries (a 401 already went to the login page) */
+    }
+  }, [withPending]);
+
+  const refreshPeople = useCallback(async () => {
+    try {
+      setPeople((await api<{ users: TeamPerson[] }>("/api/users")).users);
+    } catch {
+      /* names fall back to what the board rows carry */
+    }
+  }, []);
+
+  const refreshTeam = useCallback(() => Promise.all([refreshBoard(), refreshPeople()]).then(() => undefined), [refreshBoard, refreshPeople]);
+
+  // Load once, then every minute and whenever the tab comes back, so colleagues' changes show up.
+  useEffect(() => {
+    let last = 0;
+    const run = () => {
+      last = Date.now();
+      void refreshTeam();
+    };
+    run();
+    const t = setInterval(() => document.visibilityState === "visible" && run(), TEAM_POLL_MS);
+    const onFocus = () => Date.now() - last > 5000 && run();
+    const onVis = () => document.visibilityState === "visible" && onFocus();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [refreshTeam]);
+
+  const triageOf = useCallback((id: string): Triage => board[id]?.status ?? "nueva", [board]);
+
+  const boardRef = useRef(board);
+  useEffect(() => {
+    boardRef.current = board;
+  }, [board]);
+
+  /** A row to draw before the API answers, for a call that is not on the board yet. */
+  const placeholder = useCallback(
+    (o: Snapshot): BoardItem => ({
+      opportunityId: o.id,
+      status: "nueva",
+      assignee: null,
+      notes: [],
+      titulo: o.titulo,
+      organismo: o.organismo,
+      source: o.source ?? "",
+      url: o.url ?? "",
+      deadline: o.deadline,
+      gone: false,
+      updatedBy: { id: me.id, name: me.name },
+      updatedAt: new Date().toISOString(),
+    }),
+    [me],
+  );
+
+  /** Optimistic PATCH: draw the change now, confirm with the API's row, roll back and say so if it fails. */
+  const patchItem = useCallback(
+    (o: Snapshot, patch: Partial<BoardItem>, body: Record<string, unknown>, failMsg: string) => {
+      const id = o.id;
+      const prev = boardRef.current[id];
+      const p = pending.current.get(id) ?? { patch: {}, count: 0 };
+      pending.current.set(id, { patch: { ...p.patch, ...patch }, count: p.count + 1 });
+      setBoard((b) => ({ ...b, [id]: { ...(b[id] ?? placeholder(o)), ...patch, updatedBy: { id: me.id, name: me.name }, updatedAt: new Date().toISOString() } }));
+
+      const settle = () => {
+        const cur = pending.current.get(id);
+        if (!cur || cur.count <= 1) pending.current.delete(id);
+        else pending.current.set(id, { ...cur, count: cur.count - 1 });
+        return pending.current.get(id);
+      };
+      api<BoardItem>(boardPath(id), { method: "PATCH", json: body })
+        .then((item) => {
+          const still = settle();
+          setBoard((b) => ({ ...b, [id]: still ? { ...item, ...still.patch } : item }));
+        })
+        .catch((e) => {
+          settle();
+          setBoard((b) => {
+            const next = { ...b };
+            if (prev) next[id] = prev;
+            else delete next[id];
+            return next;
+          });
+          notify(`${failMsg} ${errorText(e)}`, "error");
+          void refreshBoard();
+        });
+    },
+    [me, notify, placeholder, refreshBoard],
+  );
+
+  const setTriage = useCallback<RadarState["setTriage"]>(
+    (o, status) => patchItem(o, { status }, { status }, "No se ha guardado el estado."),
+    [patchItem],
+  );
+
+  const setAssignee = useCallback<RadarState["setAssignee"]>(
+    (o, person) => patchItem(o, { assignee: person }, { assigneeId: person?.id ?? null }, "No se ha guardado el responsable."),
+    [patchItem],
+  );
+
+  const addNote = useCallback<RadarState["addNote"]>(
+    async (o, body) => {
+      try {
+        const note = await api<Note>(boardPath(o.id, "/notes"), { json: { body } });
+        setBoard((b) => {
+          const it = b[o.id] ?? placeholder(o);
+          return { ...b, [o.id]: { ...it, notes: [...it.notes.filter((n) => n.id !== note.id), note] } };
+        });
+        void refreshBoard();
+        return true;
+      } catch (e) {
+        notify(`No se ha guardado la nota. ${errorText(e)}`, "error");
+        return false;
+      }
+    },
+    [notify, placeholder, refreshBoard],
+  );
+
+  const deleteNote = useCallback<RadarState["deleteNote"]>(
+    (id, noteId) => {
+      const prev = boardRef.current[id];
+      if (!prev) return;
+      setBoard((b) => ({ ...b, [id]: { ...prev, notes: prev.notes.filter((n) => n.id !== noteId) } }));
+      api(boardPath(id, `/notes/${noteId}`), { method: "DELETE" }).catch((e) => {
+        setBoard((b) => ({ ...b, [id]: { ...(b[id] ?? prev), notes: prev.notes } }));
+        notify(`No se ha borrado la nota. ${errorText(e)}`, "error");
+      });
+    },
+    [notify],
+  );
 
   const byId = useMemo(() => new Map((data?.items ?? []).map((o) => [o.id, o])), [data]);
 
@@ -268,16 +414,24 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       error,
       reload,
       byId,
-      triage,
+      board,
+      boardLoaded,
+      people,
       triageOf,
       setTriage,
+      setAssignee,
+      addNote,
+      deleteNote,
+      notices,
+      notify,
+      dismiss,
       filters,
       setFilters,
       selectedId,
       openDetail: setSelectedId,
       closeDetail: () => setSelectedId(null),
     }),
-    [data, rawData, profile, loading, refreshing, error, reload, byId, triage, triageOf, setTriage, filters, selectedId],
+    [data, rawData, profile, loading, refreshing, error, reload, byId, board, boardLoaded, people, triageOf, setTriage, setAssignee, addNote, deleteNote, notices, notify, dismiss, filters, selectedId],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
