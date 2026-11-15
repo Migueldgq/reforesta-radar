@@ -6,8 +6,9 @@ BDNS has no series identifier, and regulatory bases are not a usable key. For ea
    trees (`/organos?idAdmon=C|A|L`) map (parent name, name) to id(s). Some pairs have 2 ids (both are used), a few
    none (no history).
 2. List every call of that organ since 2018 and match titles locally (`match_editions`): published before the
-   current one, Jaccard >= 0.5 on title tokens without boilerplate and the organ's own name, at most one per calendar
-   year (the best). On a research sample this made 0 wrong links in 42; true matches go down to 0.50.
+   current one, Jaccard >= 0.5 on title tokens without boilerplate and the organ's own name, not a sibling call for
+   another island or province, at most one per calendar year (the best). On a research sample this made 0 wrong
+   links in 42; true matches go down to 0.50.
 3. Read the newest previous editions: detail (opening date, window) and awards (`concesiones`, from 2022 only).
 
 Privacy: award rows name natural persons. `reduce_awards` keeps only counts by NIF class, amounts, dates and hits of
@@ -156,10 +157,38 @@ def jaccard(a: frozenset[str], b: frozenset[str]) -> float:
     return len(a & b) / len(a | b) if a | b else 0.0
 
 
+# Provinces and islands, accent-free, with their co-official or old spellings mapped to one name. An organ that runs
+# one call per island or province (a Consell Insular, a Diputación's lines) has sibling titles that differ only by
+# the place: two titles naming different places are not editions of each other. Comarcas are left out on purpose.
+_PLACE_ALIASES = {
+    "alacant": "alicante", "castello": "castellon", "gerona": "girona", "lerida": "lleida", "orense": "ourense",
+    "la coruna": "a coruna", "vizcaya": "bizkaia", "guipuzcoa": "gipuzkoa", "alava": "araba", "eivissa": "ibiza",
+    "islas baleares": "illes balears", "santa cruz de tenerife": "tenerife",
+}  # fmt: skip
+_PLACES = frozenset({
+    "a coruna", "albacete", "alicante", "almeria", "araba", "asturias", "avila", "badajoz", "barcelona", "bizkaia",
+    "burgos", "caceres", "cadiz", "cantabria", "castellon", "ceuta", "ciudad real", "cordoba", "cuenca", "gipuzkoa",
+    "girona", "granada", "guadalajara", "huelva", "huesca", "illes balears", "jaen", "la rioja", "las palmas", "leon",
+    "lleida", "lugo", "madrid", "malaga", "melilla", "murcia", "navarra", "ourense", "palencia", "pontevedra",
+    "salamanca", "segovia", "sevilla", "soria", "tarragona", "teruel", "toledo", "valencia", "valladolid", "zamora",
+    "zaragoza",
+    "mallorca", "menorca", "ibiza", "formentera", "tenerife", "gran canaria", "lanzarote", "fuerteventura",
+    "la palma", "la gomera", "el hierro",
+})  # fmt: skip
+_PLACE_RE = re.compile(r"\b(" + "|".join(sorted({*_PLACES, *_PLACE_ALIASES}, key=len, reverse=True)) + r")\b")
+
+
+def title_places(title: str) -> frozenset[str]:
+    """Provinces and islands a title names (see _PLACES)."""
+    return frozenset(_PLACE_ALIASES.get(m, m) for m in _PLACE_RE.findall(_key(title)))
+
+
 def match_editions(current: ListedCall, organ_tokens: frozenset[str], listed: list[ListedCall]) -> list[ListedCall]:
     """Previous editions of `current` among its organ's calls, newest first: published before it, not an amendment,
-    Jaccard >= 0.5, at most one per calendar year (the best; the current edition already takes its own year)."""
+    Jaccard >= 0.5, not naming only other places (title_places), at most one per calendar year (the best; the
+    current edition already takes its own year)."""
     mine = title_tokens(current.title, organ_tokens)
+    my_places = title_places(current.title)
     best: dict[str, tuple[float, ListedCall]] = {}
     for c in listed:
         year = c.published_at[:4]
@@ -167,6 +196,8 @@ def match_editions(current: ListedCall, organ_tokens: frozenset[str], listed: li
             continue
         if is_amendment(c.title):
             continue
+        if my_places and (theirs := title_places(c.title)) and my_places.isdisjoint(theirs):
+            continue  # a sibling call for another island or province
         j = jaccard(mine, title_tokens(c.title, organ_tokens))
         if j < MIN_JACCARD:
             continue

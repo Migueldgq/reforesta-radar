@@ -155,6 +155,38 @@ def test_amendments_are_not_editions() -> None:
     assert [(c.numero, c.match) for c in found] == [("3", 1.0)]
 
 
+def test_sibling_calls_for_another_island_or_province_are_not_editions() -> None:
+    # live case: Consell Insular de Menorca call linked to the Mallorca one of the same organ (J 0.58)
+    current = h.ListedCall(
+        "925589",
+        "Acuerdo por el cual se aprueban las Bases de la convocatoria de ayudas para el desarrollo rural de la isla de "
+        "Menorca por el periodo 2023-2027, vinculadas a proyectos relacionados con los ámbitos agrario y/o ambiental y "
+        "enmarcados en la Estrategia de Desarrollo Local Participativo",
+        "2026-09-01",
+    )
+    own = h.ListedCall("793086", "Acuerdo por el que se aprueban las Bases de la convocatoria de ayudas para el "
+                       "desarrollo rural de la isla de Menorca para el año 2024, vinculadas a proyectos relacionados "
+                       "con los ámbitos agrario y/o ambiental", "2024-05-02")  # fmt: skip
+    sibling = h.ListedCall("578434", "Ayudas al desarrollo rural de la isla de Mallorca, vinculadas a proyectos "
+                           "relacionados con los ámbitos agrario y / o ambiental y enmarcados en la Estrategia de "
+                           "Desarrollo Local Participativo 2014-2020 de Mallorca", "2021-06-01")  # fmt: skip
+    assert h.jaccard(h.title_tokens(current.title), h.title_tokens(sibling.title)) >= h.MIN_JACCARD
+    assert [c.numero for c in h.match_editions(current, frozenset(), [own, sibling])] == ["793086"]
+
+    assert h.title_places("Ayudas en la provincia de Alacant y en Gran Canaria") == {"alicante", "gran canaria"}
+    assert h.title_places("Subvenciones a entidades de Lleida") == h.title_places("Subvencions a entitats de Lérida")
+    assert h.title_places("SUBVENCIÓN ENTIDADES SIN ÁNIMO DE LUCRO PROYECTOS AMBIENTALES 2026") == frozenset()
+    assert h.title_places("Ayudas a la palmera canaria") == frozenset()  # whole words only
+    # a title without a place, or one naming the same place among others, still matches
+    plain = h.ListedCall("2", "Ayudas al desarrollo rural, ámbitos agrario y ambiental", "2022-06-01")
+    both = h.ListedCall(
+        "3", "Ayudas al desarrollo rural de Menorca y Mallorca, ámbitos agrario y ambiental", "2023-06-01"
+    )
+    found = h.match_editions(h.ListedCall("1", "Ayudas al desarrollo rural de Menorca, ámbitos agrario y ambiental",
+                                          "2025-06-01"), frozenset(), [plain, both])  # fmt: skip
+    assert [c.numero for c in found] == ["3", "2"]
+
+
 def test_title_tokens_drop_years_boilerplate_and_organ() -> None:
     organ = frozenset({"fundacion", "biodiversidad"})
     title = (
