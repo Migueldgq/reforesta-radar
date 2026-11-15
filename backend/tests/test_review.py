@@ -51,6 +51,8 @@ def test_parse_valid_answer() -> None:
     parts = [{"text": "pienso…", "thought": True}, {"text": '{"veredicto":"si","motivo":"Reforestación."}'}]
     thought = {"candidates": [{"content": {"parts": parts}}]}
     assert parse_answer(thought) == AiReview(verdict="si", reason="Reforestación.")
+    lower = parse_answer(_answer({"veredicto": "si", "motivo": "educación ambiental en colegios."}))
+    assert lower == AiReview(verdict="si", reason="Educación ambiental en colegios.")
 
 
 @pytest.mark.parametrize(
