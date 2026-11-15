@@ -137,6 +137,17 @@ if [ ! -f "$panel" ] || grep -q 'dokploy.docker.localhost' "$panel"; then
   echo "removed the dokploy.docker.localhost route"
 fi
 
+log "Panel switch (reforesta-panel public|private|status, ADR 0042)"
+# The panel stays private unless someone runs `reforesta-panel public` (which requires 2FA on every panel user). If it
+# is already public, refresh its route from this checkout.
+install -m 755 "$APP_DIR/deploy/panel.sh" /usr/local/sbin/reforesta-panel
+if [ -f /etc/dokploy/traefik/dynamic/reforesta-panel.yml ]; then
+  install -m 644 "$APP_DIR/deploy/traefik-panel.yml" /etc/dokploy/traefik/dynamic/reforesta-panel.yml
+  echo "panel is public: route refreshed"
+else
+  echo "panel is private (SSH tunnel only)"
+fi
+
 log "Network shared by the radar's web and Traefik"
 docker network inspect reforesta-radar-edge > /dev/null 2>&1 || docker network create --internal reforesta-radar-edge > /dev/null
 docker network inspect reforesta-radar-edge --format '{{range .Containers}}{{.Name}} {{end}}' | grep -qw dokploy-traefik \

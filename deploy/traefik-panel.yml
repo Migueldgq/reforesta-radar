@@ -1,0 +1,69 @@
+# Public route to the Dokploy panel at https://panel.miguelddev.com (ADR 0042, docs/despliegue.md). Not installed by
+# default: `sudo reforesta-panel public` (deploy/panel.sh) copies it to
+# /etc/dokploy/traefik/dynamic/reforesta-panel.yml, only if every panel user has 2FA on, and `sudo reforesta-panel
+# private` deletes it (Traefik watches the directory: the route appears or disappears within seconds).
+# Own file and own names (`panel-*`): Dokploy only ever writes `dokploy.yml` and `middlewares.yml` in that directory
+# (when they are missing at start, or when Settings -> Web Server -> Server Domain is saved), so this file survives a
+# Dokploy restart, a reboot and `install.sh update`. Leave Server Domain empty: it would add a second route.
+# Only this exact host, only over https; http answers with a redirect. Any other host (the bare IP,
+# dokploy.docker.localhost, the radar's domain) never matches these routers.
+http:
+  routers:
+    panel-http:
+      rule: Host(`panel.miguelddev.com`)
+      entryPoints: [web]
+      middlewares: [panel-redirect-https]
+      service: panel-dokploy
+    panel:
+      rule: Host(`panel.miguelddev.com`)
+      entryPoints: [websecure]
+      middlewares: [panel-ratelimit, panel-headers]
+      service: panel-dokploy
+      tls:
+        certResolver: letsencrypt
+    # Sign-in, 2FA codes, sign-up and password reset: a much lower limit than the rest of the panel. Longer rule, so
+    # Traefik tries it before `panel`.
+    panel-auth:
+      rule: >-
+        Host(`panel.miguelddev.com`) && (PathPrefix(`/api/auth/sign-in`) || PathPrefix(`/api/auth/sign-up`)
+        || PathPrefix(`/api/auth/two-factor`) || PathPrefix(`/api/auth/request-password-reset`)
+        || PathPrefix(`/api/auth/reset-password`))
+      entryPoints: [websecure]
+      middlewares: [panel-auth-ratelimit, panel-headers]
+      service: panel-dokploy
+      tls:
+        certResolver: letsencrypt
+  middlewares:
+    panel-redirect-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+    # Per client IP: no sourceCriterion, so Traefik uses the TCP peer, never X-Forwarded-For. Loading the panel fetches
+    # ~100 files at once (burst) and then polls a few requests per second; websockets (logs, terminal) are one request
+    # each.
+    panel-ratelimit:
+      rateLimit:
+        average: 20
+        period: 1s
+        burst: 200
+    # 10 attempts at once, then one every 12 s (5 a minute). A normal sign-in is 2 requests (password, 2FA code).
+    panel-auth-ratelimit:
+      rateLimit:
+        average: 5
+        period: 1m
+        burst: 10
+    # Dokploy (next.config.mjs) already sends X-Frame-Options DENY, frame-ancestors 'none', nosniff and a referrer
+    # policy; these add HSTS and replace its referrer policy with no-referrer.
+    panel-headers:
+      headers:
+        stsSeconds: 31536000
+        frameDeny: true
+        contentTypeNosniff: true
+        customResponseHeaders:
+          Referrer-Policy: no-referrer
+          X-Robots-Tag: noindex, nofollow
+  services:
+    panel-dokploy:
+      loadBalancer:
+        servers:
+          - url: http://dokploy:3000
