@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.api import analyze_pdf, auth, perfil, team
+from app.api import analyze_pdf, auth, board, perfil, team
 from app.api.state import last_ingest, read_sources, read_state
 from app.auth.accounts import bootstrap_admin
 from app.auth.csrf import csrf_middleware
@@ -50,7 +50,7 @@ app.middleware("http")(csrf_middleware)
 app.include_router(auth.router)
 signed_in = [Depends(current_user)]
 no_session: dict[int | str, dict[str, Any]] = {401: {"description": "No valid session (`radar_session` cookie)"}}
-for r in (analyze_pdf, perfil, team):
+for r in (analyze_pdf, perfil, team, board):
     app.include_router(r.router, dependencies=signed_in, responses=no_session)
 
 
