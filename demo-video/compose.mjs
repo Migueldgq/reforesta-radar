@@ -29,6 +29,7 @@ const MAX_SCALE = 2.0; // …but never past 2 canvas px per CSS px (the capture 
 const OVERLAP = 0.32; // s: beats overlap by this much (blur swap)
 const CPS = 0.034; // s per typed character
 const CARD_RADIUS = 18;
+const CONNECT_HOLD = 3.0; // s: the assistant section's MCP connector card, before the chat
 const RAIL = 52; // CSS px: width of the app's collapsed sidebar rail in the capture (48) plus a little margin
 
 /* ---------- audio ---------- */
@@ -66,6 +67,8 @@ const fill = (text) =>
 
 const CHECK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
 const AWARD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526"/><circle cx="12" cy="8" r="6"/></svg>`;
+// lucide "plug": the MCP connector
+const PLUG_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>`;
 const CAL_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>`;
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -179,8 +182,9 @@ timed.forEach((s, idx) => {
   }
 
   if (s.kind === "assistant") {
-    // Green contrast section: a question and the answer built from the radar's real tool output
-    // (captures/assistant.json). A neutral chat card in the film's own style: no assistant's name, logo or look.
+    // Green contrast section: first the radar as an MCP connector of an AI agent, then a question and the answer
+    // built from the radar's real tool output (captures/assistant.json), its tool calls tagged as MCP. Neutral cards in
+    // the film's own style: no agent's name, logo or look.
     const f = path.join(HERE, "captures", "assistant.json");
     if (!existsSync(f)) throw new Error("captures/assistant.json missing: run capture.mjs first");
     const A = JSON.parse(readFileSync(f, "utf8"));
@@ -200,24 +204,52 @@ timed.forEach((s, idx) => {
     html.push(`<div id="bg-${s.id}" class="clip greenbg" ${win(s.start, s.duration + 0.7)} style="z-index:${z - 1}"></div>`);
     anim.push(`tl.fromTo("#bg-${s.id}", { clipPath: "circle(0% at 50% 56%)" }, { clipPath: "circle(75% at 50% 56%)", duration: 0.6, ease: "power3.inOut" }, ${r3(s.start)});`);
     sounds.push({ t: s.start, kind: "wipe" });
-    const hx = typed(s.headline);
-    const hid = `h-${s.id}`;
-    html.push(`<div id="${hid}" class="clip headline on-green" ${win(s.start + 0.35, s.duration + 0.35)} style="z-index:150"><p class="typed">${hx.html}<span class="caret"></span></p></div>`);
-    typeLine(hid, s.start + 0.35, hx.n);
+    const a = s.start;
+    const L = a + CONNECT_HOLD; // the connector card gives way to the chat
+
+    // Two headlines like the screen beats: one over the connector, one over the chat.
+    const [h0, h1] = s.headlines.map(typed);
+    html.push(`<div id="h-${s.id}-0" class="clip headline on-green" ${win(a + 0.35, L - a - 0.35)} style="z-index:150"><p class="typed">${h0.html}<span class="caret"></span></p></div>`);
+    typeLine(`h-${s.id}-0`, a + 0.35, h0.n);
+    anim.push(`tl.to("#h-${s.id}-0 p", { opacity: 0, filter: "blur(10px)", duration: 0.2, ease: "power2.in" }, ${r3(L - 0.2)});`);
+    html.push(`<div id="h-${s.id}-1" class="clip headline on-green" ${win(L, s.end - L + 0.35)} style="z-index:150"><p class="typed">${h1.html}<span class="caret"></span></p></div>`);
+    typeLine(`h-${s.id}-1`, L, h1.n);
+
+    // Lead-in: the radar as an MCP connector of an AI agent (unbranded; the address host is a neutral stand-in).
+    const c = s.connector;
+    html.push(`<div id="cn-${s.id}" class="connector" style="z-index:${z}">
+        <p class="cn-label">${PLUG_SVG}<span>${esc(c.label)}</span></p>
+        <div class="cn-row">
+          <span class="mark mark-cn">${MARK_SVG}</span>
+          <div class="cn-id">
+            <p class="cn-name">${esc(c.name)}</p>
+            <p class="cn-url"><span class="muted">${esc(c.host)}</span>${esc(c.path)}<span class="muted"> · ${esc(c.note)}</span></p>
+          </div>
+          <span class="cn-state">${CHECK_SVG}<span>${esc(c.state)}</span></span>
+        </div>
+        <p class="cn-standard">${esc(c.standard)}</p>
+      </div>`);
+    anim.push(`tl.fromTo("#cn-${s.id}", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "power3.out" }, ${r3(a + 0.45)});`);
+    anim.push(`tl.fromTo("#cn-${s.id} .cn-state", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2.2)" }, ${r3(a + 1.5)});`);
+    sounds.push({ t: a + 1.5, kind: "pop", g: -3 });
+    anim.push(`tl.to("#cn-${s.id}", { opacity: 0, filter: "blur(14px)", scale: 1.035, duration: 0.3, ease: "power2.in" }, ${r3(L - 0.3)});`);
+    sounds.push({ t: L - 0.15, kind: "swish" });
+
+    // The chat: the question, the radar's MCP tool calls, the answer.
     html.push(`<div id="w-${s.id}" class="chat" style="z-index:${z}">
         <div class="q"><p id="q-${s.id}" class="typed">${q.html}<span class="caret"></span></p></div>
-        <div class="steps">${A.calls.map((c, i) => `<span class="step" id="st-${s.id}-${i}">${CHECK_SVG}<span>${i === 0 ? "Buscó en el radar" : "Abrió la ficha"}</span></span>`).join("")}</div>
+        <div class="steps"><span class="tools-tag" id="tt-${s.id}">${PLUG_SVG}<span>${esc(s.toolsTag)}</span></span>${A.calls.map((c, i) => `<span class="step" id="st-${s.id}-${i}">${CHECK_SVG}<span>${i === 0 ? "Buscó en el radar" : "Abrió la ficha"}</span></span>`).join("")}</div>
         <div class="answer">${lines.map((l, i) => `<p class="${l.cls}" id="al-${s.id}-${i}">${l.icon ? `<span class="ico">${l.icon}</span>` : ""}<span>${l.html}</span></p>`).join("")}</div>
       </div>`);
-    const a = s.start;
-    anim.push(`tl.fromTo("#w-${s.id}", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "power3.out" }, ${r3(a + 0.45)});`);
-    const qEnd = typeLine(`q-${s.id}`, a + 1.0, q.n, { cps: 0.024 });
+    anim.push(`tl.fromTo("#w-${s.id}", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "power3.out" }, ${r3(L + 0.1)});`);
+    const qEnd = typeLine(`q-${s.id}`, L + 0.65, q.n, { cps: 0.024 });
+    anim.push(`tl.fromTo("#tt-${s.id}", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, ${r3(qEnd + 0.15)});`);
     A.calls.forEach((_, i) => {
-      const t = qEnd + 0.25 + i * 0.4;
+      const t = qEnd + 0.35 + i * 0.4;
       anim.push(`tl.fromTo("#st-${s.id}-${i}", { opacity: 0, y: 8, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "back.out(1.8)" }, ${r3(t)});`);
       sounds.push({ t, kind: "type1", g: 4 });
     });
-    const ansAt = qEnd + 0.25 + A.calls.length * 0.4 + 0.15;
+    const ansAt = qEnd + 0.35 + A.calls.length * 0.4 + 0.15;
     lines.forEach((_, i) => {
       anim.push(`tl.fromTo("#al-${s.id}-${i}", { opacity: 0, y: 12, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.45, ease: "power3.out" }, ${r3(ansAt + i * 0.22)});`);
     });
@@ -423,6 +455,7 @@ const page = `<!doctype html>
         --accent: oklch(0.37 0.07 158);
         --accent-ink: oklch(0.985 0 0);
         --accent-light: oklch(0.86 0.07 158);
+        --accent-wash: oklch(0.955 0.015 158);
         --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", sans-serif;
       }
       * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -464,11 +497,27 @@ const page = `<!doctype html>
       .placeholder { display: grid; place-items: center; top: ${STAGE.top}px; }
       .placeholder span { font-size: 32px; color: var(--muted); }
 
+      .connector { position: absolute; left: 50%; top: ${STAGE.top + 215}px; width: 1100px; margin-left: -550px; opacity: 0; padding: 40px 52px 46px;
+        border-radius: 24px; background: var(--ground); box-shadow: 0 40px 80px -30px rgba(0,0,0,.45); display: flex; flex-direction: column; gap: 26px; }
+      .cn-label { display: flex; align-items: center; gap: 10px; font-size: 27px; font-weight: 500; color: var(--muted); }
+      .cn-label svg { width: 27px; height: 27px; }
+      .cn-row { display: flex; align-items: center; gap: 30px; }
+      .mark-cn { width: 104px; height: 104px; border-radius: 26px; }
+      .cn-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+      .cn-name { font-size: 56px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; }
+      .cn-url { font-size: 32px; font-weight: 500; letter-spacing: -0.01em; }
+      .cn-url .muted { color: var(--muted); }
+      .cn-standard { font-size: 26px; color: var(--muted); padding-top: 22px; margin-top: -2px; border-top: 1.5px solid var(--border); }
+      .cn-state, .tools-tag { display: inline-flex; align-items: center; flex: none; border-radius: 999px; background: var(--accent-wash); color: var(--accent); font-weight: 600; }
+      .cn-state { gap: 10px; padding: 12px 24px 12px 18px; font-size: 30px; opacity: 0; }
+      .cn-state svg { width: 30px; height: 30px; }
+      .tools-tag { gap: 8px; padding: 8px 16px 8px 13px; font-size: 22px; opacity: 0; }
+      .tools-tag svg { width: 22px; height: 22px; }
       .chat { position: absolute; left: 50%; top: ${STAGE.top + 92}px; width: 1240px; margin-left: -620px; opacity: 0; padding: 40px 48px 44px;
         border-radius: 24px; background: var(--ground); box-shadow: 0 40px 80px -30px rgba(0,0,0,.45); display: flex; flex-direction: column; gap: 26px; }
-      .chat .q { align-self: flex-end; max-width: 88%; padding: 18px 26px; border-radius: 22px 22px 6px 22px; background: oklch(0.955 0.015 158); font-size: 35px; font-weight: 500; letter-spacing: -0.015em; }
+      .chat .q { align-self: flex-end; max-width: 88%; padding: 18px 26px; border-radius: 22px 22px 6px 22px; background: var(--accent-wash); font-size: 35px; font-weight: 500; letter-spacing: -0.015em; }
       .chat .q .typed { white-space: pre-wrap; }
-      .steps { display: flex; gap: 12px; }
+      .steps { display: flex; align-items: center; gap: 12px; }
       .step { display: inline-flex; align-items: center; gap: 9px; padding: 8px 16px 8px 12px; border-radius: 999px; border: 1.5px solid var(--border); color: var(--muted); font-size: 24px; font-weight: 500; opacity: 0; }
       .step svg { width: 24px; height: 24px; color: var(--accent); }
       .answer { display: flex; flex-direction: column; gap: 14px; }
