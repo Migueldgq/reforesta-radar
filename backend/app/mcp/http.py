@@ -7,8 +7,9 @@ Order of checks on every request (all before any MCP parsing):
    strings are ignored, so there is no CSRF surface.
    - no Authorization header: public tools (when RADAR_MCP_PUBLIC), at most RADAR_MCP_PUBLIC_RATE requests per
      minute per client IP (429 + Retry-After beyond); with RADAR_MCP_PUBLIC=false, 401;
-   - a header that is not a valid, active token: always 401 with `WWW-Authenticate: Bearer … error="invalid_token"`
-     (never a silent downgrade to public); 30 of those per IP in 15 min, then 429 for that IP;
+   - a header that is not a valid, active token: 401 with `WWW-Authenticate: Bearer … error="invalid_token"` (never
+     a silent downgrade to public); after 30 of those per IP in 15 min, further invalid ones get 429 instead. The
+     token is checked first, so a valid token is never throttled; malformed ones never reach the database;
    - a valid token: team view (the tools read the person from the scope state).
 The SDK runs stateless with plain JSON responses: no MCP sessions to keep, nothing to resume, POST only.
 """
@@ -104,18 +105,20 @@ class McpEndpoint:
                 return
             throttle.mcp_public.hit(ip)
         else:
-            if wait := throttle.mcp_bad_token.retry_after(ip):
-                await _reply(
-                    send, 429, "Demasiados tokens no válidos. Espera unos minutos.", {"Retry-After": str(wait)}
-                )
-                return
+            # Validate first: a valid token is never refused because of other clients' bad attempts (behind the web
+            # origin every client shares one IP). Malformed tokens never reach the database.
             scheme, _, token = auth.partition(" ")
             if scheme.lower() == "bearer" and pats.looks_like_token(token.strip()):
                 async with scope["app"].state.engine.begin() as conn:
                     user = await pats.token_user(conn, token.strip())
             if user is None:
-                throttle.mcp_bad_token.hit(ip)
                 log.info("mcp: invalid token ip=%s", ip)
+                if wait := throttle.mcp_bad_token.retry_after(ip):
+                    await _reply(
+                        send, 429, "Demasiados tokens no válidos. Espera unos minutos.", {"Retry-After": str(wait)}
+                    )
+                    return
+                throttle.mcp_bad_token.hit(ip)
                 challenge = f'{REALM}, error="invalid_token", error_description="unknown, expired or revoked token"'
                 await _reply(
                     send, 401, "El token no es válido, ha caducado o se ha revocado.", {"WWW-Authenticate": challenge}

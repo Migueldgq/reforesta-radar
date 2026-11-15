@@ -17,7 +17,7 @@ from mcp.client.streamable_http import streamable_http_client
 from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.auth import throttle
+from app.auth import pats, throttle
 from app.config import settings
 from app.db.tables import personal_tokens, users
 from app.ingest.store import SourceRun, write_ingest
@@ -408,3 +408,22 @@ async def test_tools_cannot_write(engine: AsyncEngine) -> None:
         await conn.execute(text("set transaction read only"))
         with pytest.raises(DBAPIError, match="read-only transaction"):
             await conn.execute(text("insert into org_settings (id) values (1)"))
+
+
+async def test_bad_tokens_never_lock_out_a_valid_one(
+    engine: AsyncEngine, running: None, member: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Behind the web origin everyone shares one IP: others' bad tokens must not refuse a valid token."""
+    secret = (await _token(member))["secret"]
+    real, lookups = pats.token_user, []
+
+    async def counting(conn, token):  # noqa: ANN001, ANN202
+        lookups.append(token)
+        return await real(conn, token)
+
+    monkeypatch.setattr(pats, "token_user", counting)
+    codes = [(await _status(engine, "x")).status_code for _ in range(31)]
+    assert codes[:30] == [401] * 30 and codes[30] == 429  # over the limit, invalid ones get 429
+    assert lookups == []  # malformed tokens never reach the database
+    assert (await _status(engine, secret)).status_code == 200
+    assert (await _status(engine, "rr_pat_" + "y" * 43)).status_code == 429 and len(lookups) == 2
