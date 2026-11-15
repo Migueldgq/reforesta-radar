@@ -21,8 +21,8 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
   de ranking no exige reingestar.
 - Una fuente que falla no toca sus filas. Solo una fuente con estado `ok` marca como `gone_at` lo que ya no devuelve.
   Las filas de fuentes que ya no están registradas se marcan `gone_at` en la siguiente ingesta.
-- La API nunca consulta las fuentes al responder: no hay `?refresh=1`. «Volver a cargar» en la web solo vuelve a
-  leer la API.
+- La API nunca consulta las fuentes al responder: no hay `?refresh=1`. La web no tiene botón de recarga; el pie de
+  la barra lateral dice de cuándo son los datos («Datos de hoy, 9:02»).
 - `ingestStale` (más de 12 h sin una ingesta correcta) hace que Inicio muestre «Los datos no se actualizan desde
   hace N h».
 - Si Postgres no responde, la API devuelve 503; si la API no responde, la web muestra un estado de error (o la

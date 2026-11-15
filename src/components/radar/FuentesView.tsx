@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, CircleCheck, CircleMinus, CircleX, ExternalLink, Loader2, RotateCw } from "lucide-react";
+import { CircleAlert, CircleCheck, CircleMinus, CircleX, ExternalLink, RotateCw } from "lucide-react";
 import type { SourceHealth } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -53,8 +53,7 @@ function SourceLink({ s }: { s: SourceHealth }) {
 }
 
 export function FuentesView() {
-  const { data, loading, refreshing, error, reload } = useRadar();
-  const busy = loading || refreshing;
+  const { data, refreshing, error, reload } = useRadar();
   const sources = data?.sources ?? [];
 
   return (
@@ -62,26 +61,20 @@ export function FuentesView() {
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Fuentes</h1>
         <p className="text-sm text-muted-foreground">
-          De dónde salen los datos. Una ingesta programada consulta todas las fuentes cada 8 horas; esta página muestra
-          su último resultado.
+          De dónde salen los datos. Una ingesta programada consulta todas las fuentes cada mañana a las 9:00; esta
+          página muestra su último resultado.
         </p>
       </header>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {data ? (
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground tabular-nums">{sources.length}</span> fuentes ·{" "}
-            <span className="font-medium text-foreground tabular-nums">{data.items.length}</span> convocatorias · última ingesta{" "}
-            {fmtAgo(data.lastIngestAt ?? data.fetchedAt)}
-          </p>
-        ) : (
-          <Skeleton className="h-5 w-72 max-w-full" />
-        )}
-        <Button variant="outline" onClick={() => reload()} disabled={busy} className="self-start sm:self-auto">
-          {busy ? <Loader2 className="animate-spin" aria-hidden /> : <RotateCw aria-hidden />}
-          {busy ? "Cargando…" : "Volver a cargar"}
-        </Button>
-      </div>
+      {data ? (
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground tabular-nums">{sources.length}</span> fuentes ·{" "}
+          <span className="font-medium text-foreground tabular-nums">{data.items.length}</span> convocatorias · última ingesta{" "}
+          {fmtAgo(data.lastIngestAt ?? data.fetchedAt)}
+        </p>
+      ) : (
+        <Skeleton className="h-5 w-72 max-w-full" />
+      )}
 
       {error && (
         <Alert variant="destructive">
@@ -172,7 +165,7 @@ export function FuentesView() {
 
       <p className="text-xs leading-relaxed text-muted-foreground">
         Cada ingesta guarda los resultados en la base de datos del radar. Si una fuente falla, se mantienen sus últimos datos buenos hasta la
-        siguiente. «Volver a cargar» vuelve a leer esos datos guardados; no consulta las fuentes en ese momento.
+        siguiente. La página enseña siempre esos datos guardados: las fuentes solo se consultan en la ingesta diaria.
       </p>
     </div>
   );
