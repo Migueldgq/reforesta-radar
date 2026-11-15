@@ -43,9 +43,10 @@ export function ConsentView() {
     setPending(allow ? "allow" : "deny");
     setError(null);
     try {
-      const { redirectTo } = await api<{ redirectTo: string }>("/api/oauth/consent/decision", { json: { request, allow } });
+      const { redirectTo } = await api<{ redirectTo: string | null }>("/api/oauth/consent/decision", { json: { request, allow } });
       setDone(allow ? "allow" : "deny");
-      window.location.assign(redirectTo);
+      // null: refused a client we do not recognise; stay here rather than visit its site
+      if (redirectTo) window.location.assign(redirectTo);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) setGone(e.message);
       else setError(errorText(e));

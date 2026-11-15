@@ -4,7 +4,7 @@ Session (cookie) only, like every /api/ route, and the CSRF rule applies to the 
 pending request id travels in the JSON body (never in an API path), and the request only opens in the browser that
 started it at /oauth/authorize: its `radar_oauth` cookie must match (app/oauth/routes.py). A decision consumes the
 request: the answer is the URL the browser goes to next (the assistant's registered redirect URI, with `code` or
-`error=access_denied`, `state` and `iss`).
+`error=access_denied`, `state` and `iss`; after a refusal of an unrecognised client, nowhere: `redirectTo` is null).
 """
 
 import logging
@@ -50,7 +50,7 @@ class ConsentInfo(Contract):
 
 
 class DecisionOut(Contract):
-    redirect_to: str
+    redirect_to: str | None  # None: refused an unrecognised client; stay on the radar
 
 
 class Assistant(Contract):
@@ -88,7 +88,7 @@ async def decision(body: DecisionIn, user: User, conn: Db, request: Request, res
         BROWSER_COOKIE, path=COOKIE_PATH, httponly=True, samesite="lax", secure=settings.cookie_secure
     )
     uri, params = result
-    return DecisionOut(redirect_to=construct_redirect_uri(uri, **params))
+    return DecisionOut(redirect_to=construct_redirect_uri(uri, **params) if uri else None)
 
 
 def _iso(dt) -> str | None:  # noqa: ANN001

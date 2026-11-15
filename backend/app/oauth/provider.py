@@ -43,7 +43,7 @@ from starlette.requests import Request
 from app.auth.tokens import hash_token, new_token
 from app.config import settings
 from app.db.tables import oauth_clients, oauth_codes, oauth_grants, oauth_requests, oauth_tokens, users
-from app.oauth.clients import RadarClient, clean_name, registration_problem
+from app.oauth.clients import RadarClient, clean_name, kind_of, registration_problem
 
 log = logging.getLogger("auth")
 
@@ -535,9 +535,10 @@ async def pending_request(
 
 async def decide(
     conn: AsyncConnection, request_id: str, nonce: str, user_id: int, allow: bool
-) -> tuple[str, dict[str, Any]] | None:
+) -> tuple[str | None, dict[str, Any]] | None:
     """Consumes the pending request. Returns (redirect URI, query parameters to add) or None (unknown, expired,
-    already decided, other browser)."""
+    already decided, other browser). The URI is None when the person refused a client we do not recognise: the
+    browser stays on the radar instead of being sent to a site anyone could have registered."""
     pending = await pending_request(conn, request_id, nonce, lock=True)
     if pending is None:
         return None
@@ -546,6 +547,8 @@ async def decide(
     params: dict[str, Any] = {"state": row.state, "iss": settings.public_url}
     if not allow:
         log.info("oauth: user %d refused client %s", user_id, row.client_id)
+        if kind_of(row.redirect_uri) == "desconocido":
+            return None, {}
         return row.redirect_uri, {"error": "access_denied", **params}
     t = _now()
     # The grant lives only as long as its code until the code is exchanged (`_issue` extends it).

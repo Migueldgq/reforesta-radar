@@ -324,7 +324,7 @@ async def test_authorize_refusals(engine: AsyncEngine, member: httpx.AsyncClient
 
 async def test_authorize_errors_never_redirect_to_web_clients(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
     """RFC 9700 §4.11.2: before the person has decided, errors for a client with a web redirect URI are shown on the
-    radar (else /oauth/authorize would redirect anywhere a registrant likes). A real «No permitir» still redirects."""
+    radar (else /oauth/authorize would redirect anywhere a registrant likes)."""
     client = await new_client(engine, redirect_uris=["https://agent.example/cb"])
     cid = client["client_id"]
     _, challenge = pkce()
@@ -334,9 +334,23 @@ async def test_authorize_errors_never_redirect_to_web_clients(engine: AsyncEngin
         assert res.status_code == 400 and "location" not in res.headers, extra
         assert res.headers["content-type"].startswith("text/html")
         assert "No se puede conectar" in res.text and "frame-ancestors 'none'" in res.headers["content-security-policy"]
-    query = await consent(member, request_id(await authorize(member, cid, challenge, "https://agent.example/cb")),
-                          allow=False)  # fmt: skip
-    assert query["error"] == ["access_denied"]
+
+
+async def test_refusing_an_unrecognised_client_stays_on_the_radar(engine: AsyncEngine,
+                                                                  member: httpx.AsyncClient) -> None:  # fmt: skip
+    """«No permitir» on a client we do not recognise: no redirect to its (anyone's) site. Claude's callback and
+    loopback clients still get `error=access_denied`, so they can tell the person."""
+    _, challenge = pkce()
+    web = await new_client(engine, redirect_uris=["https://agent.example/cb"])
+    rid = request_id(await authorize(member, web["client_id"], challenge, "https://agent.example/cb"))
+    res = await member.post("/api/oauth/consent/decision", json={"request": rid, "allow": False})
+    assert res.status_code == 200 and res.json() == {"redirectTo": None}
+    assert (await member.post("/api/oauth/consent/decision", json={"request": rid, "allow": False})).status_code == 404
+    for uri in (CLAUDE, LOCAL):
+        client = await new_client(engine, redirect_uris=[uri])
+        query = await consent(member, request_id(await authorize(member, client["client_id"], challenge, uri)),
+                              allow=False)  # fmt: skip
+        assert query["error"] == ["access_denied"], uri
 
 
 async def test_token_refusals(engine: AsyncEngine, running: None, member: httpx.AsyncClient) -> None:  # noqa: F811
