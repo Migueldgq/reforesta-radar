@@ -9,7 +9,7 @@ excluye y Reforesta ya sabe hacerlo.
 Proyecto para **1hack A Coruña: el reto de Reforesta** (Common Seeds / The Agile Monkeys). Enunciado en
 [RETO.md](./RETO.md).
 
-- Vídeo de la demo: pendiente <!-- TODO: enlace al vídeo -->
+- Vídeo de la demo (3:51): <https://www.youtube.com/watch?v=VyDRFkPxtB4>
 - Despliegue público: <https://reforesta-radar.miguelddev.com> (Oracle Cloud Always Free, Dokploy y GitHub Actions;
   cómo se despliega y se mantiene en [docs/despliegue.md](./docs/despliegue.md)).
 
