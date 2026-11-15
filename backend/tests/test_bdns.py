@@ -65,6 +65,9 @@ async def test_bdns_fetch_maps_and_scores_like_ts(monkeypatch: pytest.MonkeyPatc
         "OAPN/confederaciones) desde 15/11/2025: 6 convocatorias únicas, 1 descartadas (nominativas, convenios, "
         "concesión directa), 5 con ficha completa (1 fallidas), 0 solo con datos de búsqueda; {count} relevantes."
     )
+    # every candidate that survives the pre-score gets its detail requested (no TS 230 cap); only the failed one
+    # (931651) stays search-only
+    assert sorted(u.params["numConv"] for u in seen if "numConv" in u.params) == sorted((*DETAILS, "931651"))
     by_id = {r.id: r for r in result.items}
     assert "bdns:941816" not in by_id  # "CONVENIO ...": dropped by the pre-score
     assert set(by_id) == {f"bdns:{n}" for n in (*DETAILS, "931651")}
@@ -93,16 +96,18 @@ async def test_bdns_fetch_maps_and_scores_like_ts(monkeypatch: pytest.MonkeyPatc
     assert persisted["bdns:detail:904719"].value == json.loads(_fixture("detail-904719.json"))  # raw detail JSON
 
 
-async def test_bdns_beyond_max_enrich_are_search_only(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_bdns_past_safety_bound_are_search_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """MAX_ENRICH is only a safety bound now (~1 000 candidates today, bound 2 000): past it, items are lite."""
     monkeypatch.setattr(bdns, "local_now", lambda: NOW)
-    monkeypatch.setattr(bdns, "MAX_ENRICH", 0)
+    monkeypatch.setattr(bdns, "MAX_ENRICH", 2)
     seen: list[httpx.URL] = []
     async with Http(transport=bdns_transport(seen)) as http:
         result = await bdns.BdnsSource().fetch(SourceContext(http=http, memo=Memo()))
-    assert not any("numConv" in str(u) for u in seen)
-    assert all(any(w.startswith("Ficha BDNS no cargada") for w in score_raw(r, NOW.date()).fit.warnings)
-               for r in result.items)  # fmt: skip
-    assert "0 con ficha completa, " in result.health.note
+    assert len([u for u in seen if "numConv" in u.params]) == 2  # the 2 best by pre-score
+    lite = [r for r in result.items
+            if any(w.startswith("Ficha BDNS no cargada") for w in score_raw(r, NOW.date()).fit.warnings)]  # fmt: skip
+    assert len(result.items) == 5 and len(lite) == 3
+    assert "2 con ficha completa, " in result.health.note
 
 
 def test_bdns_nivel_and_pre_drop() -> None:
