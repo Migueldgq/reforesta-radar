@@ -4,7 +4,7 @@
 //   node capture.mjs                  # all screen beats, in order
 //   node capture.mjs perfil analizar  # only these beat ids
 //
-// Env: BASE_URL (default http://localhost:3000), CHROME_PATH, VIEWPORT (default 1440x810), DSF (default 2), HEADFUL=1.
+// Env: BASE_URL (default http://localhost:3010), DEMO_ACCOUNTS (see demo-data.mjs), CHROME_PATH, VIEWPORT (default 1440x810), DSF (default 2), HEADFUL=1.
 //
 // For every beat it writes:
 //   composition/assets/scenes/<id>.mp4  H.264 at native 2x pixels (2880x1620), speed-ramped and trimmed to the action
@@ -18,6 +18,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
+import { BASE_URL, ON_CAMERA, login, seed } from "./demo-data.mjs";
 import { FPS, SCENES } from "./scenes.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -30,7 +31,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 /* ------------------------------------------------------------------ */
 const [VW, VH] = (process.env.VIEWPORT ?? "1440x810").split("x").map(Number);
 const CONFIG = {
-  baseUrl: process.env.BASE_URL ?? "http://localhost:3000",
+  baseUrl: BASE_URL, // demo-data.mjs: BASE_URL, default http://localhost:3010 (the Docker web: production build, no dev badge)
   viewport: { width: VW, height: VH },
   deviceScaleFactor: Number(process.env.DSF ?? 2),
   chromeCandidates: [
@@ -41,7 +42,9 @@ const CONFIG = {
     "/usr/bin/chromium",
   ],
   // Hide dev-only chrome (Next.js dev indicator) and scrollbars in the recording.
-  hideCss: `nextjs-portal{display:none!important} *::-webkit-scrollbar{display:none} *{scrollbar-width:none}`,
+  // The side sheet opens without its slide and dimming overlay: the composition hides the list behind it with a white
+  // curtain that rides the camera move, and a sliding edge would open a gap next to it.
+  hideCss: `nextjs-portal{display:none!important} *::-webkit-scrollbar{display:none} *{scrollbar-width:none} [data-slot=sheet-overlay]{background:transparent!important} [data-slot=sheet-content]{animation:none!important}`,
   // The app's own collapsed-sidebar state (shadcn cookie): more room for the content we crop.
   cookies: [{ name: "sidebar_state", value: "false" }],
   captureDir: path.join(HERE, "captures"),
@@ -52,40 +55,48 @@ const CONFIG = {
   scrollSpeed: 2.5,
   // Output seconds a camera move takes (compose.mjs uses the same value per event).
   camMove: 0.7,
-  triageStorageKey: "reforesta-radar:seguimiento:v1",
   // Saved UI state that would filter the lists: cleared before every page load so each beat starts unfiltered.
   clearStorageKeys: ["reforesta-radar:organismos:v1"],
   apiPath: "/api/oportunidades",
+  mcpPath: "/mcp",
   examples: {
-    madrid: { id: "bdns:904719", row: /proyectos ambientales 2026/i },
+    // The best call: score 100, already won by Reforesta (its detail shows the past editions).
+    won: { id: "bdns:904719", row: /proyectos ambientales 2026/i },
+    // Looks right (Madrid, forests) but the past awards went to companies: the score says so.
+    companies: { id: "bdns:930968" },
+    // Marked, voted, assigned and annotated on camera (demo-data.mjs resets it before every capture).
+    team: { id: ON_CAMERA },
+    company: /Fundación Unicaja/,
+  },
+  // What the assistant beat asks the radar (real tool calls against /mcp, public tools, no token).
+  mcp: {
+    question: "¿Qué convocatoria de Madrid ya hemos ganado y cuándo suele abrir?",
+    search: { texto: "ambiental", territorio: "Madrid", encaje_minimo: 60 },
   },
   sel: {
-    homeReady: [{ css: "tbody tr" }],
-    // first and last home stat tile; the last one shares its label with a table tab, which has no second line
+    homeTitle: [{ css: "main h1", text: /^Convocatorias$/ }],
+    homeSub: [{ css: "main p, main div", text: /^\d+ oportunidades de \d+ fuentes/, smallest: true }],
     statTiles: [{ css: "main button", text: /^Abiertas ahora/ }, { css: "main button", text: /^Próximas ediciones\n\d+\n/ }],
-    chartCard: [{ css: "main [data-slot=card]", text: /^Cuándo cierran/ }],
-    chartTitle: [{ css: "main *", text: /^Cuándo cierran$/, smallest: true }],
-    weekBar: [{ css: "main button", attr: ["aria-label", /^Semana del .*: [1-9]\d* convocatorias/] }],
-    mapTitle: [{ css: "main *", text: /^Territorio$/, smallest: true }],
-    mapMadrid: [{ css: "[aria-label^='Comunidad de Madrid']" }, { css: "path", attr: ["aria-label", /Madrid/] }],
+    notice: [{ css: "main [role=status]", text: /^Ahora mismo no hay convocatorias abiertas/ }],
     tableTop: [{ css: "main table thead" }, { css: "main table" }],
     row: (re) => [{ css: "tbody tr", text: re }, { css: "[role=row]", text: re }],
-    drawerFit: [{ css: "[role=dialog] [aria-label='¿Encaja?']" }, { css: "[role=dialog] section", text: /¿Encaja\?/, smallest: true }],
-    triageEstudio: [{ css: "[role=dialog] [role=radio]", text: /^En estudio$/ }, { css: "[role=dialog] button", text: /^En estudio$/ }],
-    sourcesSummary: [{ css: "main *", text: /^\d+ fuentes · \d+ convocatorias/, smallest: true }, { css: "main p", text: /fuentes ·/ }],
-    sourcesTable: [{ css: "main table" }],
+    dialog: [{ css: "[role=dialog]" }],
+    drawerFit: [{ css: "[role=dialog] [aria-label='¿Encaja?']" }],
+    drawerHist: [{ css: "[role=dialog] [aria-labelledby=hist-h]" }],
+    drawerHistRows: [{ css: "[role=dialog] [aria-label='Ediciones anteriores en BDNS']" }],
+    triage: [{ css: "[role=dialog] [aria-labelledby=triage-h]" }],
+    triageEstudio: [{ css: "[role=dialog] [role=radio]", text: /^En estudio$/ }],
+    votes: [{ css: "[role=dialog] section[aria-labelledby=vote-h]" }],
+    voteYes: [{ css: "[role=dialog] [aria-labelledby=vote-h] button", text: /Nos sirve$/ }],
+    assignee: [{ css: "[role=dialog] [aria-labelledby=assignee-h][role=combobox]" }, { css: "[role=dialog] button[aria-labelledby=assignee-h]" }],
+    assigneeOption: (name) => [{ css: "[role=option]", text: new RegExp(`^${name}$`) }],
+    notes: [{ css: "[role=dialog] section[aria-labelledby=notes-h]" }],
+    noteInput: [{ css: "[role=dialog] textarea" }],
+    noteAdd: [{ css: "[role=dialog] button", text: /^Añadir nota$/ }],
     boardReady: [{ css: "[data-col]" }],
     boardCard: (col, re) => [{ css: `[data-col='${col}'] [data-slot=card]`, text: re }, { css: `[data-col='${col}'] [data-slot=card]` }],
     boardColumn: (col) => [{ css: `[data-col='${col}']` }],
-    perfilLine: "Educación ambiental",
-    perfilOption: "Mucho más",
-    // the whole panel (title + numbers + top-5 list), not just its title row
-    perfilEffect: [{ css: "main div, main section, main aside", text: /^Efecto de vuestros ajustes[\s\S]*primeras/, smallest: true }, { css: "main div, main section, main aside", text: /^Efecto de vuestros ajustes/, smallest: true }],
-    empresasCard: [{ css: "main [data-slot=card]", text: /Santander|Iberdrola|Caixa|Fundaci/ }, { css: "main article" }],
-    pdfDrop: [{ css: "main *", text: /^Arrastra un PDF/, smallest: true }],
-    pdfSample: [{ css: "button", text: /Orden 1689\/2026/ }, { css: "button", text: /BDNS 923290/ }],
-    pdfVerdict: [{ css: "main *", text: /^\d+\s*\/\s*100$/, smallest: true }, { css: "main *", text: /\d+\s*\/\s*100/, smallest: true }],
-    pdfMotivos: [{ css: "main *", text: /^Motivos$/, smallest: true }],
+    empresasCard: (re) => [{ css: "main [data-slot=card]", text: re }, { css: "main article", text: re }],
   },
 };
 
@@ -284,16 +295,20 @@ async function click(page, x, y, pause = 250) {
   await sleep(pause);
 }
 
-/** Smooth-scroll the page's main scroller by dy (or so that `el` sits at `at` of the viewport height). Ramped. */
-async function scroll(page, { dy = null, el = null, at = 0.3, ms = 900 } = {}) {
+/**
+ * Smooth-scroll the page's main scroller by dy (or so that `el` sits at `at` of the viewport height). Ramped.
+ * `within` (CSS) limits the search for the scroller to that element, e.g. the open side sheet.
+ */
+async function scroll(page, { dy = null, el = null, at = 0.3, ms = 900, within = null } = {}) {
   await ramp(CONFIG.scrollSpeed, () =>
     page.evaluate(
-      async (dy, el, at, ms) => {
-        const cands = [...document.querySelectorAll("*")].filter((e) => {
+      async (dy, el, at, ms, within) => {
+        const scope = within ? document.querySelector(within) : document;
+        const cands = [...scope.querySelectorAll("*")].filter((e) => {
           const cs = getComputedStyle(e);
           return /(auto|scroll)/.test(cs.overflowY) && e.scrollHeight > e.clientHeight + 4;
         });
-        if (document.scrollingElement.scrollHeight > innerHeight + 4) cands.push(document.scrollingElement);
+        if (!within && document.scrollingElement.scrollHeight > innerHeight + 4) cands.push(document.scrollingElement);
         const target = cands.sort((a, b) => b.clientHeight - a.clientHeight)[0];
         if (!target) return;
         if (el) dy = el.getBoundingClientRect().top - innerHeight * at;
@@ -313,6 +328,7 @@ async function scroll(page, { dy = null, el = null, at = 0.3, ms = 900 } = {}) {
       el,
       at,
       ms,
+      within,
     ),
   );
   await sleep(100);
@@ -370,130 +386,170 @@ async function goto(page, route, readySpecs) {
 const S = CONFIG.sel;
 const TYPE_HOLD = 1100; // ms the first headline needs to type in before the action starts
 
-const ACTIONS = {
-  async fuentes(page) {
-    const sum = await box(await must(page, S.sourcesSummary, "sources summary"), { scroll: false });
-    const tableEl = await must(page, S.sourcesTable, "sources table");
-    const table = await box(tableEl, { scroll: false });
-    headline(0);
-    await cam(region([sum, { ...table, height: 330 }], 24), { dur: 0 });
-    await glide(page, table.x + table.width * 0.45, table.y + 70, 500);
-    await sleep(TYPE_HOLD + 300);
-    // Pan down the list of sources.
-    await scroll(page, { dy: 320, ms: 1200 });
-    const t2 = await box(tableEl, { scroll: false });
-    await cam(region([{ x: t2.x, y: Math.max(70, t2.y + 330), width: t2.width, height: 360 }], 24), { dur: 0.9 });
-    await sleep(1200);
-  },
+const DIALOG = "[role=dialog]";
 
+/** The right-side sheet: its left edge (where the white curtain stops) once it has slid in. */
+async function sheet(page) {
+  const d = await box(await must(page, S.dialog, "detail sheet"), { scroll: false });
+  return { ...d, left: CONFIG.viewport.width - d.width };
+}
+
+/** A box for the element whose text matches `re` inside `root` (smallest match). */
+async function textBox(page, re, what, root = "main") {
+  return box(await must(page, [{ css: `${root} *`, text: re, smallest: true }], what), { scroll: false });
+}
+
+const ACTIONS = {
   async inicio(page) {
+    const title = await box(await must(page, S.homeTitle, "home title"), { scroll: false });
+    const sub = await box(await must(page, S.homeSub, "home subtitle"), { scroll: false });
     const a = await box(await must(page, [S.statTiles[0]], "Abiertas ahora tile"), { scroll: false });
     const d = await box(await must(page, [S.statTiles[1]], "Próximas ediciones tile"), { scroll: false });
     headline(0);
-    await cam(region([a, d], 28), { dur: 0 });
-    await sleep(TYPE_HOLD);
-    await glide(page, a.x + a.width * 0.5, a.y + a.height * 0.55, 500);
-    await sleep(700);
-    await glide(page, d.x + d.width * 0.45, d.y + d.height * 0.55, 700);
-    await sleep(900);
-  },
-
-  async semana(page) {
-    const card = await box(await must(page, S.chartTitle, "chart title"), { scroll: false });
-    const bars = [];
-    for (let i = 0; i < 12; i++) {
-      const el = await find(page, S.weekBar, { index: i, timeout: 500 });
-      if (!el) break;
-      bars.push({ el, b: await box(el, { scroll: false }) });
-    }
-    if (!bars.length) throw new Error("no week bars");
-    const left = bars[0].b;
-    const right = bars.at(-1).b;
-    const chart = { x: card.x, y: card.y, width: right.x + right.width - card.x, height: left.y + left.height + 30 - card.y };
-    headline(0);
-    await cam(region(chart, 24), { dur: 0 });
-    await sleep(TYPE_HOLD - 300);
-    // The tallest bar in the first weeks.
-    const target = bars.slice(0, 8).sort((p, q) => q.b.height - p.b.height)[0] ?? bars[0];
-    const pt = { x: target.b.cx, y: target.b.y + target.b.height - 60 };
-    await glide(page, pt.x, pt.y, 700);
-    await sleep(200);
-    await click(page, pt.x, pt.y, 600);
-    // The table below reacts: scroll to it and show the filtered count.
+    await cam(region([title, sub, a, d], 28), { dur: 0 });
+    await glide(page, sub.x + sub.width * 0.6, sub.cy + 2, 600);
+    await sleep(TYPE_HOLD + 500);
+    // The honest notice and the top of the ranked list.
+    const notice = await must(page, S.notice, "quiet notice");
+    await scroll(page, { el: notice, at: 0.16, ms: 900 });
+    const n = await box(notice, { scroll: false });
+    const r = await box(await must(page, S.row(CONFIG.examples.won.row), "first row"), { scroll: false });
     headline(1);
-    const count = await tableCount(page);
-    await scroll(page, { el: count, at: 0.12 });
-    const c = await box(count, { scroll: false });
-    const top = await box(await must(page, S.tableTop, "table head"), { scroll: false });
-    await cam(region([c, { x: top.x, y: c.y, width: top.width, height: 330 }], 20), { dur: 0.8 });
-    await sleep(1700);
+    await cam(region([n, { ...r, height: r.height + 60 }], 20), { dur: 0.8 });
+    await glide(page, n.x + n.width * 0.45, n.cy, 500);
+    await sleep(2300);
   },
 
-  async mapa(page) {
-    const title = await box(await must(page, S.mapTitle, "map title"), { scroll: false });
-    const madrid = await must(page, S.mapMadrid, "Madrid on the map");
-    const m = await box(madrid, { scroll: false });
-    headline(0);
-    const mapBox = { x: title.x, y: title.y, width: 420, height: 380 };
-    await cam(region(mapBox, 16), { dur: 0 });
-    await glide(page, m.cx + 60, m.cy + 80, 400);
-    await sleep(TYPE_HOLD - 400);
-    await cam(region({ x: m.cx - 150, y: m.cy - 120, width: 300, height: 240 }, 0), { dur: 0.6 });
-    await glide(page, m.cx, m.cy, 600);
-    await sleep(150);
-    await click(page, m.cx, m.cy, 700);
-    headline(1);
-    const count = await tableCount(page);
-    await scroll(page, { el: count, at: 0.12 });
-    const c = await box(count, { scroll: false });
-    const top = await box(await must(page, S.tableTop, "table head"), { scroll: false });
-    await cam(region([c, { x: top.x, y: c.y, width: top.width, height: 330 }], 20), { dur: 0.8 });
-    await sleep(1700);
-  },
-
-  async encaje(page) {
-    const row = await must(page, S.row(CONFIG.examples.madrid.row), "row for BDNS 904719");
-    await skip(() => scroll(page, { el: row, at: 0.4, ms: 50 }));
+  async ganasteis(page) {
+    const row = await must(page, S.row(CONFIG.examples.won.row), "row of the call Reforesta already won");
+    await skip(() => scroll(page, { el: row, at: 0.45, ms: 50 }));
     const r = await box(row, { scroll: false });
     headline(0);
-    await cam(region({ x: r.x, y: r.y - 90, width: r.width, height: r.height + 180 }, 10), { dur: 0 });
-    await glide(page, r.x + 300, r.cy, 600);
-    await sleep(TYPE_HOLD - 300);
-    await click(page, r.x + 300, r.cy, 150);
-    await skip(() => must(page, [{ css: "[role=dialog]" }], "detail sheet"));
-    const dlg = await box(await must(page, [{ css: "[role=dialog]" }], "detail sheet"), { scroll: false });
-    const sheetX = CONFIG.viewport.width - dlg.width; // where the right-side sheet lands (it is still sliding in now)
-    await cam({ ...region({ x: sheetX, y: 0, width: dlg.width, height: 520 }, 0), curtain: sheetX }, { dur: 0.6, wait: false });
-    await sleep(500); // sheet slide-in, on camera
+    await cam(region({ x: r.x, y: r.y - 30, width: r.width, height: r.height + 60 }, 10), { dur: 0 });
+    await glide(page, r.x + 320, r.cy, 600);
+    await sleep(TYPE_HOLD + 200);
+    await click(page, r.x + 320, r.cy, 150);
+    await skip(() => must(page, [{ css: "[role=dialog] [aria-label='¿Encaja?']" }], "detail sheet"));
+    const sh = await sheet(page);
+    await cam({ ...region({ x: sh.left, y: 0, width: sh.width, height: 460 }, 0), curtain: sh.left }, { dur: 0.6, wait: false });
+    await sleep(600); // camera glides to the sheet
     const fit = await box(await must(page, S.drawerFit, "¿Encaja? section"), { scroll: false });
-    await cam(region({ x: fit.x, y: fit.y, width: fit.width, height: 70 }, 18), { dur: 0.6 });
-    await glide(page, fit.x + 120, fit.y + 30, 400);
-    await sleep(700);
-    // Pan down the reasons.
-    await cam(region({ x: fit.x, y: fit.y + 60, width: fit.width, height: Math.min(fit.height - 60, 260) }, 16), { dur: 0.9 });
-    await sleep(1500);
-    const estudio = await find(page, S.triageEstudio, { timeout: 3000 });
-    if (estudio) {
-      headline(1);
-      const e = await box(estudio, { scroll: false });
-      await cam(region({ x: fit.x, y: e.y - 40, width: fit.width, height: 120 }, 16), { dur: 0.7 });
-      await glide(page, e.cx, e.cy, 500);
-      await sleep(250);
-      await click(page, e.cx, e.cy, 1200);
-    } else warn("encaje: «En estudio» not found");
+    await cam(region({ x: fit.x, y: fit.y, width: fit.width, height: 130 }, 18), { dur: 0.6 });
+    await glide(page, fit.x + 260, fit.y + 100, 400);
+    await sleep(1300);
+    // Down to the past editions: the whole sheet first, then push in on the facts.
+    headline(1);
+    const hist = await must(page, S.drawerHist, "Ediciones anteriores");
+    await cam({ ...region({ x: sh.left, y: 120, width: sh.width, height: 560 }, 0), curtain: sh.left }, { dur: 0.7, wait: false });
+    await scroll(page, { el: hist, at: 0.3, ms: 900, within: DIALOG });
+    await sleep(300);
+    const h = await box(hist, { scroll: false });
+    const quien = await textBox(page, /^Quién la ganó$/, "Quién la ganó", DIALOG);
+    // The strongest fact: a closer push than the usual 2x limit (slightly upscaled, on purpose).
+    await cam(region({ x: h.x, y: h.y, width: h.width, height: quien.y - h.y - 4 }, 14), { dur: 0.9, max: 2.5 });
+    await glide(page, h.x + h.width * 0.93, h.y + 52, 500);
+    await sleep(2400);
+    const rows = await box(await must(page, S.drawerHistRows, "editions list"), { scroll: false });
+    await cam(region({ x: h.x, y: quien.y, width: h.width, height: rows.y - quien.y + 150 }, 14), { dur: 0.9 });
+    await sleep(1700);
+  },
+
+  async motivos(page) {
+    const sh = await sheet(page);
+    const fit = await box(await must(page, S.drawerFit, "¿Encaja? section"), { scroll: false });
+    headline(0);
+    await cam({ ...region({ x: fit.x, y: fit.y, width: fit.width, height: 170 }, 18), curtain: sh.left }, { dur: 0 });
+    await glide(page, fit.x + 200, fit.y + 30, 500);
+    await sleep(TYPE_HOLD + 700);
+    const w1 = await textBox(page, /^Fecha de cierre estimada/, "estimated-date warning", DIALOG);
+    const w2 = await textBox(page, /^Ninguna de las \d+ ayudas anteriores|^Solo \d+ de \d+ ayudas anteriores/, "companies warning", DIALOG);
+    headline(1);
+    await cam(region([{ ...w1, x: fit.x, width: fit.width }, { ...w2, x: fit.x, width: fit.width }], 18), { dur: 0.8 });
+    await glide(page, w2.x + w2.width * 0.5, w2.cy, 500);
+    await sleep(2300);
+  },
+
+  async empresas(page) {
+    const card = await must(page, S.empresasCard(CONFIG.examples.company), "Fundación Unicaja card");
+    const k = await box(card, { scroll: false });
+    const why = await textBox(page, /^Por qué puede encajar$/, "Por qué puede encajar");
+    const lim = await textBox(page, /^Qué lo limita$/, "Qué lo limita");
+    headline(0);
+    await cam(region({ x: k.x, y: k.y, width: k.width, height: why.y - k.y - 6 }, 8), { dur: 0 });
+    await glide(page, k.x + k.width * 0.85, k.y + 30, 600);
+    await sleep(TYPE_HOLD + 900);
+    headline(1);
+    // Closer on the right column (deadline + limits); the curtain hides the left column so no half-words show.
+    const last = await textBox(page, /^Último plazo$/, "Último plazo");
+    await cam({ ...region({ x: lim.x, y: last.y - 4, width: k.x + k.width - lim.x - 12, height: lim.y + 96 - last.y }, 14), curtain: lim.x - 20 }, { dur: 0.8 });
+    await glide(page, lim.x + 300, lim.y + 92, 500); // under the text, not on it
+    await sleep(2200);
+  },
+
+  async equipo(page) {
+    const sh = await sheet(page);
+    const triage = await must(page, S.triage, "Vuestra decisión");
+    await skip(() => scroll(page, { el: triage, at: 0.36, ms: 50, within: DIALOG }));
+    const tr = await box(triage, { scroll: false });
+    const votes = await box(await must(page, S.votes, "votes"), { scroll: false });
+    const x = sh.left + 20;
+    const w = sh.width - 40;
+    headline(0);
+    await cam({ ...region({ x, y: tr.y - 34, width: w, height: votes.y + votes.height - tr.y + 34 }, 10), curtain: sh.left }, { dur: 0 });
+    const est = await box(await must(page, S.triageEstudio, "En estudio"), { scroll: false });
+    await glide(page, est.cx, est.cy, 600);
+    await sleep(TYPE_HOLD - 200);
+    await click(page, est.cx, est.cy, 700);
+    headline(1);
+    const yes = await box(await must(page, S.voteYes, "Nos sirve"), { scroll: false });
+    await glide(page, yes.cx, yes.cy, 500);
+    await sleep(500);
+    await click(page, yes.cx, yes.cy, 900);
+    // Assign and leave a note.
+    headline(2);
+    const asg = await must(page, S.assignee, "Responsable");
+    await scroll(page, { el: asg, at: 0.36, ms: 700, within: DIALOG });
+    const a = await box(asg, { scroll: false });
+    const notes = await box(await must(page, S.notes, "Notas"), { scroll: false });
+    await cam(region({ x, y: a.y - 34, width: w, height: notes.y + notes.height - a.y + 34 }, 10), { dur: 0.7 });
+    await glide(page, a.x + 120, a.cy, 400);
+    await sleep(150);
+    // The open list is cut from the film: it names every account in the database, and the only one we may show is
+    // the demo team. Picked with the keyboard, so the pointer does not jump; the click sound lands on the cut.
+    await skip(async () => {
+      await click(page, a.x + 120, a.cy, 350);
+      await must(page, S.assigneeOption(DEMO_TEAM.assignee), "assignee option");
+      await page.keyboard.type(DEMO_TEAM.assignee.split(" ")[0], { delay: 40 });
+      await page.keyboard.press("Enter");
+      await sleep(450); // list closed and its fade-out finished
+      if (!(await page.evaluate((el) => el.innerText, asg)).includes(DEMO_TEAM.assignee)) throw new Error("assignee not set");
+    });
+    await sleep(500);
+    const ta = await box(await must(page, S.noteInput, "note box"), { scroll: false });
+    await glide(page, ta.x + 160, ta.y + 22, 400);
+    await click(page, ta.x + 160, ta.y + 22, 150);
+    await ramp(1.6, () => page.keyboard.type(DEMO_TEAM.note, { delay: 38 }));
+    await sleep(200);
+    const add = await box(await must(page, S.noteAdd, "Añadir nota"), { scroll: false });
+    await glide(page, add.cx, add.cy, 400);
+    await click(page, add.cx, add.cy, 1500);
   },
 
   async seguimiento(page) {
-    const card = await must(page, S.boardCard("estudio", CONFIG.examples.madrid.row), "card in En estudio");
     const colA = await box(await must(page, S.boardColumn("estudio"), "En estudio column"), { scroll: false });
     const colB = await box(await must(page, S.boardColumn("presentar"), "A presentar column"), { scroll: false });
-    const a = await box(card, { scroll: false });
+    const colD = await box(await must(page, S.boardColumn("descartada"), "Descartada column"), { scroll: false });
+    // The call marked on camera if it is in view, else the second card of the column.
+    let card = await find(page, [{ css: "[data-col='estudio'] [data-slot=card]", text: /F\.S\.P\./ }], { timeout: 1500 });
+    if (card && (await box(card, { scroll: false })).y > 560) card = null;
+    card ??= await must(page, [{ css: "[data-col='estudio'] [data-slot=card]" }], "card in En estudio", { index: 1 });
+    const c = await box(card, { scroll: false });
     headline(0);
-    await cam(region([{ ...colA, height: Math.min(colA.height, 420) }, { ...colB, height: Math.min(colB.height, 420) }], 16), { dur: 0 });
-    const start = { x: a.cx, y: a.y + 28 };
-    const end = { x: colB.cx, y: colB.y + 140 };
+    await cam(region({ x: colA.x, y: colA.y, width: colD.x + colD.width - colA.x, height: 470 }, 16), { dur: 0 });
+    const start = { x: c.cx, y: c.y + 28 };
+    const end = { x: colB.cx, y: colB.y + 160 };
     await glide(page, start.x, start.y, 600);
-    await sleep(TYPE_HOLD - 300);
+    await sleep(TYPE_HOLD);
     await page.mouse.down();
     ev("click", { x: start.x, y: start.y });
     await glide(page, start.x + 12, start.y + 6, 120, 1);
@@ -501,106 +557,49 @@ const ACTIONS = {
     await sleep(150);
     await page.mouse.up();
     ev("drop", { x: end.x, y: end.y });
-    await sleep(1500);
-  },
-
-  async perfil(page) {
-    const btn = await page.evaluateHandle(
-      (line, opt) => {
-        const rows = [...document.querySelectorAll("main div")].filter((d) => d.innerText.trim().startsWith(line) && d.querySelector("[role=radio]"));
-        const row = rows.sort((a, b) => a.innerText.length - b.innerText.length)[0];
-        return row ? [...row.querySelectorAll("[role=radio]")].find((r) => r.innerText.trim() === opt) : null;
-      },
-      S.perfilLine,
-      S.perfilOption,
-    );
-    const el = btn.asElement();
-    if (!el) throw new Error(`not found: «${S.perfilOption}» for ${S.perfilLine}`);
-    await skip(() => scroll(page, { el, at: 0.45, ms: 50 }));
-    const b = await box(el, { scroll: false });
-    const rowBox = await page.evaluate((el) => {
-      let r = el;
-      while (r && r.getBoundingClientRect().width < 500) r = r.parentElement;
-      const q = r.getBoundingClientRect();
-      return { x: q.x, y: q.y, width: q.width, height: q.height };
-    }, el);
-    headline(0);
-    await cam(region({ ...rowBox, y: rowBox.y - 50, height: rowBox.height + 100 }, 12), { dur: 0 });
-    await glide(page, b.cx, b.cy, 700);
-    await sleep(TYPE_HOLD - 500);
-    await click(page, b.cx, b.cy, 500);
-    headline(1);
-    await skip(() => sleep(700)); // the effect panel re-lays out after the change
-    const eff = await box(await must(page, S.perfilEffect, "Efecto de vuestros ajustes panel"), { scroll: false });
-    await cam(region({ ...eff, height: Math.min(eff.height, 340) }, 16), { dur: 0.8 });
-    await glide(page, eff.x + eff.width * 0.7, eff.y + 60, 500);
-    await sleep(2200);
-  },
-
-  async analizar(page) {
-    const drop = await box(await must(page, S.pdfDrop, "drop zone"), { scroll: false });
-    const sample = await must(page, S.pdfSample, "sample PDF button");
-    const s = await box(sample, { scroll: false });
-    headline(0);
-    await cam(region([{ x: drop.x - 250, y: drop.y - 80, width: drop.width + 500, height: 120 }, s], 24), { dur: 0 });
-    await glide(page, s.cx, s.cy, 700);
-    await sleep(TYPE_HOLD - 400);
-    await click(page, s.cx, s.cy, 300);
-    const verdict = await skip(() => find(page, S.pdfVerdict, { timeout: 40000 }));
-    if (!verdict) throw new Error("no PDF result after 40 s");
-    headline(1);
-    await sleep(100);
-    const v = await box(verdict, { scroll: false });
-    const mot = await box(await must(page, S.pdfMotivos, "Motivos"), { scroll: false });
-    await cam(region({ x: v.x, y: v.y - 60, width: 720, height: 180 }, 20), { dur: 0.7 });
-    await glide(page, v.x + 300, v.y + 30, 500);
-    await sleep(1000);
-    await cam(region({ x: mot.x, y: mot.y - 10, width: 720, height: 200 }, 20), { dur: 0.9 });
-    await sleep(1500);
-  },
-
-  async empresas(page) {
-    const k = await box(await must(page, S.empresasCard, "first company card"), { scroll: false });
-    headline(0);
-    await cam(region(k, 0), { dur: 0 });
-    await glide(page, k.x + k.width * 0.55, k.y + k.height * 0.45, 600);
-    await sleep(TYPE_HOLD + 1600);
+    await sleep(1600);
   },
 };
 
 const READY = {
-  fuentes: S.sourcesTable,
-  inicio: S.homeReady,
-  semana: S.homeReady,
-  mapa: S.homeReady,
-  encaje: S.homeReady,
+  inicio: S.notice,
+  ganasteis: S.notice,
+  motivos: S.drawerFit,
+  empresas: S.empresasCard(CONFIG.examples.company),
+  equipo: S.triage,
   seguimiento: S.boardReady,
-  perfil: S.perfilEffect,
-  empresas: S.empresasCard,
-  analizar: S.pdfSample,
 };
 
-/** Puts a few real calls on the tracking board (the Madrid example is added during "encaje"). */
-async function seedBoard(page, withEncaje) {
-  let items;
-  for (let i = 0; i < 5 && !items; i++) {
-    try {
-      items = (await (await fetch(CONFIG.baseUrl + CONFIG.apiPath)).json()).items;
-    } catch {
-      await sleep(3000); // API mid-refresh or dev server recompiling
-    }
-  }
-  if (!items) return warn(`could not seed the board: no data from ${CONFIG.apiPath}`);
-  const top = [...items].sort((a, b) => b.fit.score - a.fit.score).filter((o) => o.id !== CONFIG.examples.madrid.id).slice(0, 4);
-  const status = ["estudio", "presentar", "presentada", "estudio"];
-  const map = {};
-  top.forEach((o, i) => (map[o.id] = { status: status[i], at: new Date().toISOString(), titulo: o.titulo, organismo: o.organismo, deadline: o.deadline ?? null }));
-  // If "encaje" (which marks it «En estudio» on camera) is not recorded in this run, put the Madrid example on the board.
-  const ex = withEncaje ? null : items.find((o) => o.id === CONFIG.examples.madrid.id);
-  if (ex) map[ex.id] = { status: "estudio", at: new Date().toISOString(), titulo: ex.titulo, organismo: ex.organismo, deadline: ex.deadline ?? null };
-  await page.goto(CONFIG.baseUrl + "/seguimiento", { waitUntil: "domcontentloaded" });
-  await page.evaluate((k, v) => localStorage.setItem(k, v), CONFIG.triageStorageKey, JSON.stringify(map));
-  log(`  seeded board with ${Object.keys(map).length} calls`);
+/** What the on-camera teammate does in "equipo". */
+const DEMO_TEAM = { assignee: "Marta Ibáñez", note: "Encaja con riberas. ¿Lo miras esta semana?" };
+
+/** Real numbers for the typed copy (scenes.mjs `{placeholders}`), read from the app at capture time. */
+async function writeFacts(cookie) {
+  const r = await fetch(CONFIG.baseUrl + CONFIG.apiPath, { headers: { cookie } });
+  const j = await r.json();
+  const facts = { total: j.items.length, fuentes: j.sources?.length ?? null, alto: j.items.filter((o) => o.fit?.tier === "alto").length, at: new Date().toISOString() };
+  writeFileSync(path.join(CONFIG.captureDir, "facts.json"), JSON.stringify(facts, null, 1));
+  log(`  facts: ${facts.fuentes} fuentes · ${facts.total} convocatorias · ${facts.alto} encaje alto`);
+}
+
+/** The assistant beat: the radar's real answers (read-only tools over /mcp, no token) for one question. */
+async function writeAssistant() {
+  const call = async (name, args) => {
+    const r = await fetch(CONFIG.baseUrl + CONFIG.mcpPath, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+    });
+    const j = await r.json();
+    if (!j.result || j.result.isError) throw new Error(`${name}: ${JSON.stringify(j).slice(0, 200)}`);
+    return j.result.structuredContent;
+  };
+  const found = await call("buscar_convocatorias", CONFIG.mcp.search);
+  const hit = found.convocatorias.find((c) => c.motivos?.some((m) => /^Reforesta ya la ganó/.test(m))) ?? found.convocatorias[0];
+  const ficha = await call("ver_convocatoria", { id: hit.id });
+  const out = { question: CONFIG.mcp.question, calls: [{ tool: "buscar_convocatorias", args: CONFIG.mcp.search, total: found.total }, { tool: "ver_convocatoria", args: { id: hit.id } }], hit, ficha };
+  writeFileSync(path.join(CONFIG.captureDir, "assistant.json"), JSON.stringify(out, null, 1));
+  log(`  assistant: ${hit.id} (${found.total} results)`);
 }
 
 /* ---------- Post-processing: ramps → output timeline, frames → H.264 ---------- */
@@ -678,7 +677,7 @@ async function main() {
     const r = await fetch(CONFIG.baseUrl, { method: "HEAD" });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
   } catch (e) {
-    console.error(`App not reachable at ${CONFIG.baseUrl} (${e.message}). Start it with \`npm run dev\` in the repo root.`);
+    console.error(`App not reachable at ${CONFIG.baseUrl} (${e.message}). Start it with \`docker compose up -d\` in the repo root (or set BASE_URL).`);
     process.exit(1);
   }
   try {
@@ -709,8 +708,14 @@ async function main() {
       await pg.setCookie(...CONFIG.cookies.map((c) => ({ ...c, url: CONFIG.baseUrl })));
       return pg;
     };
+    // Signed in as the demo admin (fictional account, see demo-data.mjs); the cookie is shared by every tab.
+    const session = await login("lucia");
+    const [name, value] = session.split(/=(.*)/s);
+    CONFIG.cookies.push({ name, value, httpOnly: true });
+    if (scenes.some((s) => s.id === "equipo")) await seed(); // on-camera call back to «Sin revisar»
+    await writeFacts(session);
+    await writeAssistant();
     let page = await newPage();
-    await seedBoard(page, scenes.some((s) => s.id === "encaje"));
 
     for (const scene of scenes) {
       log(`▶ ${scene.id} ${scene.route}`);
