@@ -80,7 +80,7 @@ const STEPS = [
     title: "Encuentra.",
     // Counted from the live source list, so it says the same number as the hero.
     body: (d: LandingData | null) =>
-      `Consulta ${d ? `${numberWord(d.sources.length)} fuentes` : "las fuentes"}: la BDNS, el BOE, dos boletines autonómicos (BOCM y DOG), los portales de la UE, la Fundación Biodiversidad y programas de empresa revisados a mano. Junta todo en una lista y quita duplicados.`,
+      `Consulta ${d ? `${numberWord(d.sources.filter((s) => s.status !== "disabled").length)} fuentes` : "las fuentes"}: la BDNS, el BOE, dos boletines autonómicos (BOCM y DOG), los portales de la UE, la Fundación Biodiversidad y programas de empresa revisados a mano. Junta todo en una lista y quita duplicados.`,
   },
   {
     n: "02",
@@ -426,7 +426,7 @@ export default function LandingPage() {
                               <span className="block text-xs font-normal text-muted-foreground">{n.how}</span>
                             </span>
                             <span className="text-right text-sm tabular-nums text-muted-foreground sm:order-3">
-                              {s ? `${s.count}${s.status === "partial" ? " · parcial" : s.status === "error" ? " · sin respuesta" : ""}` : ""}
+                              {s ? `${s.count}${s.status === "disabled" ? " · desactivada" : s.status === "partial" ? " · parcial" : s.status === "error" ? " · sin respuesta" : ""}` : ""}
                             </span>
                             <span className="col-span-2 text-sm text-muted-foreground sm:col-span-1">
                               {n.what}

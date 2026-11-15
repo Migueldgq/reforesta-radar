@@ -34,7 +34,7 @@ export function HeroFigures({ data }: { data: LandingData | null }) {
     return <p className="text-sm text-muted-foreground">Datos de fuentes oficiales y programas de empresa, actualizados cada día a las 9:00.</p>;
   const figures = [
     { n: data.total, label: "convocatorias" },
-    { n: data.sources.length, label: "fuentes" },
+    { n: data.sources.filter((s) => s.status !== "disabled").length, label: "fuentes" },
     { n: data.open, label: "abiertas ahora" },
   ];
   return (

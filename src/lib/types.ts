@@ -146,7 +146,7 @@ export interface SourceHealth {
   id: string;
   name: string;
   category: string;
-  status: "ok" | "partial" | "error";
+  status: "ok" | "partial" | "error" | "disabled"; // disabled: switched off by configuration (count 0, note says why)
   count: number;
   url: string;
   note: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, CircleCheck, CircleMinus, CircleX, Clock, ExternalLink, Loader2, RefreshCw, RotateCw } from "lucide-react";
+import { CircleAlert, CircleCheck, CircleMinus, CircleSlash, CircleX, Clock, ExternalLink, Loader2, RefreshCw, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, errorText } from "@/lib/api";
 import { fmtWhenShort, type IngestStatus } from "@/lib/team";
@@ -22,6 +22,21 @@ function StatusBadge({ s }: { s: SourceHealth }) {
       <Badge variant="outline" className="border-destructive/40 text-destructive">
         <CircleX aria-hidden />
         Error
+      </Badge>
+    );
+  if (s.status === "disabled")
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        <CircleSlash aria-hidden />
+        Desactivada
+      </Badge>
+    );
+  // The company programmes are a hand-made list: "partial" there means it is due for a review.
+  if (s.status === "partial" && s.id === "rsc")
+    return (
+      <Badge variant="outline">
+        <Clock aria-hidden />
+        Por revisar
       </Badge>
     );
   if (s.status === "partial")
