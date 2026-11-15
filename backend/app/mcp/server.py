@@ -483,6 +483,10 @@ async def tablero_equipo(
     las fuentes. Para las notas completas y los votos, `ver_convocatoria`."""
     async with _read(ctx) as conn:
         if await _team_user(ctx, conn) is None:
+            if ctx.request_context.request is None:  # stdio
+                raise ToolError(
+                    "El tablero del equipo en modo stdio necesita RADAR_MCP_USER (correo de una cuenta activa)."
+                )
             raise ToolError("El tablero del equipo necesita un token personal. " + NEEDS_TOKEN)
         items = await _board_items(conn)
     counts: dict[str, int] = {}

@@ -138,7 +138,7 @@ function CreateForm({ onCreated }: { onCreated: (c: TokenCreated) => void }) {
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input id={id} placeholder="Nombre (p. ej. Claude en mi portátil)" maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
         <Select value={days} onValueChange={setDays}>
-          <SelectTrigger className="sm:w-36" aria-label="Caducidad">
+          <SelectTrigger className="w-full sm:w-36" aria-label="Caducidad">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
