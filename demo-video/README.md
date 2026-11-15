@@ -2,7 +2,7 @@
 
 Builds the short demo video the hackathon asks for ("un vídeo corto explicando el proyecto") from the live app, with [HyperFrames](https://hyperframes.heygen.com/) rendering locally (no account, no API key, nothing uploaded).
 
-v3 is a product-launch film (about 54 s, 1920×1080, 30 fps): a white canvas, one short typed headline per beat with the key words in the brand green, and under it one cropped piece of the real app, framed by a camera that pushes in and pans. Beats change with a blur/scale swap; one beat sits on a green canvas behind a circular wipe. Music bed plus typing ticks, clicks, whooshes and pops. The beat list and timestamps are in `GUION.md`.
+v3 is a product-launch film (about 53 s, 1920×1080, 30 fps): a white canvas, one short typed headline per beat with the key words in the brand green, and under it one cropped piece of the real app, framed by a camera that pushes in and pans. Beats change with a blur/scale swap; one beat sits on a green canvas behind a circular wipe. Music bed plus typing ticks, clicks, whooshes and pops. The beat list and timestamps are in `GUION.md`.
 
 ```
 scenes.mjs ─► capture.mjs ─► composition/assets/scenes/<id>.mp4   (2880×1620, speed-ramped, trimmed)
