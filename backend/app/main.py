@@ -4,7 +4,9 @@ Requests never fan out to the sources: the ingest fills Postgres, the API reads 
 fit (geographic + kind) and ranking on every response.
 
 Access (docs/api-auth.md): everything under /api/ needs a session, except /api/auth/* and /api/public/*; /health
-is open. State-changing /api/ requests must pass the CSRF check (app/auth/csrf.py).
+is open. State-changing /api/ requests must pass the CSRF check (app/auth/csrf.py). /mcp is the read-only MCP server
+(app/mcp/http.py, docs/mcp.md): public tools without credentials, team tools with a personal access token; it never
+reads the session cookie.
 """
 
 import logging
@@ -16,8 +18,9 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
+from starlette.routing import Route
 
-from app.api import analyze_pdf, auth, board, ingest_requests, perfil, team
+from app.api import analyze_pdf, auth, board, ingest_requests, perfil, team, tokens
 from app.api.state import last_ingest, read_sources, read_state
 from app.auth.accounts import bootstrap_admin
 from app.auth.csrf import csrf_middleware
@@ -25,6 +28,7 @@ from app.auth.deps import current_user
 from app.body_limit import BodyLimitMiddleware
 from app.config import settings
 from app.db.session import make_engine
+from app.mcp.http import endpoint as mcp_endpoint
 from app.models import OpportunitiesResponse, SourcesResponse
 from app.scoring.rank import rank
 
@@ -37,7 +41,8 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engine = make_engine()
     await bootstrap_admin(app.state.engine)
-    yield
+    async with mcp_endpoint.run():
+        yield
     await app.state.engine.dispose()
 
 
@@ -52,8 +57,10 @@ app.add_middleware(BodyLimitMiddleware)  # added last = runs first: oversized bo
 app.include_router(auth.router)
 signed_in = [Depends(current_user)]
 no_session: dict[int | str, dict[str, Any]] = {401: {"description": "No valid session (`radar_session` cookie)"}}
-for r in (analyze_pdf, perfil, team, board, ingest_requests):
+for r in (analyze_pdf, perfil, team, tokens, board, ingest_requests):
     app.include_router(r.router, dependencies=signed_in, responses=no_session)
+# Read-only MCP server (Streamable HTTP): its own auth, see app/mcp/http.py. Any method; the SDK answers 405 to GET.
+app.router.routes.append(Route("/mcp", endpoint=mcp_endpoint))
 
 
 def _engine(request: Request) -> AsyncEngine:
