@@ -112,8 +112,8 @@ const NOT_DOING = [
     body: "El reto lo excluye y Reforesta ya sabe escribirlas. El radar se ocupa de encontrar y decidir.",
   },
   {
-    title: "No usa IA generativa ni claves de API.",
-    body: "La puntuación son reglas fijas escritas en el código, que cualquiera puede leer y discutir.",
+    title: "La nota no la pone una IA.",
+    body: "La nota sale de reglas fijas escritas en el código, que cualquiera puede leer y discutir. Si el radar la tiene activada, una inteligencia artificial solo ayuda a descartar lo que no tiene que ver.",
   },
   {
     title: "No está abierto a cualquiera.",

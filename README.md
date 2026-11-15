@@ -27,6 +27,9 @@ Proyecto para **1hack A Coruña: el reto de Reforesta** (Common Seeds / The Agil
 
 **Priorizar**
 - Nota de 0 a 100 por reglas, con sus motivos y avisos en frases cortas.
+- **Revisión por IA** (opcional, apagada sin clave): una IA (Google Gemini) lee el texto público de cada convocatoria
+  y opina si tiene que ver con el trabajo de Reforesta. Las que cree que no salen de la lista y quedan en «Descartadas
+  por la IA», donde el equipo puede revisarlas y devolverlas con «Sí encaja». Nunca cambia la nota.
 - Historial de cada convocatoria BDNS: cuándo suele abrir, cuánto plazo da y qué tipo de entidad la ganó (Reforesta
   incluida).
 - **Analizar PDF**: sube unas bases (hasta 15 MB) o un documento de la convocatoria y devuelve una ficha (quién puede
@@ -48,7 +51,9 @@ Proyecto para **1hack A Coruña: el reto de Reforesta** (Common Seeds / The Agil
   lo mismo que la portada pública; con un token personal (Mi cuenta) también el tablero del equipo. Ver
   [docs/mcp.md](./docs/mcp.md).
 
-No usa IA generativa ni claves de API: todas las reglas están en el código.
+La nota sale de reglas a la vista, todas en el código. Una inteligencia artificial solo ayuda a descartar lo que no
+tiene que ver, y solo si se configura una clave de Google Gemini (`GEMINI_API_KEY`); sin ella el radar no llama a
+ningún modelo ([ADR 0041](./docs/adr/0041-revision-por-ia-que-solo-descarta.md)).
 
 ## Puesta en marcha
 
