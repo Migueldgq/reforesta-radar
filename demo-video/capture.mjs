@@ -69,7 +69,7 @@ const CONFIG = {
     row: (re) => [{ css: "tbody tr", text: re }, { css: "[role=row]", text: re }],
     drawerFit: [{ css: "[role=dialog] [aria-label='¿Encaja?']" }, { css: "[role=dialog] section", text: /¿Encaja\?/, smallest: true }],
     triageEstudio: [{ css: "[role=dialog] [role=radio]", text: /^En estudio$/ }, { css: "[role=dialog] button", text: /^En estudio$/ }],
-    sourcesSummary: [{ css: "main *", text: /^11 fuentes · \d+ convocatorias/, smallest: true }, { css: "main p", text: /fuentes ·/ }],
+    sourcesSummary: [{ css: "main *", text: /^\d+ fuentes · \d+ convocatorias/, smallest: true }, { css: "main p", text: /fuentes ·/ }],
     sourcesTable: [{ css: "main table" }],
     boardReady: [{ css: "[data-col]" }],
     boardCard: (col, re) => [{ css: `[data-col='${col}'] [data-slot=card]`, text: re }, { css: `[data-col='${col}'] [data-slot=card]` }],

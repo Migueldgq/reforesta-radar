@@ -13,7 +13,7 @@ export const REPO_URL = "github.com/Migueldgq/reforesta-radar";
 export const SCENES = [
   { id: "intro", kind: "intro", duration: 2.2, name: "Reforesta Radar" },
   { id: "statement", kind: "statement", duration: 3.0, lines: ["Cada convocatoria que se escapa", "*es monte que no se planta.*"] },
-  { id: "fuentes", kind: "screen", route: "/fuentes", headlines: ["*11 fuentes*, una sola lista"] },
+  { id: "fuentes", kind: "screen", route: "/fuentes", headlines: ["*7 fuentes*, una sola lista"] },
   { id: "inicio", kind: "screen", route: "/", headlines: ["Lo importante, *de un vistazo*"] },
   { id: "semana", kind: "screen", route: "/", headlines: ["Pulsa una *semana*…", "…y la lista *responde*"] },
   { id: "mapa", kind: "screen", route: "/", headlines: ["O pulsa *Madrid*", "Solo lo de *vuestro territorio*"] },
