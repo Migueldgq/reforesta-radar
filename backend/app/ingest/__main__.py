@@ -4,7 +4,8 @@ Port of scripts/ingest.ts.
     python -m app.ingest [--dry-run] [--source boe,rsc] [--trigger schedule]
 
 --dry-run fetches and prints the diff against the database without writing (if the database is unreachable it
-diffs against an empty one). Exit code 1 only if every source failed or the database write failed.
+diffs against an empty one). Exit code 1 only if every source failed or the database write failed. After the write,
+the BDNS history step (app/ingest/history.py) reads previous editions of the best BDNS calls; it never fails the run.
 """
 
 import argparse
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.config import settings
 from app.db.session import make_engine
 from app.http import Http
+from app.ingest.history import run_history
 from app.ingest.store import (
     IngestResult,
     SourceDiff,
@@ -166,6 +168,10 @@ async def main(argv: list[str] | None = None) -> int:
             print_summary(runs, None, t0, args.dry_run)
             return 1
         print_summary(runs, res, t0, args.dry_run)
+        bdns = next((r for r in runs if r.health.id == "bdns" and r.health.status != "error"), None)
+        if bdns is not None and engine is not None and not args.dry_run:
+            # after the commit above: a failure or timeout here never fails the run (run_history never raises)
+            await run_history(engine, memo, bdns.items, settings.history_timeout_s)
         if status == "error":
             print("[ingest] every source failed", file=sys.stderr)
             return 1
