@@ -6,8 +6,9 @@
 // - In any text, *words in asterisks* are set in the brand green, and {fuentes} / {total} / {alto} are replaced with
 //   the app's numbers at capture time (captures/facts.json): numbers on screen are never typed by hand.
 // - `canvas: "green"` puts a beat on the forest-green canvas (one contrast section, circular wipe in and out).
-// - The "assistant" beat shows a question and the answer built from the radar's real tool output
-//   (captures/assistant.json, written by capture.mjs from /mcp).
+// - The "assistant" beat first shows the radar connected to an AI agent as an MCP connector (its /mcp server), then a
+//   question and the answer built from the radar's real tool output (captures/assistant.json, written by capture.mjs
+//   from /mcp), with the tool calls tagged as MCP.
 // compose.mjs builds composition/index.html from this list. Keep GUION.md in sync.
 
 export const FPS = 30;
@@ -16,19 +17,34 @@ export const REPO_URL = "github.com/Migueldgq/reforesta-radar";
 export const SCENES = [
   { id: "intro", kind: "intro", duration: 2.2, name: "Reforesta Radar" },
   { id: "statement", kind: "statement", duration: 3.2, lines: ["{fuentes} fuentes, {total} convocatorias", "*y un equipo de siete.*"] },
+  { id: "fuentes", kind: "screen", route: "/fuentes", headlines: ["Siete fuentes, *a la vista*", "¿No queréis esperar? *Actualizad ahora*"] },
   { id: "inicio", kind: "screen", route: "/", headlines: ["Las lee *cada mañana*", "Si hoy no hay nada bueno, *lo dice*"] },
   { id: "ganasteis", kind: "screen", route: "/", headlines: ["Arriba, *la que ya ganasteis*", "Cuándo abre y *quién la gana*"] },
   { id: "motivos", kind: "screen", route: "/?c=bdns:930968", headlines: ["Cada nota, *con sus motivos*", "Y sus avisos: *aquí ganan empresas*"] },
+  { id: "analizar", kind: "screen", route: "/analizar", headlines: ["¿Tenéis las bases? *Subid el PDF*", "Misma nota, *mismos motivos*"] },
   { id: "empresas", kind: "screen", route: "/empresas", headlines: ["Fundaciones, *comprobadas a mano*", "Y también *lo que las limita*"] },
   { id: "equipo", kind: "screen", route: "/?c=bdns:926034", headlines: ["Marcadla *en estudio*", "¿Os sirve? *Votadlo*", "Asignadla y *dejad una nota*"] },
   { id: "seguimiento", kind: "screen", route: "/seguimiento", headlines: ["Todo el equipo, *un solo tablero*"] },
+  { id: "invitar", kind: "screen", route: "/equipo", headlines: ["Invitad al equipo *con un enlace*", "Cada persona, *con su rol*"] },
   {
     id: "asistente",
     kind: "assistant",
     canvas: "green",
-    duration: 8.0,
-    headline: "Pregúntaselo a *vuestro asistente*",
-    sources: "Consultó el radar: búsqueda y ficha",
+    duration: 10.2,
+    // headlines[0] types over the connector card, headlines[1] over the chat
+    headlines: ["Conectadlo por MCP *a cualquier agente de IA*", "Pregúntaselo a *vuestro agente de IA*"],
+    // The radar's own MCP server (/mcp), connected to an unbranded AI agent. `host` is a neutral stand-in, not a domain.
+    // `standard`: MCP is an open standard, so the honest claim is "any agent that supports MCP".
+    connector: {
+      label: "Conector MCP",
+      name: "Reforesta Radar",
+      host: "vuestro-radar",
+      path: "/mcp",
+      note: "Solo lectura",
+      state: "Conectado",
+      standard: "Estándar abierto: vale cualquier agente de IA compatible con MCP",
+    },
+    toolsTag: "MCP · Reforesta Radar",
   },
   {
     id: "outro",
