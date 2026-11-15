@@ -1,4 +1,4 @@
-# 0035. Iniciar sesión desde el asistente (OAuth 2.1) en una segunda dirección, `/mcp/equipo`
+# 0035. Iniciar sesión desde el agente de IA (OAuth 2.1) en una segunda dirección, `/mcp/equipo`
 
 - Estado: Aceptada
 - Fecha: 2026-11-15 (rama `feat/mcp-oauth`)
@@ -38,12 +38,12 @@ protecciones) salvo «OAuth, fuera». 0027 (tokens personales) no cambia.
   `authorization_response_iss_parameter_supported` y se envía `iss` (RFC 9207).
 - **Flujo:** `/oauth/authorize` guarda la solicitud (10 min, id aleatorio guardado como hash), pone la cookie
   `radar_oauth` (HttpOnly, SameSite=Lax, ruta `/api/oauth/`) y manda el navegador a la página `/autorizar` de la web,
-  detrás del login normal (`?next=` conserva la solicitud). La página dice, en castellano llano, «<asistente> quiere
-  leer el radar de Reforesta con tu cuenta…», con el nombre que se dio el asistente, a qué dirección se envía el
+  detrás del login normal (`?next=` conserva la solicitud). La página dice, en castellano llano, «<agente> quiere
+  leer el radar de Reforesta con tu cuenta…», con el nombre que se dio el agente, a qué dirección se envía el
   permiso y un aviso claro si no lo reconocemos; «Permitir» / «No permitir» son `POST /api/oauth/consent/decision` con
   sesión, regla CSRF de 0016 y la cookie del navegador que empezó. La página no se deja enmarcar
   (`frame-ancestors 'none'`, `X-Frame-Options: DENY`). Sea cual sea el cliente, avisa: continúa solo si tú mismo
-  acabas de pulsar «Conectar» en tu propio asistente; si alguien te ha enviado el enlace, «No permitir».
+  acabas de pulsar «Conectar» en tu propio agente; si alguien te ha enviado el enlace, «No permitir».
 - **Errores antes de decidir** (cliente o URI de vuelta desconocidos, falta PKCE, `resource` ajeno…): una página de
   error en el radar, nunca una redirección a la URI de vuelta del cliente (RFC 9700 §4.11.2: quien registra el cliente
   elige esa URI, y redirigir convertiría `/oauth/authorize` en un redirector abierto). Solo se redirige con error si
@@ -84,7 +84,7 @@ protecciones) salvo «OAuth, fuera». 0027 (tokens personales) no cambia.
     necesita ese 401 para refrescar. Los tokens son aleatorios de 256 bits: no hay nada que adivinar.
   - `/oauth/register`: sin presupuesto global (uno compartido lo puede mantener gastado cualquiera, para siempre).
     La tabla la acota el tope de 5000: un registro nuevo siempre cabe echando al más antiguo sin usar, y como las
-    solicitudes anónimas están topadas en 1000, casi toda la tabla se puede echar. Un asistente aprobado alguna vez,
+    solicitudes anónimas están topadas en 1000, casi toda la tabla se puede echar. Un agente aprobado alguna vez,
     o con una solicitud pendiente, no se echa.
   - Con un proxy de confianza que da la IP real (`FORWARDED_ALLOW_IPS` distinto de `127.0.0.1`), además 10 registros
     por IP cada 10 minutos.
@@ -108,7 +108,7 @@ protecciones) salvo «OAuth, fuera». 0027 (tokens personales) no cambia.
 - Límites conocidos, aceptados:
   - La detección de reutilización tiene 10 s de gracia. Un ladrón que gane la carrera con un código o un refresco
     robado (lo use antes que el cliente legítimo, o en esos 10 s) se queda con un par de tokens válido hasta que la
-    persona vuelva a conectar ese asistente o lo desconecte en Mi cuenta: el cliente legítimo solo recibe
+    persona vuelva a conectar ese agente o lo desconecte en Mi cuenta: el cliente legítimo solo recibe
     `invalid_grant`. Pasado el margen, presentar uno usado sí revoca la concesión.
   - El límite de fallos de `/oauth/token` no frena adivinar: no hace falta, todos los secretos (códigos, tokens,
     secretos de cliente) son aleatorios de 256 bits.

@@ -1,4 +1,4 @@
-# Conectar el radar a tu asistente (Claude)
+# Conectar el radar a tu agente de IA (Claude)
 
 Con esto, puedes preguntarle a Claude cosas como «¿qué hay abierto para charcas en Madrid?» y él mira el radar por
 ti. Se hace una vez y tarda un par de minutos.
@@ -16,8 +16,8 @@ ti. Se hace una vez y tarda un par de minutos.
 
 ## 1. Conectarlo (Claude en la web o en la aplicación de escritorio)
 
-1. En la web del radar: tu nombre (abajo a la izquierda) → **Mi cuenta** → **Conectar un asistente**. Ahí verás la
-   **dirección del radar** para el asistente. Pulsa **Copiar**. Termina en `/mcp/equipo`.
+1. En la web del radar: tu nombre (abajo a la izquierda) → **Mi cuenta** → **Conectar un agente de IA**. Ahí verás la
+   **dirección del radar** para el agente. Pulsa **Copiar**. Termina en `/mcp/equipo`.
 2. En Claude: abre **Ajustes** (en algunas versiones, **Configuración**; está en tu nombre o tu foto, abajo a la
    izquierda) → **Conectores**.
 3. Pulsa **Añadir conector personalizado**.
@@ -66,11 +66,11 @@ Algunas preguntas que el radar sabe responder:
 9. «¿Por qué esta convocatoria tiene un 45? ¿Qué le falta para encajar mejor?»
 10. «¿De cuándo son los datos del radar? ¿Alguna fuente ha fallado?»
 
-Pide siempre el enlace oficial: las bases de la convocatoria mandan sobre lo que diga el radar o el asistente.
+Pide siempre el enlace oficial: las bases de la convocatoria mandan sobre lo que diga el radar o el agente.
 
 ## 3. Desconectarlo
 
-- **Desde el radar** (lo más seguro): Mi cuenta → Conectar un asistente → en «Asistentes conectados», **Desconectar**.
+- **Desde el radar** (lo más seguro): Mi cuenta → Conectar un agente de IA → en «Agentes de IA conectados», **Desconectar**.
   Deja de funcionar al momento.
 - **Desde Claude**: Ajustes → Conectores → Reforesta Radar → Desconectar o eliminar.
 - También se desconecta solo si cambias o restableces tu contraseña, o si te desactivan la cuenta. Para volver a
@@ -84,7 +84,7 @@ Pide siempre el enlace oficial: las bases de la convocatoria mandan sobre lo que
 - **No puede:** cambiar nada (ni el tablero, ni notas, ni votos, ni el Perfil), ver correos ni contraseñas de nadie,
   ni analizar PDFs.
 - **Lo que lee, lo ve también Anthropic** (la empresa de Claude), como cualquier cosa que le cuentes a Claude. Las
-  notas del equipo salen del radar cuando el asistente las consulta: no escribáis en ellas nada que no deba salir.
+  notas del equipo salen del radar cuando el agente las consulta: no escribáis en ellas nada que no deba salir.
 
 ## 5. Si algo no funciona
 
