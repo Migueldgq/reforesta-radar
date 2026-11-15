@@ -24,10 +24,12 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.routing import Route
 
+from app.auth import throttle
 from app.config import settings
-from app.db.tables import oauth_clients, oauth_codes, oauth_grants, users
+from app.db.tables import oauth_clients, oauth_codes, oauth_grants, oauth_tokens, users
 from app.main import app
 from app.oauth import provider
+from app.oauth.clients import clean_name
 from tests.conftest import login, make_client
 from tests.test_mcp import SECRET_NOTE, _seed, _team_state, _token, running  # noqa: F401 - fixture
 
@@ -320,6 +322,23 @@ async def test_authorize_refusals(engine: AsyncEngine, member: httpx.AsyncClient
     assert error(await authorize(member, cid, challenge, state="s" * 600)) == "invalid_request"
 
 
+async def test_authorize_errors_never_redirect_to_web_clients(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    """RFC 9700 §4.11.2: before the person has decided, errors for a client with a web redirect URI are shown on the
+    radar (else /oauth/authorize would redirect anywhere a registrant likes). A real «No permitir» still redirects."""
+    client = await new_client(engine, redirect_uris=["https://agent.example/cb"])
+    cid = client["client_id"]
+    _, challenge = pkce()
+    for extra in ({"code_challenge": None}, {"response_type": "token"}, {"resource": "https://other.example/mcp"},
+                  {"code_challenge_method": "plain"}):  # fmt: skip
+        res = await authorize(member, cid, challenge, "https://agent.example/cb", **extra)  # type: ignore[arg-type]
+        assert res.status_code == 400 and "location" not in res.headers, extra
+        assert res.headers["content-type"].startswith("text/html")
+        assert "No se puede conectar" in res.text and "frame-ancestors 'none'" in res.headers["content-security-policy"]
+    query = await consent(member, request_id(await authorize(member, cid, challenge, "https://agent.example/cb")),
+                          allow=False)  # fmt: skip
+    assert query["error"] == ["access_denied"]
+
+
 async def test_token_refusals(engine: AsyncEngine, running: None, member: httpx.AsyncClient) -> None:  # noqa: F811
     client = await new_client(engine)
     other = await new_client(engine)
@@ -484,19 +503,57 @@ async def test_registration_limits(engine: AsyncEngine, monkeypatch: pytest.Monk
         name = (await conn.execute(select(oauth_clients.c.name))).scalar()
     assert name.startswith("Claude de confianza") and len(name) <= 60 and "‮" not in name
 
-    # per IP: 10 per hour
-    async with bare(engine, "10.0.0.9") as c:
-        codes = [(await register(c)).status_code for _ in range(11)]
-    assert codes[:10] == [201] * 10 and codes[10] == 429
     # stored clients are capped; unused registrations expire after a day
-    monkeypatch.setattr(provider, "MAX_CLIENTS", 11)
+    monkeypatch.setattr(provider, "MAX_CLIENTS", 2)
     async with bare(engine, "10.0.0.10") as c:
-        assert (await register(c)).status_code == 400
+        assert (await register(c)).status_code == 201
+        assert (await register(c)).status_code == 400  # full
         async with engine.begin() as conn:
             await conn.execute(update(oauth_clients).values(created_at=datetime.now(UTC) - timedelta(days=2)))
         assert (await register(c)).status_code == 201
     async with engine.connect() as conn:
         assert (await conn.execute(select(func.count()).select_from(oauth_clients))).scalar() == 1
+
+
+async def test_registration_flood_does_not_lock_the_team_out(engine: AsyncEngine, member: httpx.AsyncClient,
+                                                             monkeypatch: pytest.MonkeyPatch,
+                                                             patch_settings) -> None:  # noqa: ANN001  # fmt: skip
+    """Behind the web origin every caller has the same IP, so a per-IP limit would be a team-wide one. The budget is
+    global, an assistant that already registered never needs it again, and near the cap unused registrations go
+    after 10 minutes, so a flood delays new registrations by at most 10 minutes and never blocks sign-in."""
+    known = await new_client(engine)  # registered before the flood (Claude keeps its client_id)
+    async with bare(engine) as c:
+        codes = [(await register(c)).status_code for _ in range(throttle.oauth_register_global.limit - 1)]
+        assert set(codes) == {201}
+        res = await register(c)
+        assert res.status_code == 429 and int(res.headers["retry-after"]) <= 600
+    # the assistant registered earlier still signs in and refreshes
+    _, tokens = await sign_in(engine, member, known)
+    assert (await refresh(engine, known["client_id"], tokens["refresh_token"])).status_code == 200
+    # the budget is per 10 minutes, then registration works again
+    throttle.oauth_register_global.clear()
+    async with bare(engine) as c:
+        assert (await register(c)).status_code == 201
+
+    # near the cap, registrations nobody used for 10 minutes make room (instead of a day)
+    monkeypatch.setattr(provider, "MAX_CLIENTS", 10)
+    async with engine.begin() as conn:
+        await conn.execute(update(oauth_clients).where(oauth_clients.c.client_id != known["client_id"])
+                           .values(created_at=datetime.now(UTC) - timedelta(minutes=11)))  # fmt: skip
+    throttle.oauth_register_global.clear()
+    async with bare(engine) as c:
+        assert (await register(c)).status_code == 201
+    async with engine.connect() as conn:
+        assert (await conn.execute(select(func.count()).select_from(oauth_clients))).scalar() == 2
+
+    # with a trusted proxy (real client IPs) there is also a per-IP limit of 10 per 10 minutes
+    patch_settings(forwarded_allow_ips="10.0.0.1")
+    monkeypatch.setattr(provider, "MAX_CLIENTS", 500)
+    async with bare(engine, "10.0.0.9") as c:
+        codes = [(await register(c)).status_code for _ in range(11)]
+    assert codes[:10] == [201] * 10 and codes[10] == 429
+    async with bare(engine, "10.0.0.10") as c:
+        assert (await register(c)).status_code == 201
 
 
 async def test_token_endpoint_is_not_blocked_by_browser_rules(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
@@ -514,13 +571,68 @@ async def test_token_endpoint_is_not_blocked_by_browser_rules(engine: AsyncEngin
         assert big.status_code == 413
 
 
-async def test_token_failures_are_throttled(engine: AsyncEngine) -> None:
+async def test_bad_token_requests_never_block_good_ones(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    """Attack: junk to /oauth/token and /oauth/revoke from the shared IP until it is over the limit. Only failures
+    count and are slowed down; a correct exchange, refresh or revocation still goes through, and a dead refresh token
+    still gets `invalid_grant` (the client needs it to start a new sign-in), never 429."""
     client = await new_client(engine)
-    async with bare(engine, "10.0.0.7") as c:
-        codes = [(await c.post("/oauth/token", data={"grant_type": "refresh_token", "refresh_token": "rr_rt_x",
-                                                     "client_id": client["client_id"]})).status_code
-                 for _ in range(61)]  # fmt: skip
-    assert codes[:60] == [400] * 60 and codes[60] == 429
+    cid = client["client_id"]
+    _, tokens = await sign_in(engine, member, client)
+    junk = {"grant_type": "refresh_token", "refresh_token": "rr_rt_x", "client_id": "nope"}
+    async with bare(engine) as c:
+        codes = [(await c.post("/oauth/token", data=junk)).status_code
+                 for _ in range(throttle.oauth_token_failures.limit + 1)]  # fmt: skip
+        assert codes[-1] == 429 and set(codes[:-1]) == {401}  # unknown client
+        assert (await c.post("/oauth/revoke", data={"token": "x", "client_id": "nope"})).status_code == 429
+        dead = await c.post("/oauth/token", data={**junk, "client_id": cid})
+        assert dead.status_code == 400 and dead.json()["error"] == "invalid_grant"
+    res = await refresh(engine, cid, tokens["refresh_token"])
+    assert res.status_code == 200, res.text
+    _, other = await sign_in(engine, member, client)  # code exchange
+    async with bare(engine) as c:
+        res = await c.post("/oauth/revoke", data={"token": other["refresh_token"], "client_id": cid})
+    assert res.status_code == 200
+
+
+async def test_authorize_junk_never_blocks_a_real_request(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    """Attack: anonymous junk to /oauth/authorize from the shared IP. Junk gets an error page (then 429); a valid
+    request from the same IP is never refused."""
+    client = await new_client(engine)
+    _, challenge = pkce()
+    async with bare(engine) as anon:
+        codes = [(await authorize(anon, "nope", challenge)).status_code
+                 for _ in range(throttle.oauth_authorize_failures.limit + 1)]  # fmt: skip
+    assert set(codes[:-1]) == {400} and codes[-1] == 429
+    rid = request_id(await authorize(member, client["client_id"], challenge))
+    assert "code" in await consent(member, rid)
+
+
+async def test_team_address_never_answers_429(engine: AsyncEngine, running: None,  # noqa: F811
+                                              member: httpx.AsyncClient) -> None:  # fmt: skip
+    """Attack: junk bearer tokens to /mcp/equipo from the shared IP. An expired access token must still get 401 with
+    the challenge (so the client refreshes), and a valid token must still work."""
+    _, tokens = await sign_in(engine, member)
+    for _ in range(throttle.mcp_bad_token.limit + 5):
+        res = await team_status(engine, "rr_at_" + secrets.token_urlsafe(32))
+        assert res.status_code == 401 and "resource_metadata" in res.headers["www-authenticate"]
+    assert (await team_status(engine, tokens["access_token"])).status_code == 200
+    async with engine.begin() as conn:
+        await conn.execute(text("update oauth_tokens set expires_at = now() - interval '1 second' where kind='access'"))
+    res = await team_status(engine, tokens["access_token"])
+    assert res.status_code == 401 and 'error="invalid_token"' in res.headers["www-authenticate"]
+
+
+async def test_token_resource_check_reads_multipart_too(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    client = await new_client(engine)
+    verifier, challenge = pkce()
+    code = (await consent(member, request_id(await authorize(member, client["client_id"], challenge))))["code"][0]
+    form = {"grant_type": "authorization_code", "code": code, "client_id": client["client_id"],
+            "code_verifier": verifier, "redirect_uri": LOCAL, "resource": "https://other.example/mcp"}  # fmt: skip
+    async with bare(engine) as c:
+        res = await c.post("/oauth/token", files={k: (None, v) for k, v in form.items()})
+        assert res.status_code == 400 and res.json()["error"] == "invalid_target"
+        res = await c.post("/oauth/token", files={k: (None, v) for k, v in {**form, "resource": team_url()}.items()})
+    assert res.status_code == 200, res.text
 
 
 async def test_oauth_off_without_https(engine: AsyncEngine, running: None, patch_settings) -> None:  # noqa: ANN001, F811

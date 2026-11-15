@@ -168,7 +168,11 @@ class McpEndpoint:
                 grant = await access_token_user(scope["app"].state.engine, token)
                 # audience: only tokens issued for this URL (RFC 8707), never one meant for another resource
                 user = grant if grant is not None and same_resource(grant.resource, settings.mcp_team_url) else None
-        if user is None and await self._bad_token(send, ip):
+        if user is None:
+            # Always 401 with the challenge, never 429: an expired access token must reach the client as 401 so it
+            # refreshes or signs in again, and other callers' junk (all behind one IP) must not change that. Tokens
+            # are 256-bit random, so there is nothing to guess; malformed ones never reach the database.
+            log.info("mcp: invalid token on %s ip=%s", TEAM_PATH, ip)
             await _reply(send, 401, "La sesión del asistente no es válida, ha caducado o se ha desconectado.",
                          {"WWW-Authenticate": challenge("invalid_token")})  # fmt: skip
         return user

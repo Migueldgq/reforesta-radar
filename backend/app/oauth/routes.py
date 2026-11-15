@@ -1,13 +1,13 @@
 """HTTP side of the authorization server (ADR 0035): discovery documents and the four OAuth endpoints, built from
 the MCP SDK's handlers with our provider (app/oauth/provider.py). Hand-rolled here only what the SDK leaves to the
-server: the URLs come from settings (never from the Host header), throttles, the browser cookie of /authorize, the
-resource check at /oauth/token and the hashed client-secret check.
+server: the URLs come from settings (never from the Host header), limits that only ever slow down failures, the
+error page and browser cookie of /authorize, the resource check at /oauth/token and the hashed client-secret check.
 
 | Path | What |
 |---|---|
 | `GET /.well-known/oauth-protected-resource/mcp/equipo` (and the root form) | RFC 9728 metadata of the team MCP URL |
 | `GET /.well-known/oauth-authorization-server` | RFC 8414 metadata (issuer = RADAR_PUBLIC_URL) |
-| `GET /oauth/authorize` | records the request, cookie `radar_oauth`, 302 to the web's `/autorizar?solicitud=…` |
+| `GET /oauth/authorize` | request + cookie `radar_oauth`, 302 to `/autorizar?solicitud=…`; errors: a page here |
 | `POST /oauth/token` | code (PKCE) and refresh-token grants, form-encoded |
 | `POST /oauth/register` | dynamic client registration (RFC 7591) |
 | `POST /oauth/revoke` | RFC 7009: revokes the whole grant of the token |
@@ -16,6 +16,7 @@ These paths are outside /api/, so the cookie CSRF rule does not apply to them (t
 /authorize, which only sets one); the body-size middleware caps them at 16 KiB (app/body_limit.py).
 """
 
+import json
 import logging
 from urllib.parse import parse_qs, urlsplit
 
@@ -27,11 +28,12 @@ from mcp.server.auth.routes import build_resource_metadata_url
 from mcp.server.auth.settings import ClientRegistrationOptions
 from mcp.shared.auth import OAuthMetadata, ProtectedResourceMetadata
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
 from app.auth import throttle
 from app.config import settings
+from app.oauth.clients import is_loopback
 from app.oauth.provider import (
     SCOPE,
     HashedSecretAuthenticator,
@@ -124,6 +126,9 @@ def _too_many(wait: int) -> Response:
 
 
 def _ip(request: Request) -> str:
+    """Client IP: the TCP peer, or the proxy's X-Forwarded-For when uvicorn trusts it (FORWARDED_ALLOW_IPS). Behind
+    the Next.js rewrite without such a proxy every caller shares one IP, so no limit here may refuse a request that
+    would succeed (ADR 0035)."""
     return request.client.host if request.client else "unknown"
 
 
@@ -145,66 +150,150 @@ async def authorization_server(request: Request) -> Response:
     return _json(authorization_server_metadata())
 
 
-class _Endpoint:
-    """Runs an SDK handler with the app's engine, behind the availability check and an optional per-IP throttle."""
+async def _run(request: Request, handler) -> Response:  # noqa: ANN001
+    """An SDK (or our) handler with the app's engine available to the provider."""
+    token = current_engine.set(request.app.state.engine)
+    try:
+        return await handler(request)
+    finally:
+        current_engine.reset(token)
 
-    def __init__(self, handler, limiter: throttle.Throttle | None = None, count: str = "all") -> None:  # noqa: ANN001
-        self.handler = handler
-        self.limiter = limiter
-        self.count = count  # "all": every request counts; "failures": only answers >= 400
 
-    async def run(self, request: Request) -> Response:
-        if not oauth_available():
-            return _not_found()
-        ip = _ip(request)
-        if self.limiter and (wait := self.limiter.retry_after(ip)):
-            return _too_many(wait)
-        if self.limiter and self.count == "all":
-            self.limiter.hit(ip)
-        token = current_engine.set(request.app.state.engine)
-        try:
-            response = await self.handler(request)
-        finally:
-            current_engine.reset(token)
-        if self.limiter and self.count == "failures" and response.status_code >= 400:
-            self.limiter.hit(ip)
-        return response
+def _count_failure(request: Request, limiter: throttle.Throttle) -> int | None:
+    """Records a failed request from the client's IP; seconds to wait when that IP was already over its limit."""
+    ip = _ip(request)
+    wait = limiter.retry_after(ip)
+    limiter.hit(ip)
+    return wait
+
+
+# ---- /oauth/authorize ----
+
+ERROR_PAGE = """<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>No se puede conectar · Reforesta Radar</title>
+<style>body{{font:16px/1.5 system-ui,sans-serif;margin:0;background:#f7f7f7;color:#1a1a1a}}
+main{{max-width:28rem;margin:12vh auto;padding:1.5rem;background:#fff;border:1px solid #e3e3e3;border-radius:.75rem}}
+h1{{font-size:1.125rem;margin:0 0 .5rem}}p{{margin:.5rem 0;color:#555}}code{{font-size:.8rem;color:#777}}</style>
+</head><body><main><h1>No se puede conectar</h1><p>{message}</p>
+<p>Vuelve a tu asistente y pulsa «Conectar» otra vez. Si no lo has pedido tú, cierra esta página.</p>
+<p><code>{code}</code></p></main></body></html>"""
+ERROR_MESSAGES = {
+    "invalid_target": "El asistente ha pedido una dirección del radar que no existe.",
+    "unsupported_response_type": "El asistente ha hecho una petición que el radar no admite.",
+    "temporarily_unavailable": "Hay demasiadas peticiones ahora mismo. Espera unos minutos.",
+}
+ERROR_HEADERS = {
+    **NO_STORE,
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
+
+
+def _error_page(code: str, status: int = 400, headers: dict[str, str] | None = None) -> Response:
+    safe = code if code.replace("_", "").isalpha() else "invalid_request"
+    message = ERROR_MESSAGES.get(safe, "La solicitud de conexión no es válida o el asistente no está registrado.")
+    return HTMLResponse(ERROR_PAGE.format(message=message, code=safe), status_code=status,
+                        headers={**ERROR_HEADERS, **(headers or {})})  # fmt: skip
+
+
+def _error_of(response: Response) -> str:
+    """The OAuth error code of an SDK authorize error, whether it came as a redirect or as JSON."""
+    location = response.headers.get("location")
+    if location:
+        return parse_qs(urlsplit(location).query).get("error", ["invalid_request"])[0]
+    try:
+        return str(json.loads(bytes(response.body)).get("error", "invalid_request"))
+    except (ValueError, AttributeError):
+        return "invalid_request"
 
 
 async def authorize(request: Request) -> Response:
+    """Success (a request recorded for the consent page) is never throttled. Any error found before the person has
+    decided is shown here, on the radar, and never sent to the client's redirect URI (RFC 9700 §4.11.2: the URI was
+    chosen by whoever registered the client, so redirecting would make this an open redirector), except to a loopback
+    URI (a program on the person's own computer). Only failures count towards the per-IP limit."""
+    if not oauth_available():
+        return _not_found()
     pending_browser_nonce.set(None)
-    response = await _Endpoint(_authorize.handle, throttle.oauth_authorize).run(request)
+    response = await _run(request, _authorize.handle)
     nonce = pending_browser_nonce.get()
     if nonce is not None and response.status_code == 302:
         response.set_cookie(BROWSER_COOKIE, nonce, max_age=600, path=COOKIE_PATH, httponly=True, samesite="lax",
                             secure=settings.cookie_secure)  # fmt: skip
-    response.headers["Referrer-Policy"] = "no-referrer"
-    return response
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+    wait = _count_failure(request, throttle.oauth_authorize_failures)
+    location = response.headers.get("location")
+    if response.status_code == 302 and location and is_loopback(location) and not wait:
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+    if wait:
+        return _error_page("temporarily_unavailable", 429, {"Retry-After": str(wait)})
+    return _error_page(_error_of(response))
 
 
-async def _form(request: Request) -> dict[str, list[str]]:
-    body = await request.body()  # cached on the Request: the SDK handler reads it again
-    try:
-        return parse_qs(body.decode(), keep_blank_values=True)
-    except UnicodeDecodeError:
-        return {}
+# ---- /oauth/token and /oauth/revoke ----
 
 
 async def _token_with_resource_check(request: Request) -> Response:
-    # RFC 8707 §2.2: a token request may name the resource; it must be the one the grant is for.
-    resources = (await _form(request)).get("resource", [])
-    if any(not same_resource(r, settings.mcp_team_url) for r in resources) or len(resources) > 1:
+    # RFC 8707 §2.2: a token request may name the resource; it must be the one the grant is for. Read the body the
+    # way the SDK handler does (urlencoded or multipart), so no encoding skips this check.
+    resources = (await request.form()).getlist("resource")
+    if len(resources) > 1 or any(not isinstance(r, str) or not same_resource(r, settings.mcp_team_url)
+                                 for r in resources):  # fmt: skip
         return JSONResponse({"error": "invalid_target", "error_description": "unknown resource"}, status_code=400,
                             headers=NO_STORE)  # fmt: skip
     return await _token.handle(request)
 
 
+def _error_code(response: Response) -> str | None:
+    try:
+        return json.loads(bytes(response.body)).get("error")
+    except (ValueError, AttributeError):
+        return None
+
+
+async def _failures_only(request: Request, handler) -> Response:  # noqa: ANN001
+    """Processes first: a correct request always goes through, whatever others from the same IP did. Only failures
+    count; once the IP is over its limit, further failures answer 429, except `invalid_grant` (a dead code or refresh
+    token), which the client needs to see to start a new sign-in."""
+    if not oauth_available():
+        return _not_found()
+    response = await _run(request, handler)
+    if response.status_code < 400:
+        return response
+    wait = _count_failure(request, throttle.oauth_token_failures)
+    if wait and _error_code(response) != "invalid_grant":
+        return _too_many(wait)
+    return response
+
+
 async def token(request: Request) -> Response:
-    return await _Endpoint(_token_with_resource_check, throttle.oauth_token_failures, count="failures").run(request)
+    return await _failures_only(request, _token_with_resource_check)
+
+
+# ---- /oauth/register ----
 
 
 async def register(request: Request) -> Response:
-    response = await _Endpoint(_register.handle, throttle.oauth_register).run(request)
+    """Unauthenticated by nature (RFC 7591). A global budget per 10 minutes bounds how fast the client table fills
+    (with the cap and the purge in the provider); per IP only when a trusted proxy gives real client IPs (otherwise
+    every caller shares one IP and the per-IP limit would be the global one)."""
+    if not oauth_available():
+        return _not_found()
+    limiters = [throttle.oauth_register_global]
+    if settings.trusted_proxy:
+        limiters.append(throttle.oauth_register_ip)
+    keys = ["*", _ip(request)]
+    for limiter, key in zip(limiters, keys, strict=False):
+        if wait := limiter.retry_after(key):
+            log.warning("oauth: registration refused, %s over its limit", "budget" if key == "*" else "ip")
+            return _too_many(wait)
+    for limiter, key in zip(limiters, keys, strict=False):
+        limiter.hit(key)
+    response = await _run(request, _register.handle)
     response.headers.update(NO_STORE)
     return response
 
@@ -228,7 +317,7 @@ async def _revoke(request: Request) -> Response:
 
 
 async def revoke(request: Request) -> Response:
-    return await _Endpoint(_revoke, throttle.oauth_token_failures, count="failures").run(request)
+    return await _failures_only(request, _revoke)
 
 
 routes = [

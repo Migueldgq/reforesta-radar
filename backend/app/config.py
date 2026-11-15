@@ -69,6 +69,8 @@ class Settings:
     mcp_allowed_origins: list[str] = field(default_factory=lambda: _list(os.getenv("RADAR_MCP_ALLOWED_ORIGINS", "")))
     # stdio mode (`python -m app.mcp`) only: e-mail of the active account whose team view the tools show.
     mcp_user: str = field(default_factory=lambda: os.getenv("RADAR_MCP_USER", ""))
+    # Read by uvicorn itself (client IP from X-Forwarded-For); here only to know whether per-IP limits are per client.
+    forwarded_allow_ips: str = field(default_factory=lambda: os.getenv("FORWARDED_ALLOW_IPS", "127.0.0.1").strip())
     # Sign-in from the assistant (OAuth 2.1, app/oauth, ADR 0035) for the team address `<RADAR_MCP_URL>/equipo`.
     # Needs an https RADAR_PUBLIC_URL (or a loopback one for local use); off when that is not the case.
     mcp_oauth: bool = field(default_factory=lambda: _bool(os.getenv("RADAR_MCP_OAUTH", "true")))
@@ -76,6 +78,12 @@ class Settings:
     @property
     def mcp_public_url(self) -> str:
         return (self.mcp_url or f"{self.public_url}/mcp").rstrip("/")
+
+    @property
+    def trusted_proxy(self) -> bool:
+        """uvicorn takes the client IP from X-Forwarded-For (a proxy in front overwrites it): per-IP limits then mean
+        one client each. With the default (127.0.0.1) every caller through the web shares the web container's IP."""
+        return self.forwarded_allow_ips not in ("", "127.0.0.1")
 
     @property
     def mcp_team_url(self) -> str:

@@ -77,15 +77,20 @@ forgot_by_ip = Throttle(limit=10, window_s=3600)
 mcp_bad_token = Throttle(limit=30, window_s=WINDOW_S)
 # Requests to /mcp without a token (public tools), per client IP and minute (RADAR_MCP_PUBLIC_RATE).
 mcp_public = Throttle(limit=settings.mcp_public_rate, window_s=60)
-# OAuth for assistants (app/oauth/routes.py), per client IP. Registration and /authorize write a row each time, so
-# every request counts; at /oauth/token and /oauth/revoke only failed requests count (codes and refresh tokens are
-# 256-bit random: this caps database work from junk, it is not what stops guessing).
-oauth_register = Throttle(limit=10, window_s=3600)
-oauth_authorize = Throttle(limit=30, window_s=10 * 60)
+# OAuth for assistants (app/oauth/routes.py, ADR 0035). Behind the Next.js rewrite every caller may share one IP, so
+# none of these may refuse a request that would succeed:
+# - /oauth/authorize, /oauth/token, /oauth/revoke: processed first, only failures count, per client IP. Over the limit
+#   further failures answer 429 (never a success, never `invalid_grant` at /oauth/token);
+# - /oauth/register (unauthenticated by nature): a global budget per 10 minutes, plus per IP only when a trusted proxy
+#   gives real client IPs (FORWARDED_ALLOW_IPS set to the proxy). Someone spending the global budget delays
+#   new registrations by at most 10 minutes; connected assistants keep working.
+oauth_authorize_failures = Throttle(limit=30, window_s=10 * 60)
 oauth_token_failures = Throttle(limit=60, window_s=WINDOW_S)
+oauth_register_global = Throttle(limit=60, window_s=10 * 60)
+oauth_register_ip = Throttle(limit=10, window_s=10 * 60)
 
 ALL = (account_ceiling, account_ip, password_change, forgot_by_account, forgot_by_ip, mcp_bad_token, mcp_public,
-       oauth_register, oauth_authorize, oauth_token_failures)  # fmt: skip
+       oauth_authorize_failures, oauth_token_failures, oauth_register_global, oauth_register_ip)  # fmt: skip
 
 
 def clear_all() -> None:

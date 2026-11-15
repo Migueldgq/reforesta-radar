@@ -54,6 +54,9 @@ REFRESH_DAYS = 30
 CODE_TTL = timedelta(seconds=60)
 REQUEST_TTL = timedelta(minutes=10)
 UNUSED_CLIENT_TTL = timedelta(hours=24)  # a registration nobody authorised is deleted after this
+UNUSED_CLIENT_TTL_NEAR_CAP = timedelta(minutes=10)  # ...or after this once the table is 80 % full (= REQUEST_TTL)
+NEAR_CAP = 0.8
+REUSE_GRACE = timedelta(seconds=10)  # a used code or rotated refresh token again within this: refused, not revoked
 IDLE_CLIENT_TTL = timedelta(days=90)  # a client with no live grant and no use for this long, too
 MAX_CLIENTS = 500
 USED_EVERY = timedelta(minutes=5)  # grants' last_used_at is written at most this often
@@ -189,7 +192,11 @@ class RadarOAuthProvider:
         t = _now()
         async with _engine().begin() as conn:
             await purge_clients(conn, t)
-            full = (await conn.execute(select(func.count()).select_from(oauth_clients))).scalar_one() >= MAX_CLIENTS
+            count = (await conn.execute(select(func.count()).select_from(oauth_clients))).scalar_one()
+            if count >= MAX_CLIENTS * NEAR_CAP:  # under pressure, unused registrations go after 10 minutes
+                await purge_clients(conn, t, unused_ttl=UNUSED_CLIENT_TTL_NEAR_CAP)
+                count = (await conn.execute(select(func.count()).select_from(oauth_clients))).scalar_one()
+            full = count >= MAX_CLIENTS
             if not full:
                 await conn.execute(
                     insert(oauth_clients).values(
@@ -434,8 +441,8 @@ async def access_token_user(engine: AsyncEngine, token: str) -> GrantUser | None
                      resource=row.resource)  # fmt: skip
 
 
-async def purge_clients(conn: AsyncConnection, t: datetime) -> None:
-    """Registrations nobody authorised within UNUSED_CLIENT_TTL, and clients without a live grant idle for
+async def purge_clients(conn: AsyncConnection, t: datetime, unused_ttl: timedelta = UNUSED_CLIENT_TTL) -> None:
+    """Registrations nobody authorised within `unused_ttl`, and clients without a live grant idle for
     IDLE_CLIENT_TTL (their dead grants go with them)."""
     live = select(oauth_grants.c.id).where(
         oauth_grants.c.client_id == oauth_clients.c.client_id,
@@ -445,7 +452,7 @@ async def purge_clients(conn: AsyncConnection, t: datetime) -> None:
     await conn.execute(
         delete(oauth_clients).where(
             ~live.exists(),
-            ((oauth_clients.c.last_used_at.is_(None)) & (oauth_clients.c.created_at < t - UNUSED_CLIENT_TTL))
+            ((oauth_clients.c.last_used_at.is_(None)) & (oauth_clients.c.created_at < t - unused_ttl))
             | (oauth_clients.c.last_used_at < t - IDLE_CLIENT_TTL),
         )
     )
