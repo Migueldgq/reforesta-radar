@@ -1,6 +1,6 @@
 # Production overlay, deployed by Dokploy (docs/despliegue.md, ADR 0039). The Dokploy compose app runs, in its own
-# checkout of this repository (custom command):
-#   docker compose -p <app name> -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
+# checkout of this repository, the custom command deploy/deploy.sh sets (`dokploy_command` there; ADR 0044):
+#   docker compose -p <app name> -f docker-compose.yml -f docker-compose.prod.yml build && … up (rollout of api and web)
 # (<app name>: the one Dokploy gave the app, e.g. reforesta-radar-prod-fb9o1w; also COMPOSE_PROJECT_NAME), with the
 # .env Dokploy writes from the app's environment: RADAR_DOMAIN and RADAR_DB_PASSWORD (never in git); optionally
 # GEMINI_API_KEY for the «Revisión por IA» (ADR 0041).
@@ -50,12 +50,19 @@ services:
     deploy: *limits-backend
     logging: *logging
 
-  # One image per service, rebuilt on every deploy from the checked-out commit (Dokploy runs `up --build`).
+  # One image per service, rebuilt on every deploy from the checked-out commit (Dokploy's command, set by
+  # deploy/deploy.sh). `api` and `web` are rolled out without downtime (ADR 0044): a second container of each starts
+  # from the new images, and the old one is removed only once the new one is healthy. Both versions serve side by
+  # side for a few seconds, on the same database: migrations must keep the previous release working.
   api:
     image: ${COMPOSE_PROJECT_NAME}-backend:prod
     environment:
       <<: *prod-env
     ports: !reset []
+    healthcheck:
+      start_period: 30s
+      start_interval: 2s # healthy (and so in rotation for the rollout) within seconds of starting
+    stop_grace_period: 30s # uvicorn finishes the requests in flight (a PDF analysis can take a while)
     deploy: *limits-backend
     logging: *logging
 
@@ -86,12 +93,20 @@ services:
     networks:
       - default
       - edge
+    environment:
+      # After SIGTERM the old container keeps serving this long (scripts/web-start.sh): Traefik routes only to healthy
+      # containers and drops one when it exits, a couple of seconds after the event (ADR 0044).
+      RADAR_DRAIN_SECONDS: "5"
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 30s
+      start_interval: 2s
+    # Changing any traefik.* label below costs a few seconds of 404 on that one deploy: while the old and the new
+    # container both run, Traefik sees the router defined twice, differently, and drops it (ADR 0044).
     labels:
       traefik.enable: "true"
       traefik.docker.network: reforesta-radar-edge
@@ -103,8 +118,12 @@ services:
       traefik.http.routers.reforesta-radar.rule: Host(`${RADAR_DOMAIN}`)
       traefik.http.routers.reforesta-radar.entrypoints: websecure
       traefik.http.routers.reforesta-radar.tls.certresolver: letsencrypt
-      traefik.http.routers.reforesta-radar.middlewares: reforesta-radar-headers
+      traefik.http.routers.reforesta-radar.middlewares: reforesta-radar-retry,reforesta-radar-headers
       traefik.http.services.reforesta-radar.loadbalancer.server.port: "3000"
+      # A request that cannot reach a `web` container (refused: it has just exited during a deploy and Traefik still
+      # lists it) goes to the other one. Only on a network error before any answer, never on an HTTP error status.
+      traefik.http.middlewares.reforesta-radar-retry.retry.attempts: "3"
+      traefik.http.middlewares.reforesta-radar-retry.retry.initialInterval: 100ms
       # HSTS here (it belongs to the https edge); the other security headers come from next.config.ts, so the
       # app's stricter values on /autorizar and the link pages are never overwritten. An empty value removes it.
       traefik.http.middlewares.reforesta-radar-headers.headers.stsSeconds: "31536000"

@@ -8,10 +8,13 @@
 #  1. checks that the commit is on RADAR_DEPLOY_BRANCH (main) of the GitHub repository, in a root-owned mirror;
 #  2. checks it out in Dokploy's checkout of the compose app (/etc/dokploy/compose/<app>/code);
 #  3. asks Dokploy, over its API on localhost (key in a root-only file), to "redeploy" the app: rebuild and restart
-#     from that checkout, without cloning. The API applies `alembic upgrade head` when it starts;
+#     from that checkout, without cloning, with the command below (`dokploy_command`, kept in the app by this
+#     script). It rolls `api` and `web` out without downtime: a second container of each from the new images, the old
+#     one removed only once the new one is healthy (ADR 0044). The new API applies `alembic upgrade head` before it
+#     listens, while the old one still serves: migrations must keep the previous release working;
 #  4. waits for the Dokploy deployment, every container's health check, and /login + the OAuth issuer through Traefik.
-# If 3 or 4 fails it checks the previous commit out again, redeploys it the same way and exits 1. Migrations are not
-# undone (they are written to be backwards compatible). Guide: docs/despliegue.md.
+# If 3 or 4 fails it removes the new containers that are not healthy (the old ones never stopped), checks the previous
+# commit out again, redeploys it the same way and exits 1. Migrations are not undone. Guide: docs/despliegue.md.
 set -euo pipefail
 
 CONF=${CONF:-/etc/reforesta-radar/deploy.env}
@@ -61,9 +64,50 @@ checkout() {
   git -C "$code" checkout --quiet --force --detach "$1"
 }
 
+# The app's custom command in Dokploy (it runs `docker <command>` in the checkout; only `&&`-chained `docker compose`
+# commands are allowed, no shell). In order: build every image; create whatever is missing (a new server) without
+# touching what runs; start a second `api` and `web` from the new images next to the running ones and wait until they
+# are healthy; then the normal `up`, which scales back to one container each, removing the outdated one (Compose drops
+# outdated containers first), and recreates `ingest-scheduler` (stop, then start: never two). `postgres` is only
+# recreated if its own definition changes.
+dokploy_command() {
+  local p="-p $RADAR_APP -f docker-compose.yml -f docker-compose.prod.yml"
+  printf '%s' "compose $p build" \
+    " && docker compose $p up -d --no-recreate --wait --wait-timeout 600" \
+    " && docker compose $p up -d --no-recreate --scale api=2 --scale web=2 --wait --wait-timeout 600 api web" \
+    " && docker compose $p up -d --remove-orphans"
+}
+
+# Sets that command in the Dokploy app if it differs (the panel's Rebuild button uses it too).
+ensure_command() {
+  local want have
+  want=$(dokploy_command)
+  # compose.one also returns the app's environment (secrets): keep only the command.
+  have=$(api_get compose.one "composeId=$RADAR_COMPOSE_ID" | jq -r '.command // ""')
+  [ "$have" = "$want" ] && return 0
+  api_post compose.update "$(jq -nc --arg id "$RADAR_COMPOSE_ID" --arg c "$want" '{composeId: $id, command: $c}')" > /dev/null
+  echo "Dokploy command updated (zero-downtime rollout)"
+}
+
+# After a failed rollout the old container of a service may run next to a new one that never became healthy: remove
+# the new one, so the next rollout starts from the old one alone. Never removes the last healthy container.
+drop_unready() {
+  local svc lines
+  for svc in api web; do
+    lines=$(docker ps -a --filter "label=com.docker.compose.project=$RADAR_APP" --filter "label=com.docker.compose.service=$svc" \
+      --filter label=com.docker.compose.oneoff=False --format '{{.Names}} {{.Status}}')
+    grep -q '(healthy)' <<< "$lines" || continue
+    { grep -v '(healthy)' <<< "$lines" || true; } | while read -r name _; do
+      echo "Removing $name (not healthy; a healthy $svc is running)"
+      docker rm -f "$name" > /dev/null
+    done
+  done
+}
+
 # Asks Dokploy to rebuild and restart from the checkout and waits for that deployment to finish.
 redeploy() {
   local before row status i
+  drop_unready
   before=$(api_get deployment.allByCompose "composeId=$RADAR_COMPOSE_ID" | jq -c '[.[].deploymentId]')
   api_post compose.redeploy "$(jq -nc --arg id "$RADAR_COMPOSE_ID" --arg t "Commit ${1:0:12}" '{composeId: $id, title: $t}')" > /dev/null
   for i in $(seq 1 180); do
@@ -114,6 +158,7 @@ healthy() {
 prev=$(git -C "$code" rev-parse HEAD)
 log "Deploy $sha (running: $prev)"
 logger -t reforesta-radar-deploy "deploying $sha (running $prev)"
+ensure_command
 checkout "$sha"
 if redeploy "$sha" && healthy; then
   logger -t reforesta-radar-deploy "deployed $sha"
