@@ -6,7 +6,9 @@
 #   deploy/probe.sh https://radar.example.org [log file]
 #
 # .github/workflows/deploy.yml runs it during every deploy and turns any failed answer into a warning on the run.
-# Read-only (three GETs that need no session), about 6 requests a second.
+# Read-only (three GETs that need no session), about 6 requests a second. On the server itself, through Traefik:
+#   PROBE_RESOLVE=radar.example.org:443:127.0.0.1 deploy/probe.sh https://radar.example.org
+# Log: one line per answer, `<epoch> <path> <status> <seconds> <curl exit code>` (000 = no HTTP answer).
 set -uo pipefail
 
 URL=${1:-}
@@ -15,6 +17,8 @@ URL=${URL%/}
 log=${2:-$(mktemp)}
 : > "$log"
 INTERVAL=${PROBE_INTERVAL:-0.5}
+resolve=()
+[ -z "${PROBE_RESOLVE:-}" ] || resolve=(--resolve "$PROBE_RESOLVE")
 
 summary() {
   local errors
@@ -41,11 +45,12 @@ now() { if [ -n "${EPOCHREALTIME:-}" ]; then echo "${EPOCHREALTIME/,/.}"; else d
 
 # One loop per path, so a slow answer on one path does not thin out the others.
 probe_path() {
-  local code
+  local out rc
   trap - TERM INT
   while :; do
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$URL$1") || code=${code:-000}
-    printf '%s %s %s\n' "$(now)" "$1" "$code" >> "$log"
+    out=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 10 ${resolve[@]+"${resolve[@]}"} "$URL$1")
+    rc=$?
+    printf '%s %s %s %s\n' "$(now)" "$1" "${out:-000 0}" "$rc" >> "$log"
     sleep "$INTERVAL"
   done
 }
