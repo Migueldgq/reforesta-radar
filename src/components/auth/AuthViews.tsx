@@ -82,11 +82,12 @@ function FormError({ message }: { message: string | null }) {
   );
 }
 
-function Submit({ pending, children, pendingLabel }: { pending: boolean; children: ReactNode; pendingLabel: string }) {
+function Submit({ pending, children, pendingLabel, waitSeconds = 0 }: { pending: boolean; children: ReactNode; pendingLabel: string; waitSeconds?: number }) {
+  const off = pending || waitSeconds > 0;
   return (
-    <Button type="submit" className="w-full" disabled={pending} aria-disabled={pending}>
+    <Button type="submit" className="w-full" disabled={off} aria-disabled={off}>
       {pending && <Loader2 className="animate-spin" aria-hidden />}
-      {pending ? pendingLabel : children}
+      {pending ? pendingLabel : waitSeconds > 0 ? `Espera ${waitSeconds > 90 ? `${Math.ceil(waitSeconds / 60)} min` : `${waitSeconds} s`}` : children}
     </Button>
   );
 }
@@ -144,7 +145,16 @@ export function LoginView() {
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After a 429 the button stays off for the seconds the API asks (Retry-After).
+  const [waitLeft, setWaitLeft] = useState(0);
+  const waiting = waitLeft > 0;
   const pwRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setInterval(() => setWaitLeft((n) => Math.max(0, n - 1)), 1000);
+    return () => clearInterval(t);
+  }, [waiting]);
 
   useEffect(() => {
     let alive = true;
@@ -162,7 +172,7 @@ export function LoginView() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (pending) return;
+    if (pending || waitLeft > 0) return;
     if (!email.trim() || !password) {
       setError("Escribe tu correo y tu contraseña.");
       return;
@@ -174,6 +184,7 @@ export function LoginView() {
       hardNavigate(next);
     } catch (err) {
       setError(errorText(err));
+      if (err instanceof ApiError && err.status === 429 && err.retryAfter > 0) setWaitLeft(err.retryAfter);
       setPassword("");
       setPending(false);
       pwRef.current?.focus();
@@ -212,7 +223,7 @@ export function LoginView() {
           {(p) => <Input {...p} ref={pwRef} type="password" name="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />}
         </Field>
         <FormError message={error} />
-        <Submit pending={pending} pendingLabel="Entrando…">
+        <Submit pending={pending} pendingLabel="Entrando…" waitSeconds={waitLeft}>
           Entrar
         </Submit>
         {session &&

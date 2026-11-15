@@ -11,6 +11,8 @@ export class ApiError extends Error {
     readonly status: number,
     /** Parsed JSON body, for routes that send more than `detail` (e.g. 409 on /api/ingest). */
     readonly body: unknown = null,
+    /** Seconds from `Retry-After` (429), or 0. */
+    readonly retryAfter = 0,
   ) {
     super(message);
     this.name = "ApiError";
@@ -116,7 +118,8 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
   }
   if (!res.ok) {
     if (res.status === 401 && !opts.noAuthRedirect && !path.startsWith("/api/auth/")) toLogin();
-    throw new ApiError(messageOf(res.status, data), res.status, data);
+    const retry = Number(res.headers.get("Retry-After"));
+    throw new ApiError(messageOf(res.status, data), res.status, data, Number.isFinite(retry) && retry > 0 ? Math.ceil(retry) : 0);
   }
   return data as T;
 }
