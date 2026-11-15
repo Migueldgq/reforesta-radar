@@ -123,8 +123,31 @@ Hay tres niveles, de menos a más técnico:
    - Si cambias el territorio (`GeoFit`), cambia igual `GEO_FIT` en `src/lib/reforesta-profile.ts`: la vista Perfil
      de la web lo usa para sus ajustes por territorio. `tests/test_geo_fit_web_copy.py` falla si no coinciden.
    - Si cambia el comportamiento, escribe un ADR ([docs/adr/README.md](adr/README.md)).
-   - `uv run pytest` en `backend/`, `docker compose up -d --build` y `docker compose run --rm ingest` para
-     repuntuar.
+   - `uv run pytest` en `backend/` y `docker compose up -d --build`. No hace falta ingestar a mano: al arrancar con
+     la imagen nueva, `ingest-scheduler` ve que la última ingesta correcta se puntuó con otra `SCORING_VERSION` y
+     lanza una en el acto (en sus logs, «scored with vN, code is vM»; en `ingest_runs`, `trigger = scoring`). Lo
+     mismo en producción tras cada despliegue. Si esa ingesta falla, se reintenta a la hora, como la diaria.
+
+## Revisión por IA
+
+Opcional y apagada sin `GEMINI_API_KEY` ([ADR 0041](adr/0041-revision-por-ia-que-solo-descarta.md),
+[backend.md](backend.md#revisión-por-ia)). Qué vigilar:
+
+- **El resumen de cada ingesta** (logs de `ingest-scheduler`): `[review] done: {'si': …, 'no': …, 'dudoso': …,
+  'failed': …, 'throttled': …}`. Muchos `failed` o `throttled` = la clave dejó de valer o se acabó la cuota gratuita;
+  el radar sigue igual (las convocatorias sin veredicto se quedan en la lista).
+- **«Descartadas por la IA»** en Inicio, de vez en cuando: si descarta algo que sí encaja, «Sí encaja» la devuelve
+  para todo el equipo; si se repite un patrón, se cambia el texto de `SYSTEM` en `backend/app/review.py`.
+- **Cambiar el texto de las instrucciones o el modelo**: sube `PROMPT_VERSION` en `backend/app/review.py` (o cambia
+  `RADAR_AI_MODEL`). Los veredictos guardados dejan de valer y se vuelven a pedir: al arrancar con la imagen nueva
+  `ingest-scheduler` ejecuta el paso de revisión una vez, y la ingesta diaria sigue con lo que quede (como mucho
+  `RADAR_AI_MAX_CALLS` por ejecución). Mientras tanto esas convocatorias se ven sin veredicto, nunca con uno viejo.
+  Si solo cambia el texto de una convocatoria, solo se pregunta por esa.
+- **A mano**: `docker compose run --rm ingest-scheduler python -m app.ingest.review` (o
+  `docker compose exec ingest-scheduler python -m app.ingest.review`) pide los veredictos que falten sin leer las
+  fuentes.
+- **Apagarla** sin quitar la clave: `RADAR_AI_REVIEW=false` y `docker compose up -d`. La app vuelve a ser exactamente
+  como sin la revisión; los veredictos guardados se quedan en `ai_reviews` por si se vuelve a encender.
 
 ## Copias de seguridad
 
