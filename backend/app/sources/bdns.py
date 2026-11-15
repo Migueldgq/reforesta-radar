@@ -7,6 +7,7 @@ built from the search row only.
 """
 
 import math
+import time
 from datetime import UTC, datetime
 from typing import Any, NamedTuple
 from urllib.parse import quote
@@ -32,6 +33,7 @@ DAY_S = 86400
 RETRIES = 3
 # Details in flight at once (the TS used 8): BDNS is a public service and already answers bursts with 429.
 DETAIL_CONCURRENCY = 4
+PROGRESS_EVERY_S = 15
 LITE_WARNING = "Ficha BDNS no cargada en este barrido: abre la convocatoria para ver plazo, tipo y beneficiarios."
 
 
@@ -352,6 +354,19 @@ def raw_to_raw(raw: dict[str, Any]) -> RawOpportunity:
     )
 
 
+class _Progress:
+    """A log line every PROGRESS_EVERY_S while the details load, so the ingest log is not silent for minutes."""
+
+    def __init__(self, total: int) -> None:
+        self.total, self.done, self.last = total, 0, time.monotonic()
+
+    def tick(self) -> None:
+        self.done += 1
+        if time.monotonic() - self.last >= PROGRESS_EVERY_S and self.done < self.total:
+            self.last = time.monotonic()
+            print(f"[ingest] bdns: {self.done}/{self.total} fichas leídas…", flush=True)
+
+
 class BdnsSource(Source):
     id = "bdns"
     name = "BDNS"
@@ -382,7 +397,16 @@ class BdnsSource(Source):
         to_enrich = [raw for raw, _ in ranked[:MAX_ENRICH]]
         not_enriched = [raw for raw, _ in ranked[MAX_ENRICH:]]
 
-        details = await map_limit(to_enrich, DETAIL_CONCURRENCY, lambda r: fetch_detail(ctx, r["numeroConvocatoria"]))
+        print(f"[ingest] bdns: {ok_searches}/{len(searches)} búsquedas, {len(deduped)} convocatorias únicas; "
+              f"leyendo {len(to_enrich)} fichas…", flush=True)  # fmt: skip
+        progress = _Progress(len(to_enrich))
+
+        async def detail(r: dict[str, Any]) -> dict[str, Any] | None:
+            d = await fetch_detail(ctx, r["numeroConvocatoria"])
+            progress.tick()
+            return d
+
+        details = await map_limit(to_enrich, DETAIL_CONCURRENCY, detail)
 
         items: list[RawOpportunity] = []
         failed = 0

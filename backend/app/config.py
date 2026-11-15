@@ -33,6 +33,9 @@ class Settings:
     history_timeout_s: float = field(default_factory=lambda: float(os.getenv("HISTORY_TIMEOUT_S", "1800")))
     # Local time (RADAR_TZ) of the daily scheduled ingest (app.ingest.scheduler).
     ingest_at: str = field(default_factory=lambda: os.getenv("RADAR_INGEST_AT", "09:00"))
+    # Source ids switched off without a code change (e.g. "dog,bocm"): the ingest skips them and the API hides their
+    # stored calls and lists them as "disabled" (docs/mantenimiento.md). Their rows stay in the database.
+    disabled_sources: list[str] = field(default_factory=lambda: _list(os.getenv("RADAR_DISABLED_SOURCES", "")))
 
     # --- accounts (app/auth) ---
     # Public base URL of the web app: invitation and reset links are `<public_url>/invitacion/<token>` etc.

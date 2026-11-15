@@ -15,7 +15,7 @@ OpportunityKind = Literal["subvencion", "licitacion", "boletin", "europa", "empr
 NivelAdmin = Literal["Estatal", "Autonómica", "Local", "UE", "Privada", "Otros"]
 Tier = Literal["alto", "medio", "bajo"]
 DeadlineState = Literal["abierta", "proxima", "cerrada", "sin_fecha"]
-HealthStatus = Literal["ok", "partial", "error"]
+HealthStatus = Literal["ok", "partial", "error", "disabled"]  # disabled: RADAR_DISABLED_SOURCES
 
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -172,9 +172,17 @@ class SourceHealth(Contract):
     note: str
 
 
+class IngestState(Contract):
+    """Whether an ingest is loading the sources right now (from ingest_runs), for "first load in progress" notices."""
+
+    running: bool
+    started_at: str | None  # ISO; set only while running
+
+
 class OpportunitiesResponse(Contract):
     items: list[Opportunity]
     sources: list[SourceHealth]
+    ingest: IngestState
     fetched_at: str
     cached: bool
     stale: bool | None = Field(default=None, exclude_if=_absent_if_none)

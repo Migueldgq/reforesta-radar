@@ -29,6 +29,7 @@ from app.ingest.store import (
     load_fetch_cache,
     record_failed_run,
     run_status,
+    start_run,
     write_ingest,
 )
 from app.models import SourceHealth
@@ -49,6 +50,7 @@ async def run_source(source: Source, ctx: SourceContext, timeout_s: float) -> So
     except Exception as e:  # noqa: BLE001 - any connector failure is reported, never fatal for the run
         error = f"Sin respuesta en {round(timeout_s)} s" if isinstance(e, TimeoutError) else f"Error: {e}"
         log.warning("source %s failed: %s", source.id, error, exc_info=not isinstance(e, TimeoutError))
+        print(f"[ingest] {source.id}: error ({error[:120]})", flush=True)
         health = {"id": source.id, "name": source.name, "category": "Otros", "status": "error", "count": 0, "url": ""}
         return SourceRun(
             health=SourceHealth(**health, note=error), items=[], started_at=started, finished_at=datetime.now(UTC),
@@ -58,6 +60,8 @@ async def run_source(source: Source, ctx: SourceContext, timeout_s: float) -> So
     health = result.health.model_copy(
         update={"id": source.id, "count": len(items), "note": result.health.note.replace("{count}", str(len(items)))}
     )
+    secs = (datetime.now(UTC) - started).total_seconds()
+    print(f"[ingest] {source.id}: {len(items)} convocatorias en {secs:.0f} s ({health.status})", flush=True)
     return SourceRun(
         health=health,
         items=items,
@@ -128,7 +132,15 @@ async def main(argv: list[str] | None = None) -> int:
     if unknown:
         print(f"Unknown source(s) {', '.join(unknown)}. Known: {', '.join(SOURCES)}", file=sys.stderr)
         return 1
-    jobs = [s for s in SOURCES.values() if not only or s.id in only]
+    disabled = set(settings.disabled_sources)
+    if unknown_disabled := sorted(disabled - set(SOURCES)):
+        print(f"[ingest] RADAR_DISABLED_SOURCES: unknown id(s) {', '.join(unknown_disabled)} ignored", file=sys.stderr)
+    jobs = [s for s in SOURCES.values() if (not only or s.id in only) and s.id not in disabled]
+    if skipped := [s for s in SOURCES if s in disabled and (not only or s in only)]:
+        print(f"[ingest] desactivadas por RADAR_DISABLED_SOURCES: {', '.join(skipped)}", flush=True)
+    if not jobs:
+        print("[ingest] no source to read (all disabled or filtered out)", file=sys.stderr)
+        return 1
     print(f"[ingest] {', '.join(j.id for j in jobs)} · trigger={args.trigger} · scoring v{SCORING_VERSION}"
           + (" · DRY RUN" if args.dry_run else ""))  # fmt: skip
 
@@ -137,13 +149,18 @@ async def main(argv: list[str] | None = None) -> int:
     except Exception as e:  # noqa: BLE001
         print(f"[ingest] database unreachable: {e}", file=sys.stderr)
         return 1
+    run_id: int | None = None
     try:
         seed = []
         if engine is not None:
             async with engine.connect() as conn:
                 seed = await load_fetch_cache(conn)
+            if not args.dry_run:
+                run_id = await start_run(engine, started, args.trigger, SCORING_VERSION)
         memo = Memo(seed)
         memo_since = time.time()
+        n = len(jobs)
+        print(f"[ingest] leyendo {n} fuente{'s' if n != 1 else ''}… (cada una avisa al terminar)", flush=True)
         async with Http() as http:
             ctx = SourceContext(http=http, memo=memo)
             runs = await asyncio.gather(*(run_source(j, ctx, settings.ingest_source_timeout_s) for j in jobs))
@@ -157,12 +174,15 @@ async def main(argv: list[str] | None = None) -> int:
                 runs=runs,
                 memo=memo.persisted_since(memo_since),
                 dry_run=args.dry_run,
+                run_id=run_id,
             )
+            run_id = None  # completed
         except Exception as e:
             log.exception("database write failed (rolled back)")
             if engine is not None and not args.dry_run:
                 try:
-                    await record_failed_run(engine, started, args.trigger, SCORING_VERSION, str(e))
+                    await record_failed_run(engine, started, args.trigger, SCORING_VERSION, str(e), run_id)
+                    run_id = None
                 except Exception:  # noqa: BLE001
                     log.exception("could not record the failed run")
             print_summary(runs, None, t0, args.dry_run)
@@ -179,6 +199,11 @@ async def main(argv: list[str] | None = None) -> int:
         return 0
     finally:
         if engine is not None:
+            if run_id is not None:  # crashed before the write: do not leave the run "running"
+                try:
+                    await record_failed_run(engine, started, args.trigger, SCORING_VERSION, "Interrumpida", run_id)
+                except Exception:  # noqa: BLE001
+                    log.exception("could not record the interrupted run")
             await engine.dispose()
 
 

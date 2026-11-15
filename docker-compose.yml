@@ -21,6 +21,7 @@ x-backend: &backend
     HTTP_CONCURRENCY: ${HTTP_CONCURRENCY:-8} # requests in flight per host during the ingest
     HTTP_USER_AGENT: ${HTTP_USER_AGENT:-Mozilla/5.0 (compatible; ReforestaRadar/1.0)}
     RADAR_INGEST_AT: ${RADAR_INGEST_AT:-09:00} # daily scheduled ingest, local time in RADAR_TZ
+    RADAR_DISABLED_SOURCES: ${RADAR_DISABLED_SOURCES:-} # e.g. dog,bocm: not ingested, hidden (docs/mantenimiento.md)
     # Accounts (docs/api-auth.md). Invitation/reset links point at RADAR_PUBLIC_URL; set RADAR_COOKIE_SECURE=true
     # behind https. Bootstrap admin: only used while the users table is empty (prefer `python -m app.users`).
     RADAR_PUBLIC_URL: ${RADAR_PUBLIC_URL:-http://localhost:3010}

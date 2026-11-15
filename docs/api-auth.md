@@ -235,3 +235,19 @@ when it is `done`, reload `/api/oportunidades`. Only one request can be open at 
 `GET /api/public/oportunidades` returns the same `OpportunitiesResponse` without a session (the landing's
 `getLandingData` summarises it server-side); it contains only the ingested public calls, never users, board, votes
 or the team profile.
+
+## Opportunities and sources: fields added for the web
+
+```ts
+// GET /api/oportunidades and GET /api/public/oportunidades
+type OpportunitiesResponse = { /* …as before… */ ingest: { running: boolean; startedAt: string | null } };
+// SourceHealth.status in both responses and in GET /api/fuentes
+type HealthStatus = "ok" | "partial" | "error" | "disabled";
+```
+
+- `ingest.running` is true while an ingest is loading the sources (an `ingest_runs` row in `running` started less
+  than an hour ago); `startedAt` is its start (ISO), `null` when nothing runs. On a fresh install `items` is empty
+  and `running` true until the first load finishes (a few minutes): show «Cargando las fuentes por primera vez…»
+  instead of an empty radar, and poll. `lastIngestAt` still means the last *finished* ingest.
+- `"disabled"`: the source is switched off with `RADAR_DISABLED_SOURCES` (show «Desactivada»; `count` is 0 and
+  `note` explains it). Its calls are left out of `items`.

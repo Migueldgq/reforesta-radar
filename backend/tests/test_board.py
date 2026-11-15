@@ -189,7 +189,7 @@ async def test_public_endpoint_leaks_nothing_about_people_or_board(
         assert secret not in body, secret
     data = res.json()
     assert set(data) == {"items", "sources", "fetchedAt", "cached", "stale", "refreshing", "storage", "lastIngestAt",
-                         "ingestStale"}  # fmt: skip
+                         "ingestStale", "ingest"}  # fmt: skip
     assert {o["id"] for o in data["items"]} == {o.id for o in items}
 
 

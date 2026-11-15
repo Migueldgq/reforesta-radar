@@ -87,6 +87,7 @@ async def _opportunities(request: Request) -> OpportunitiesResponse:
     return OpportunitiesResponse(
         items=rank(state.items),
         sources=state.sources,
+        ingest=state.ingest,
         fetched_at=state.last_ingest_at or "1970-01-01T00:00:00.000Z",
         cached=True,
         stale=False,

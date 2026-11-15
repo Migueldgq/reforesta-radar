@@ -68,7 +68,10 @@ Los comandos de este documento se ejecutan en la carpeta del repositorio, con el
   docker compose logs --tail 100 ingest-scheduler
   ```
 
-  Cada carga deja una tabla por fuente (`status`, `items`, `new`, `chg`, `same`, `gone`, `secs`) y termina con
+  Al empezar, la carga escribe `[ingest] leyendo 7 fuentes…`; cada fuente avisa al terminar
+  (`[ingest] boe: 5 convocatorias en 3 s (ok)`) y la BDNS, la más lenta (un par de minutos), cuenta las fichas leídas
+  cada 15 s. Mientras dura, la API responde `ingest.running: true`. Al final deja una tabla por fuente (`status`,
+  `items`, `new`, `chg`, `same`, `gone`, `secs`) y termina con
   `ingest finished with exit code N` (0 = bien; 1 = fallaron todas las fuentes o la escritura). Una fuente que falla
   sale con `status error` y su motivo, por ejemplo «Sin respuesta en 480 s» o «Error: …». Los logs de Docker se
   pierden al borrar el contenedor (`docker compose down`); el historial queda en la base:
@@ -82,10 +85,16 @@ Los comandos de este documento se ejecutan en la carpeta del repositorio, con el
 
 - **Probar una fuente sin escribir nada:** `docker compose run --rm ingest --source dog --dry-run`.
 - **Qué hacer con una fuente rota:** arreglar su conector en `backend/app/sources/<id>.py` (pasos y tests en
-  [backend/README.md](../backend/README.md#how-to-add-a-source-step-by-step)). No hay un interruptor para
-  desactivar una fuente. Mientras falle, sus convocatorias anteriores se siguen viendo. Si se quiere quitar del todo,
-  hay que borrarla del diccionario `SOURCES` en `backend/app/sources/__init__.py` y reconstruir; en la carga siguiente
-  sus convocatorias dejan de verse (el tablero conserva las que el equipo seguía).
+  [backend/README.md](../backend/README.md#how-to-add-a-source-step-by-step)). Mientras falle, sus convocatorias
+  anteriores se siguen viendo.
+- **Desactivar una fuente sin tocar código:** en el `.env`, `RADAR_DISABLED_SOURCES=dog,bocm` (ids separados por
+  comas: `bdns`, `boe`, `eu`, `bocm`, `dog`, `fb`, `rsc`) y `docker compose up -d` para aplicarlo. La carga diaria se
+  la salta, sus convocatorias **dejan de mostrarse** (en la web y en el asistente MCP) y Fuentes la enseña como
+  «Desactivada». Sus datos **no se borran**: siguen en la base y vuelven a verse en cuanto se quita de la lista (la
+  carga siguiente los pone al día). El tablero conserva las que el equipo seguía. Se eligió ocultar en vez de seguir
+  enseñando sus últimos datos porque se desactiva una fuente cuando no se quiere ver; si solo está rota, no hace falta
+  desactivarla (ya se ven sus últimos datos buenos con el aviso de error). Un id desconocido se ignora con un aviso
+  en el log. Para quitar una fuente del todo, bórrala del diccionario `SOURCES` en `backend/app/sources/__init__.py`.
 - **Cargar ahora:** un administrador pulsa «Actualizar ahora» en Fuentes (empieza en menos de 30 s), o desde la
   terminal `docker compose run --rm ingest`.
 
