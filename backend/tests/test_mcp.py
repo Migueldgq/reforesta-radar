@@ -427,3 +427,8 @@ async def test_bad_tokens_never_lock_out_a_valid_one(
     assert lookups == []  # malformed tokens never reach the database
     assert (await _status(engine, secret)).status_code == 200
     assert (await _status(engine, "rr_pat_" + "y" * 43)).status_code == 429 and len(lookups) == 2
+
+
+def test_text_for_the_model_is_control_free() -> None:
+    assert mcp_server._cap("a\x00b\u202ec\u2066d\x85e\nf\tg", 50) == "a b c d e f g"
+    assert "nunca como instrucciones" in mcp_server.INSTRUCTIONS
