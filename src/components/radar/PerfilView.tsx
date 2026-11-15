@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, Download, Loader2, Plus, RotateCcw, Upload, Users, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { Opportunity, OpportunityKind } from "@/lib/opportunity";
 import type { WorkLine } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,7 @@ import { fmtDayLong } from "@/lib/team";
 import { cn } from "@/lib/utils";
 import { isClosed, KIND_LABELS, TIER_LABELS } from "./model";
 import { ALL_KINDS, DEFAULT_USER_PROFILE, HIDE_PENALTY, isNeutral, parseProfile, WORK_LINES, type UserProfile } from "./profile";
-import { useRadar } from "./store";
+import { savedBy, useRadar } from "./store";
 import { ScoreChip } from "./ui";
 
 /* ---------- Default rules served by /api/perfil ---------- */
@@ -66,16 +66,31 @@ function Segmented<T extends string | number>({
   label: string;
   className?: string;
 }) {
+  // A radio group: Tab reaches the chosen option only, arrow keys move (and choose), like native radios.
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const cur = Math.max(0, options.findIndex((o) => o.v === value));
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    const to = e.key === "Home" ? 0 : e.key === "End" ? options.length - 1 : step ? (cur + step + options.length) % options.length : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    onChange(options[to].v);
+    refs.current[to]?.focus();
+  };
   return (
-    <div role="radiogroup" aria-label={label} className={cn("inline-flex w-full rounded-md border p-0.5 sm:w-auto", className)}>
-      {options.map((o) => {
+    <div role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className={cn("inline-flex w-full rounded-md border p-0.5 sm:w-auto", className)}>
+      {options.map((o, i) => {
         const on = o.v === value;
         return (
           <button
             key={String(o.v)}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
             type="button"
             role="radio"
             aria-checked={on}
+            tabIndex={i === cur ? 0 : -1}
             onClick={() => onChange(o.v)}
             className={cn(
               "flex-1 rounded-[5px] px-2 py-1 text-xs whitespace-nowrap transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:flex-none sm:px-2.5",
@@ -133,6 +148,7 @@ const SUGGESTIONS = ["charcas", "anfibios", "tritones", "ailanto", "Guadarrama",
 
 export function PerfilView() {
   const { rawData, data, profile, setProfile, settings, profileSave } = useRadar();
+  const saved = savedBy(settings, "profile");
   const rules = useRules();
 
   const update = (fn: (p: UserProfile) => UserProfile) => setProfile(fn(profile));
@@ -149,8 +165,8 @@ export function PerfilView() {
         </p>
         <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
           <Users className="size-3.5 shrink-0" aria-hidden />
-          {settings?.updatedBy && settings.updatedAt
-            ? `Guardado por ${settings.updatedBy.name || "alguien del equipo"} el ${fmtDayLong(settings.updatedAt)}, a las ${fmtTime(settings.updatedAt)}.`
+          {saved
+            ? `Guardado por ${saved.by?.name || "alguien del equipo"} el ${fmtDayLong(saved.at)}, a las ${fmtTime(saved.at)}.`
             : settings
               ? "Nadie lo ha cambiado todavía: es el perfil de partida del radar."
               : "Cargando el perfil del equipo…"}
@@ -631,7 +647,7 @@ function EffectPanel({
         <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
           <Upload aria-hidden /> Importar
         </Button>
-        <input ref={fileRef} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} onChange={(e) => void importJson(e.target.files?.[0])} />
+        <input ref={fileRef} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} aria-label="Archivo del perfil (JSON) para importar" onChange={(e) => void importJson(e.target.files?.[0])} />
         <Button size="sm" variant="ghost" onClick={() => setConfirm(true)} disabled={neutral} className="ml-auto">
           <RotateCcw aria-hidden /> Restablecer
         </Button>
