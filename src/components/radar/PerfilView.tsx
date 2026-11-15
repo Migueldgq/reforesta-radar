@@ -562,7 +562,7 @@ function EffectPanel({
   };
 
   return (
-    <aside aria-label="Efecto de vuestros ajustes" className="space-y-4 rounded-lg border p-4 lg:sticky lg:top-6">
+    <aside aria-label="Efecto de vuestros ajustes" className="space-y-4 rounded-lg border p-4 lg:sticky lg:top-20">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Efecto de vuestros ajustes</h2>
         <span className={cn("inline-flex items-center gap-1 text-xs text-muted-foreground transition-opacity", saved ? "opacity-100" : "opacity-0")} role="status">
