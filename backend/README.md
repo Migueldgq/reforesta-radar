@@ -56,6 +56,7 @@ backend/
       profile.py         keyword / dealbreaker / NGO / geo / kind tables (value-for-value with the TS)
       score.py           ScoreInput, score_convocatoria, score_rsc, tier_for, FitAdjust
       rank.py            geographic_fit, kind_fit, rank, clean_items (read time)
+      history.py         FitAdjust from the past winners of a BDNS call (read time, after geo + kind)
       regions.py         infer_comunidad_autonoma
     sources/           connectors
       base.py            Source, RawOpportunity, FetchResult, SourceContext, score_raw
@@ -66,14 +67,16 @@ backend/
       boe.py, rsc.py     ported connectors
       eu.py, fb.py, bocm.py, dog.py  ports of src/lib/sources/multi-source.ts
       bdns.py            BDNS connector (68 searches + a memoised detail for every candidate; retries 429 x3)
+      bdns_history.py    previous editions of a BDNS call (organ resolution, title matching) and who won them
     ingest/
       __main__.py        CLI (python -m app.ingest), per-source run, summary table
       scheduler.py       daily run at RADAR_INGEST_AT (python -m app.ingest.scheduler), is_due()
+      history.py         BDNS history step, after the main write (own budget and transaction; never fails the run)
       store.py           one-transaction write: upsert, change log, gone, run records, fetch_cache
       hashing.py         content_hash / dedupe_key (byte-identical to store-pg.ts)
     api/state.py       read path: live items, source health, last ingest
     db/                tables (SQLAlchemy Core) and async engine
-  alembic/             migrations (0001 = supabase/migrations/0001_init.sql)
+  alembic/             migrations (0001 = supabase/migrations/0001_init.sql, 0002 = bdns_editions)
   tests/               parity, connectors on recorded fixtures, store semantics
 ```
 
@@ -93,8 +96,8 @@ Correctness over elegance: same numbers, same Spanish strings, same order of rea
 The goldens and the `expected.json` fixtures are **frozen**: they were dumped from the TypeScript backend before it
 was deleted (the dump tools `tools/dump_ts_*.ts` and `tools/capture_*_inputs.py` went with it; see git history
 before the Python cutover). They pin the scoring as it was at parity. When you change the scoring on purpose,
-update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 12; it is
-stored in `ingest_runs.scoring_version`).
+update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 13: the
+BDNS history signal; it is stored in `ingest_runs.scoring_version`).
 
 Details that matter when porting more code:
 
@@ -123,6 +126,32 @@ Details that matter when porting more code:
     so it keeps covering the lite adjustment; a live ingest no longer produces them in bulk.
 - The golden still holds items from sources dropped from the product (`ted`, `bocyl`); they are kept as extra
   scoring-parity cases only (`tests/golden_reconstruct.py` rebuilds their inputs), not as sources to port.
+
+## History of BDNS calls (previous editions, past winners)
+
+After the main write, `app/ingest/history.py` reads the history of the BDNS calls worth a look (competitive grants
+with a displayed score >= 40, or closed recurring ones; ~250 today) and stores it in `bdns_editions` (one row per
+current call and edition, the current edition included). The API attaches it at read time as `history` on each BDNS
+item (`editions`, `typicalOpening`, `typicalWindow`, `awards`; absent when no previous edition was found). Past
+editions are never opportunities.
+
+- **Matching** (`app/sources/bdns_history.py`): BDNS has no series id. The detail's organ names are resolved to ids
+  with `/organos?idAdmon=C|A|L`; every call of that organ since 2018 is listed (`organos=<ids>&pageSize=2000`) and
+  titles are compared locally: published before the current one, Jaccard >= 0.5 on title tokens (no numbers,
+  stopwords, boilerplate or the organ's own name), at most one per calendar year (the best; the current edition
+  takes its own year). The newest 4 previous editions are read in detail and, from mid-2021, their awards.
+- **Privacy**: award rows name natural persons. Only counts by NIF class (G non-profit, A/B companies, P local bodies,
+  Q public bodies, masked/DNI/NIE persons...), amounts, dates and hits of a curated NGO list (by NIF) are kept; the
+  memo stores that reduced summary, never the raw response.
+- **Scoring** (`app/scoring/history.py`, applied in `rank.adjusted_fit`): Reforesta (G80428204) won a past edition
+  +8; curated peer NGOs won +3; >= 70 % of >= 5 past awards to non-profits +6; < 20 % −10 and a warning; none at all:
+  also capped at 45. The delta goes on the base fit (territorial and kind caps still bound it), the cap last (a
+  ceiling geographic bonuses cannot lift), the reasons first. The web Perfil adds its deltas on top of this fit.
+- **Cost and failure**: 3 requests in flight, memoised in `fetch_cache` (organ trees and lists 7 d, edition details
+  90 d, awards 7/30/90 d by age). Cold start on 2026-11-15: 255 calls, 1 146 requests (108 answered 429 and were
+  retried), 2 min, 177 calls with history; a warm run made 0 requests (2 s): a daily run reads only what expired. Budget
+  `HISTORY_TIMEOUT_S` (30 min); on a timeout the calls read are saved. A failure is logged and never fails the run;
+  calls not read keep their earlier rows.
 
 ## How to add a source (step by step)
 

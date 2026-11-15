@@ -10,7 +10,7 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
    └─ python -m app.ingest ──► fuentes (BDNS, BOE, UE, BOCM, DOG, FB, RSC)
             │  una transacción por ejecución
             ▼
-   Postgres 16: opportunities · opportunity_changes · ingest_runs · source_runs · fetch_cache
+   Postgres 16: opportunities · opportunity_changes · ingest_runs · source_runs · fetch_cache · bdns_editions
             ▲  lectura
    API FastAPI (/api/oportunidades, /api/fuentes, /api/perfil, /api/analyze-pdf)
             ▲  rewrite /api/* (next.config.ts, API_URL)
@@ -28,8 +28,14 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
 - Si Postgres no responde, la API devuelve 503; si la API no responde, la web muestra un estado de error (o la
   última copia guardada en el navegador, con un aviso). La portada se pinta sin cifras.
 - Esquema: migraciones de Alembic en `backend/alembic/` (la API las aplica al arrancar).
-- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 12) se guarda en cada `ingest_runs`; súbelo cuando
-  cambie la puntuación base.
+- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 13) se guarda en cada `ingest_runs`; súbelo cuando
+  cambie la puntuación.
+- Historial BDNS: tras guardar la ingesta, un paso aparte busca ediciones anteriores de las convocatorias BDNS
+  relevantes (cuándo suelen abrir, cuánto plazo dan) y quién las ganó (solo recuentos por tipo de entidad, nunca
+  nombres de personas). Va en la tabla `bdns_editions` y la API lo añade como `history` a cada convocatoria. Suma
+  puntos si Reforesta u ONG ambientales afines ganaron ediciones anteriores y avisa si casi nunca gana una entidad
+  sin ánimo de lucro. Si falla o se agota su tiempo (`HISTORY_TIMEOUT_S`, 30 min), la ingesta sigue siendo
+  correcta. Detalles en [backend/README.md](../backend/README.md).
 
 ## Puesta en marcha
 
