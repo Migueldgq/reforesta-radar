@@ -305,6 +305,8 @@ function WinnersBlock({ a }: { a: AwardsSummary }) {
   );
 }
 
+const BDNS_AWARDS = "https://www.infosubvenciones.es/bdnstrans/GE/es/concesiones/consulta";
+
 function HistorySection({ h }: { h: History }) {
   const wins = h.awards?.wonByReforesta ?? [];
   const wonYears = new Set(wins.map((w) => w.year));
@@ -355,9 +357,22 @@ function HistorySection({ h }: { h: History }) {
                   <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground tabular-nums">
                     {awText}
                     {wonYears.has(e.year) && (
-                      <span className="inline-flex items-center gap-1 font-medium text-primary">
-                        <Award className="size-3" aria-hidden /> La ganasteis
-                      </span>
+                      <>
+                        <span className="inline-flex items-center gap-1 font-medium text-primary">
+                          <Award className="size-3" aria-hidden /> La ganasteis
+                        </span>
+                        {/* BDNS reads the call number from the URL (the NIF filter is not), so this opens that edition's awards, Reforesta's among them. */}
+                        <a
+                          href={`${BDNS_AWARDS}?numeroConvocatoria=${encodeURIComponent(e.numero)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Abre las concesiones de esta edición en BDNS; la de Reforesta (NIF G80428204) está entre ellas"
+                          className="inline-flex items-center gap-0.5 rounded-sm underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                        >
+                          Ver concesión en BDNS <ArrowUpRight className="size-3" aria-hidden />
+                          <span className="sr-only"> (se abre en otra pestaña)</span>
+                        </a>
+                      </>
                     )}
                   </p>
                 </div>
