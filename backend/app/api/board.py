@@ -79,6 +79,7 @@ class NoteIn(Contract):
 # ---------- Profile (mirror of UserProfile in src/components/radar/profile.ts; ranges as its parseProfile) ----------
 
 Delta = Annotated[int | float, Field(ge=-10, le=10)]
+ALL_KINDS: tuple[OpportunityKind, ...] = ("subvencion", "licitacion", "boletin", "europa", "empresa")
 
 
 class ExtraKeyword(Contract):
@@ -97,7 +98,13 @@ class TeamProfile(Contract):
     excluded_terms: Annotated[list[ExcludedTerm], Field(max_length=200)] = []
     line_priority: dict[WorkLine, Delta] = {}
     region_adjust: Annotated[dict[Annotated[str, Field(max_length=100)], Delta], Field(max_length=100)] = {}
-    kinds: list[OpportunityKind] = ["subvencion", "licitacion", "boletin", "europa", "empresa"]
+    kinds: Annotated[list[OpportunityKind], Field(max_length=5)] = [
+        "subvencion",
+        "licitacion",
+        "boletin",
+        "europa",
+        "empresa",
+    ]
     min_budget: Annotated[float, Field(ge=0)] | None = None
     hide_municipal_outside_regions: bool = False
 
@@ -113,7 +120,7 @@ class TeamProfile(Contract):
         )
 
 
-Organisms = Annotated[list[Annotated[str, Field(max_length=300)]], Field(max_length=1000)]
+Organisms = Annotated[list[Annotated[str, Field(max_length=300)]], Field(max_length=300)]
 
 
 class TeamSettings(Contract):
@@ -170,14 +177,15 @@ class ImportedTriage(Contract):
     """One entry of localStorage `reforesta-radar:seguimiento:v1` (TriageEntry)."""
 
     status: Triage
-    at: str | None = None
+    # the rest of the entry is accepted for compatibility and ignored: the snapshot comes from the radar's data
+    at: Annotated[str, Field(max_length=40)] | None = None
     titulo: Annotated[str, Field(max_length=1000)] = ""
     organismo: Annotated[str, Field(max_length=1000)] = ""
     deadline: Annotated[str, Field(max_length=40)] | None = None
 
 
 class ImportIn(Contract):
-    tracking: Annotated[dict[OpportunityId, ImportedTriage], Field(max_length=5000)] = {}
+    tracking: Annotated[dict[OpportunityId, ImportedTriage], Field(max_length=2000)] = {}
     profile: TeamProfile | None = None  # `reforesta-radar:perfil:v1`
     organisms: Organisms | None = None  # `reforesta-radar:organismos:v1`
 
@@ -185,6 +193,7 @@ class ImportIn(Contract):
 class ImportOut(Contract):
     tracking_imported: int
     tracking_kept: int  # already on the team board: left untouched
+    tracking_skipped: int  # ids the radar has never seen: not imported
     profile: Literal["imported", "kept", "none"]
     organisms: Literal["imported", "kept", "none"]
 
@@ -465,16 +474,21 @@ async def disagreements(_: Admin, conn: Db) -> DisagreementsResponse:
 @router.post("/api/import", response_model=ImportOut)
 async def import_local(body: ImportIn, user: User, conn: Db) -> ImportOut:
     """Merge rule: what the team already saved always wins; the browser's state only fills gaps. A call already on
-    the board keeps its row; profile and organism filter are imported only if the team never saved them (and the
-    imported value is not empty/neutral). Idempotent: a second import changes nothing."""
-    imported = kept = 0
+    the board keeps its row; ids the radar has never seen (not in `opportunities`, gone ones included) are skipped;
+    profile and organism filter are imported only if the team never saved them (and the imported value is not
+    empty/neutral). Idempotent: a second import changes nothing."""
+    imported = kept = skipped = 0
     for oid, e in body.tracking.items():
         if e.status == "nueva":
             continue
-        snap = await _snapshot(conn, oid) or {
-            "titulo": e.titulo, "organismo": e.organismo, "source": oid.split(":", 1)[0], "url": "",
-            "deadline": e.deadline,
-        }  # fmt: skip
+        snap = await _snapshot(conn, oid)
+        if snap is None:
+            exists = (
+                await conn.execute(select(tracking.c.opportunity_id).where(tracking.c.opportunity_id == oid))
+            ).first()
+            kept += exists is not None
+            skipped += exists is None
+            continue
         res = await conn.execute(
             pg_insert(tracking)
             .values(opportunity_id=oid, status=e.status, updated_by=user.id, updated_at=now(), **snap)
@@ -500,7 +514,7 @@ async def import_local(body: ImportIn, user: User, conn: Db) -> ImportOut:
         await conn.execute(
             update(org_settings).where(org_settings.c.id == 1).values(**values, updated_by=user.id, updated_at=now())
         )
-    log.info("import by user %d: %d tracking rows imported, %d kept; profile %s; organisms %s",
-             user.id, imported, kept, profile_result, organisms_result)  # fmt: skip
-    return ImportOut(tracking_imported=imported, tracking_kept=kept, profile=profile_result,
-                     organisms=organisms_result)  # fmt: skip
+    log.info("import by user %d: %d tracking rows imported, %d kept, %d skipped; profile %s; organisms %s",
+             user.id, imported, kept, skipped, profile_result, organisms_result)  # fmt: skip
+    return ImportOut(tracking_imported=imported, tracking_kept=kept, tracking_skipped=skipped,
+                     profile=profile_result, organisms=organisms_result)  # fmt: skip
