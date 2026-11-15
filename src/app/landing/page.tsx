@@ -110,8 +110,8 @@ const NOT_DOING = [
     body: "La puntuación son reglas fijas escritas en el código, que cualquiera puede leer y discutir.",
   },
   {
-    title: "El seguimiento se guarda en el navegador.",
-    body: "El tablero vive en cada navegador: todavía no se comparte entre el equipo ni entre dispositivos.",
+    title: "No está abierto a cualquiera.",
+    body: "Esta página es pública; el radar, no. Las cuentas solo se crean con una invitación de alguien del equipo.",
   },
   {
     title: "Las reglas se pueden equivocar.",
