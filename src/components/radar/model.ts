@@ -82,6 +82,7 @@ export function isClosed(o: Opportunity): boolean {
 
 /** Closed competitive grant open to non-profits: likely to come back, so it is a lead for the next edition (mirrors scoring.ts). */
 export function isNextEdition(o: Opportunity): boolean {
+  if (isClosed(o) && o.rsc) return true; // the closed private programmes in the list have all run several editions
   return isClosed(o) && o.kind === "subvencion" && o.fit.isCompetitive && o.fit.isOngEligible !== false;
 }
 
@@ -140,7 +141,7 @@ export function reforestaWins(o: Opportunity): { year: number; importe: number |
  * Keeps the API's own wording; a "Convocatoria irregular: no sale…" phrase keeps only what follows the colon.
  */
 export function openingNote(o: Opportunity): string | null {
-  const t = o.history?.typicalOpening?.text?.trim();
+  const t = o.history?.typicalOpening?.text?.trim() ?? o.rsc?.timing ?? undefined;
   if (!t) return null;
   const i = t.indexOf(": ");
   const s = i >= 0 ? t.slice(i + 2) : t;

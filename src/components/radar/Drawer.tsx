@@ -103,11 +103,18 @@ function DrawerBody({ o }: { o: Opportunity }) {
     ),
     o.rsc && (
       <section key="rsc" className="space-y-3">
-        <SectionTitle>Cómo acercarse</SectionTitle>
+        <SectionTitle>Programa privado</SectionTitle>
         <dl className="space-y-3">
-          <Fact label="Por qué Reforesta">{o.rsc.whyReforesta}</Fact>
-          <Fact label="Ángulo para la propuesta">{o.rsc.pitchAngle}</Fact>
-          <Fact label="Cuándo">{o.rsc.cadence}</Fact>
+          <Fact label="Por qué puede encajar">{o.rsc.whyReforesta}</Fact>
+          <Fact label="Último plazo">{o.rsc.window}</Fact>
+          <Fact label="Requisitos">
+            <ul className="list-disc space-y-0.5 pl-4">
+              {o.rsc.requirements.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          </Fact>
+          {o.rsc.unverified && <Fact label="Sin comprobar">{o.rsc.unverified}</Fact>}
         </dl>
       </section>
     ),
