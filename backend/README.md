@@ -64,7 +64,8 @@ backend/
       memo.py            fetch_cache-backed TTL memo (same keys/values as the TS)
       notices.py         decode_html, is_call_notice, is_open_tender, extract_notice_details,
                          parse_deadline, deadline_from_days, es_date_to_iso (BOE, BOCM, DOG, BDNS)
-      boe.py, rsc.py     ported connectors
+      boe.py             ported connectors
+      rsc.py             hand-checked private programmes (the only copy; the web reads them from the API)
       eu.py, fb.py, bocm.py, dog.py  ports of src/lib/sources/multi-source.ts
       bdns.py            BDNS connector (68 searches + a memoised detail for every candidate; retries 429 x3)
       bdns_history.py    previous editions of a BDNS call (organ resolution, title matching) and who won them
@@ -86,8 +87,10 @@ Correctness over elegance: same numbers, same Spanish strings, same order of rea
 
 - `tests/test_parity_functions.py`: identical inputs → identical outputs, against data dumped from the TS
   functions themselves (former `tools/dump_ts_golden.ts`, frozen clock): 2 168 `scoreConvocatoria` cases, 3 630
-  `geographicFit`+`kindFit` cases, `scoreRsc`, `inferComunidadAutonoma`, `normalizeText`, `contentHash`,
+  `geographicFit`+`kindFit` cases, `inferComunidadAutonoma`, `normalizeText`, `contentHash`,
   `dedupeKey`, and every profile table value by value.
+- RSC items are outside both parity tests: the TS list was replaced on 2026-11-15 by programmes checked on the
+  funders' sites (`app/sources/rsc.py`, tested in `tests/test_sources.py`).
 - `tests/test_parity_golden.py`: the live TS `GET /api/oportunidades` (542 items) rebuilt from raw fields and
   scored end to end (base + connector adjustment + geo + kind): score, tier, reasons and the whole `fit` must match.
   The API output lacks some scoring inputs (BDNS `descripcionLeng`/`objetivos`/`abierto`, the EU description past
