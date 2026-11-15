@@ -25,6 +25,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AccountMenu } from "@/components/auth/AccountMenu";
 import { SessionGate } from "@/components/auth/session";
 import { isPublicPath } from "@/lib/api";
 import { DEFAULT_FILTERS, EMPTY_DIMS, fmtFreshness, isClosed, plazoValues, type Filters } from "./model";
@@ -235,6 +236,7 @@ function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <AccountMenu />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
