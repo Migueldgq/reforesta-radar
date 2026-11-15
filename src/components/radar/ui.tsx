@@ -47,62 +47,64 @@ export function ScoreChip({ fit, size = "md" }: { fit: FitAnalysis; size?: keyof
   );
 }
 
-export function DeadlineChip({ o }: { o: Opportunity }) {
+const CHIP_TONE = {
+  muted: "text-muted-foreground",
+  plain: "",
+  sky: "border-sky-200 bg-sky-50 text-sky-900",
+  red: "border-red-200 bg-red-50 text-red-800",
+  amber: "border-amber-200 bg-amber-50 text-amber-900",
+} as const;
+
+/** Short date for the secondary line; the year only when it is not this one. */
+function fmtDayNote(t: number): string {
+  const y = new Date(t).getUTCFullYear();
+  return y === new Date(todayUTC()).getUTCFullYear() ? fmtDayShort(t) : `${fmtDayShort(t)} ${y}`;
+}
+
+/**
+ * Deadline state in two levels: a one-word-ish chip (icon + short label, never wraps)
+ * and a quiet secondary line with the date that explains it.
+ */
+function deadlineState(o: Opportunity) {
   const d = daysLeft(o);
+  const end = parseDay(o.deadline);
   const opens = parseDay(o.opensAt);
-  if (isNextEdition(o)) {
-    const closed = parseDay(o.deadline);
-    return (
-      <Badge variant="outline" className={cn(badge, "h-auto items-start text-left text-muted-foreground [&>svg]:mt-px")} title="Convocatoria periódica: prepara la siguiente edición">
-        <RotateCw aria-hidden />
-        <span className="flex flex-col leading-tight">
-          <span>{closed != null ? `Cerró el ${fmtDayShort(closed)}` : "Cerrada"} ·</span>
-          <span>próxima edición</span>
-        </span>
-      </Badge>
-    );
-  }
-  if (isClosed(o))
-    return (
-      <Badge variant="outline" className={cn(badge, "text-muted-foreground")}>
-        <CircleSlash aria-hidden />
-        Cerrada
-      </Badge>
-    );
+  const closes = end != null ? `Cierra el ${fmtDayNote(end)}` : null;
+  const closed = end != null ? `Cerró el ${fmtDayNote(end)}` : null;
+  if (isNextEdition(o))
+    return { Icon: RotateCw, label: "Próxima edición", tone: "muted", title: "Convocatoria periódica: prepara la siguiente edición", detail: closed } as const;
+  if (isClosed(o)) return { Icon: CircleSlash, label: "Cerrada", tone: "muted", title: undefined, detail: closed } as const;
   if (opens != null && opens > todayUTC())
-    return (
-      <Badge variant="outline" className={cn(badge, "border-sky-200 bg-sky-50 text-sky-900")} title={`Abre el ${fmtDate(o.opensAt)}`}>
-        <CalendarClock aria-hidden />
-        Abre el {fmtDayShort(opens)}
-      </Badge>
-    );
+    return { Icon: CalendarClock, label: `Abre el ${fmtDayNote(opens)}`, tone: "sky", title: `Abre el ${fmtDate(o.opensAt)}`, detail: closes } as const;
   if (d == null)
-    return (
-      <Badge variant="outline" className={cn(badge, "text-muted-foreground")} title={o.deadlineText ?? undefined}>
-        <CalendarDays aria-hidden />
-        {o.kind === "empresa" ? "Todo el año" : "Sin fecha"}
-      </Badge>
-    );
-  const text = d === 0 ? "Cierra hoy" : d === 1 ? "Mañana" : `${d} días`;
-  if (d <= 7)
-    return (
-      <Badge variant="outline" className={cn(badge, "border-red-200 bg-red-50 text-red-800")} title={fmtDate(o.deadline) ?? undefined}>
-        <AlarmClock aria-hidden />
-        {text}
-      </Badge>
-    );
-  if (d <= 30)
-    return (
-      <Badge variant="outline" className={cn(badge, "border-amber-200 bg-amber-50 text-amber-900")} title={fmtDate(o.deadline) ?? undefined}>
-        <Clock aria-hidden />
-        {text}
-      </Badge>
-    );
+    return { Icon: CalendarDays, label: o.kind === "empresa" ? "Todo el año" : "Sin fecha", tone: "muted", title: o.deadlineText ?? undefined, detail: null } as const;
+  const label = d === 0 ? "Cierra hoy" : d === 1 ? "Mañana" : `${d} días`;
+  const title = fmtDate(o.deadline) ?? undefined;
+  const detail = d === 0 ? null : closes;
+  if (d <= 7) return { Icon: AlarmClock, label, tone: "red", title, detail } as const;
+  if (d <= 30) return { Icon: Clock, label, tone: "amber", title, detail } as const;
+  return { Icon: CalendarDays, label, tone: "plain", title, detail } as const;
+}
+
+/** The state chip alone: icon + short label on one line. */
+export function DeadlineChip({ o }: { o: Opportunity }) {
+  const { Icon, label, tone, title } = deadlineState(o);
   return (
-    <Badge variant="outline" className={badge} title={fmtDate(o.deadline) ?? undefined}>
-      <CalendarDays aria-hidden />
-      {text}
+    <Badge variant="outline" className={cn(badge, CHIP_TONE[tone])} title={title}>
+      <Icon aria-hidden />
+      {label}
     </Badge>
+  );
+}
+
+/** The chip with its date note underneath, for lists and cards. */
+export function Deadline({ o, className }: { o: Opportunity; className?: string }) {
+  const { detail } = deadlineState(o);
+  return (
+    <div className={cn("flex min-w-0 flex-col items-start gap-1", className)}>
+      <DeadlineChip o={o} />
+      {detail && <span className="pl-0.5 text-xs leading-snug text-muted-foreground tabular-nums">{detail}</span>}
+    </div>
   );
 }
 

@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { daysLeft, fmtEuros, parseDay, tidy, TRIAGE_ORDER, type Triage } from "./model";
+import { daysLeft, fmtEuros, tidy, TRIAGE_ORDER, type Triage } from "./model";
 import { useRadar } from "./store";
-import { DeadlineChip, EmptyState, ScoreChip, TriageSelect } from "./ui";
+import { Deadline, EmptyState, ScoreChip, TriageSelect } from "./ui";
 
 export const KIND_SHORT: Record<OpportunityKind, string> = {
   subvencion: "Subvención",
@@ -62,8 +62,6 @@ function compare(a: Opportunity, b: Opportunity, col: Col, triageOf: (id: string
       return TRIAGE_ORDER.indexOf(triageOf(a.id)) - TRIAGE_ORDER.indexOf(triageOf(b.id));
   }
 }
-
-const fmtDate = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[]; onClear: () => void; resetKey: string }) {
   const { triageOf, openDetail } = useRadar();
@@ -181,7 +179,6 @@ function Amount({ o }: { o: Opportunity }) {
 }
 
 function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
-  const d = parseDay(o.deadline);
   const title = tidy(o.titulo);
   return (
     <TableRow onClick={onOpen} className="cursor-pointer">
@@ -214,10 +211,7 @@ function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
         {o.region}
       </TableCell>
       <TableCell className="py-3">
-        <div className="flex flex-col items-start gap-1">
-          <DeadlineChip o={o} />
-          {d != null && <span className="pl-0.5 text-xs text-muted-foreground tabular-nums">{fmtDate.format(d).replace(".", "")}</span>}
-        </div>
+        <Deadline o={o} />
       </TableCell>
       <TableCell className="py-3 text-right whitespace-normal">
         <Amount o={o} />
@@ -242,7 +236,7 @@ function MobileCard({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
         </button>
         <p className="truncate text-xs text-muted-foreground">{tidy(o.organismo)}</p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-0.5">
-          <DeadlineChip o={o} />
+          <Deadline o={o} />
           <span className="text-sm">
             <Amount o={o} />
           </span>
