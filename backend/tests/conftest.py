@@ -62,12 +62,12 @@ async def engine(api_database: str) -> AsyncIterator[AsyncEngine]:
     await eng.dispose()
 
 
-def make_client(engine: AsyncEngine, **headers: str) -> httpx.AsyncClient:
+def make_client(engine: AsyncEngine, ip: str = "127.0.0.1", **headers: str) -> httpx.AsyncClient:
     from app.main import app
 
     app.state.engine = engine
     return httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app),
+        transport=httpx.ASGITransport(app=app, client=(ip, 123)),
         base_url="http://testserver",
         headers={"X-Radar-CSRF": "1", **headers},
     )

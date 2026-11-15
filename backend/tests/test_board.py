@@ -85,8 +85,9 @@ async def test_settings_shared_and_validated(admin: httpx.AsyncClient, member: h
 async def test_import_merges_without_overwriting_and_is_idempotent(
     engine: AsyncEngine, admin: httpx.AsyncClient, member: httpx.AsyncClient
 ) -> None:
-    items = _items(3)
+    items = _items(4)
     await _ingest(engine, items)
+    await _ingest(engine, items[:3])  # items[3] leaves the sources
     await admin.patch(f"/api/board/{items[0].id}", json={"status": "presentar"})
     await admin.put("/api/settings", json={"organisms": ["MITECO"]})
     local = {
@@ -105,30 +106,31 @@ async def test_import_merges_without_overwriting_and_is_idempotent(
                 "organismo": "o",
                 "deadline": None,
             },  # fmt: skip
-            "bdns:1": {
-                "status": "presentada",
-                "titulo": "Una que ya no está",
-                "organismo": "MITECO",
-                "deadline": "2026-01-31",
-            },  # fmt: skip
+            items[3].id: {"status": "presentada", "titulo": "ignored", "organismo": "", "deadline": None},
+            "bdns:999999": {"status": "estudio", "titulo": "Inventada", "organismo": "", "deadline": None},
             items[2].id: {"status": "nueva"},
         },
         "profile": {"extraKeywords": [{"term": "dehesa", "weight": 10}]},
         "organisms": ["Junta de Andalucía"],
     }
     first = await member.post("/api/import", json=local)
-    assert first.json() == {"trackingImported": 2, "trackingKept": 1, "profile": "imported", "organisms": "kept"}
+    assert first.json() == {
+        "trackingImported": 2, "trackingKept": 1, "trackingSkipped": 1, "profile": "imported", "organisms": "kept",
+    }  # fmt: skip
     board = {i["opportunityId"]: i for i in (await member.get("/api/board")).json()["items"]}
     assert board[items[0].id]["status"] == "presentar"  # the team's value wins
     assert board[items[1].id]["status"] == "estudio" and board[items[1].id]["titulo"] == items[1].titulo
-    assert board["bdns:1"]["titulo"] == "Una que ya no está" and board["bdns:1"]["gone"] is True
-    assert items[2].id not in board
+    gone = board[items[3].id]  # known to the radar but gone from the sources: imported, with the radar's snapshot
+    assert gone["titulo"] == items[3].titulo and gone["gone"] is True and gone["status"] == "presentada"
+    assert items[2].id not in board and "bdns:999999" not in board  # never-seen ids are not imported
     settings_after = (await member.get("/api/settings")).json()
     assert settings_after["organisms"] == ["MITECO"]
     assert settings_after["profile"]["extraKeywords"] == [{"term": "dehesa", "weight": 10}]
 
     second = await admin.post("/api/import", json=local)
-    assert second.json() == {"trackingImported": 0, "trackingKept": 3, "profile": "kept", "organisms": "kept"}
+    assert second.json() == {
+        "trackingImported": 0, "trackingKept": 3, "trackingSkipped": 1, "profile": "kept", "organisms": "kept",
+    }  # fmt: skip
     assert {i["opportunityId"]: i["status"] for i in (await member.get("/api/board")).json()["items"]} == {
         k: v["status"] for k, v in board.items()
     }
@@ -220,3 +222,22 @@ async def test_ingest_request_lifecycle_and_guard(engine: AsyncEngine, admin: ht
         q = text("select status from ingest_requests where id = :i")
         assert (await conn.execute(q, {"i": nxt["id"]})).scalar() == "failed"
     assert (await admin.post("/api/ingest")).status_code == 202
+
+
+async def test_shared_data_is_bounded(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    fake = {f"bdns:{i}": {"status": "estudio", "titulo": "x" * 900} for i in range(1500)}
+    res = await member.post("/api/import", json={"tracking": fake})
+    assert res.status_code in (413, 200)  # over the 1 MiB body cap, or every fake id skipped
+    if res.status_code == 200:
+        assert res.json()["trackingImported"] == 0
+    small = {f"bdns:{i}": {"status": "estudio"} for i in range(1500)}
+    assert (await member.post("/api/import", json={"tracking": small})).json()["trackingSkipped"] == 1500
+    assert (await member.get("/api/board")).json()["items"] == []
+    too_many = {f"bdns:{i}": {"status": "estudio"} for i in range(2001)}
+    assert (await member.post("/api/import", json={"tracking": too_many})).status_code == 422
+    assert (await member.put("/api/settings", json={"profile": {"kinds": ["europa"] * 6}})).status_code == 422
+    assert (await member.put("/api/settings", json={"organisms": ["x"] * 301})).status_code == 422
+    assert (await member.put("/api/settings", json={"organisms": ["x" * 301]})).status_code == 422
+    assert (await member.put("/api/votes/rsc:x", json={"vote": "sirve", "reason": "x" * 2001})).status_code == 422
+    assert (await member.patch("/api/me", json={"name": "x" * 101})).status_code == 422
+    assert (await member.get("/api/settings")).json()["profile"] is None

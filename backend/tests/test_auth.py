@@ -1,18 +1,23 @@
 """Accounts and access control against a real Postgres (see conftest.py)."""
 
+import asyncio
 import re
+import threading
+import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import httpx
 import pytest
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.auth import throttle
+from app.auth import passwords, throttle
 from app.auth.accounts import bootstrap_admin
 from app.auth.deps import COOKIE
 from app.auth.passwords import hash_password, password_problem, verify_password
 from app.auth.tokens import hash_token
+from app.config import settings
 from app.db.tables import invitations, password_resets, sessions, users
 from app.main import app
 from tests.conftest import PASSWORD, add_user, login, make_client
@@ -82,23 +87,75 @@ async def test_login_failures_are_generic(engine: AsyncEngine, client: httpx.Asy
     assert (await client.get("/api/auth/session")).json()["user"] is None
 
 
-async def test_login_throttled_per_account_then_per_ip(engine: AsyncEngine, client: httpx.AsyncClient) -> None:
+async def test_failures_from_one_client_never_lock_out_a_right_password(engine: AsyncEngine) -> None:
     await add_user(engine, "ana@example.org")
     wrong = {"email": "ana@example.org", "password": "nope nope nope"}
-    for _ in range(throttle.by_account.limit):
-        assert (await client.post("/api/auth/login", json=wrong)).status_code == 401
-    res = await client.post("/api/auth/login", json={"email": "ana@example.org", "password": PASSWORD})
-    assert res.status_code == 429 and int(res.headers["retry-after"]) > 0  # even the right password
-    # an unknown address is throttled the same way (no hint that it does not exist)
-    for _ in range(throttle.by_account.limit):
-        await client.post("/api/auth/login", json={"email": "x@example.org", "password": "nope nope nope"})
-    assert (await client.post("/api/auth/login", json={"email": "x@example.org", "password": "n"})).status_code == 429
+    right = {"email": "ana@example.org", "password": PASSWORD}
+    async with make_client(engine, ip="203.0.113.9") as attacker, make_client(engine, ip="198.51.100.7") as ana:
+        for _ in range(throttle.account_ip.limit):
+            assert (await attacker.post("/api/auth/login", json=wrong)).status_code == 401
+        res = await attacker.post("/api/auth/login", json=wrong)
+        assert res.status_code == 429 and int(res.headers["retry-after"]) > 0  # that client is now told to wait
+        assert (await ana.post("/api/auth/login", json=right)).status_code == 200  # another client: unaffected
+        # same client too (e.g. everyone behind the proxy's one IP): the right password still works
+        assert (await attacker.post("/api/auth/login", json=right)).status_code == 200
+        assert (await ana.get("/api/board")).status_code == 200
 
-    throttle.clear_all()
-    for i in range(throttle.by_ip.limit):  # many accounts from one IP
-        await client.post("/api/auth/login", json={"email": f"u{i}@example.org", "password": "nope nope nope"})
-    res = await client.post("/api/auth/login", json={"email": "ana@example.org", "password": PASSWORD})
-    assert res.status_code == 429
+
+async def test_account_ceiling_is_the_hard_backstop(engine: AsyncEngine) -> None:
+    await add_user(engine, "ana@example.org")
+    for i in range(throttle.account_ceiling.limit):  # spread over many IPs
+        async with make_client(engine, ip=f"10.0.{i // 250}.{i % 250 + 1}") as c:
+            await c.post("/api/auth/login", json={"email": "ana@example.org", "password": "nope nope nope"})
+    async with make_client(engine, ip="198.51.100.7") as ana:
+        res = await ana.post("/api/auth/login", json={"email": "ana@example.org", "password": PASSWORD})
+        assert res.status_code == 429  # refused without checking the password
+    # an unknown address is throttled the same way (no hint that it does not exist)
+    async with make_client(engine) as c:
+        for _ in range(throttle.account_ip.limit):
+            await c.post("/api/auth/login", json={"email": "x@example.org", "password": "nope nope nope"})
+        assert (await c.post("/api/auth/login", json={"email": "x@example.org", "password": "n"})).status_code == 429
+
+
+async def test_concurrent_guesses_are_counted_before_checking(engine: AsyncEngine, client: httpx.AsyncClient) -> None:
+    await add_user(engine, "ana@example.org")
+    wrong = {"email": "ana@example.org", "password": "nope nope nope"}
+    responses = await asyncio.gather(*(client.post("/api/auth/login", json=wrong) for _ in range(20)))
+    codes = [r.status_code for r in responses]
+    assert codes.count(401) == throttle.account_ip.limit and codes.count(429) == 20 - throttle.account_ip.limit
+
+
+async def test_argon2_runs_at_most_n_at_a_time(
+    engine: AsyncEngine, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    running = peak = 0
+    lock = threading.Lock()
+    real = passwords.verify_password
+
+    def slow_verify(stored: str | None, password: str) -> bool:
+        nonlocal running, peak
+        with lock:
+            running += 1
+            peak = max(peak, running)
+        try:
+            time.sleep(0.02)
+            return real(stored, password)
+        finally:
+            with lock:
+                running -= 1
+
+    monkeypatch.setattr(passwords, "verify_password", slow_verify)
+    await asyncio.gather(*(
+        client.post("/api/auth/login", json={"email": f"u{i}@example.org", "password": "nope nope nope"})
+        for i in range(12)
+    ))  # fmt: skip
+    assert peak == settings.argon2_concurrency == 2
+
+
+def test_forwarded_headers_not_trusted_from_everyone() -> None:
+    compose = (Path(__file__).resolve().parents[2] / "docker-compose.yml").read_text()
+    m = re.search(r"FORWARDED_ALLOW_IPS: \$\{FORWARDED_ALLOW_IPS:-([^}]*)\}", compose)
+    assert m and m.group(1) == "127.0.0.1"  # trust only what an operator configures (docs/backend.md)
 
 
 # ---------- sessions ----------
@@ -181,6 +238,7 @@ ADMIN_ROUTES = {
     ("DELETE", "/api/team/invitations/{invitation_id}"),
     ("PATCH", "/api/team/users/{user_id}"),
     ("POST", "/api/team/users/{user_id}/reset-link"),
+    ("DELETE", "/api/team/resets/{reset_id}"),
     ("GET", "/api/votes/disagreements"),
     ("POST", "/api/ingest"),
 }
@@ -414,3 +472,73 @@ async def test_bootstrap_admin_only_on_empty_table(engine: AsyncEngine, patch_se
     await bootstrap_admin(engine)
     async with engine.connect() as conn:
         assert (await conn.execute(text("select count(*) from users"))).scalar() == 1
+
+
+async def test_wrong_current_password_never_blocks_login(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    for _ in range(throttle.password_change.limit):
+        bad = await member.post("/api/me/password", json={"currentPassword": "wrong one!", "newPassword": "x" * 12})
+        assert bad.status_code == 400
+    body = {"currentPassword": PASSWORD, "newPassword": "x" * 12}
+    assert (await member.post("/api/me/password", json=body)).status_code == 429
+    async with make_client(engine) as c:
+        await login(c, "luis@example.org")
+
+
+# ---------- links of a person who loses admin ----------
+
+
+async def test_demoted_or_deactivated_admin_links_stop_working(engine: AsyncEngine, admin: httpx.AsyncClient) -> None:
+    await add_user(engine, "pablo@example.org", "admin")  # user 2
+    await add_user(engine, "luis@example.org")  # user 3
+    async with make_client(engine) as pablo:
+        await login(pablo, "pablo@example.org")
+        reset = (await pablo.post("/api/team/users/1/reset-link")).json()  # for ana
+        inv = (await pablo.post("/api/team/invitations", json={"email": "marta@example.org", "role": "admin"})).json()
+    own = (await admin.post("/api/team/users/3/reset-link")).json()  # ana's link for luis: unaffected
+    team = (await admin.get("/api/team")).json()
+    assert {(r["userId"], r["createdBy"]) for r in team["resets"]} == {(1, 2), (3, 1)}
+    assert team["resets"][0]["userName"] and team["invitations"][0]["createdBy"] == 2
+
+    assert (await admin.patch("/api/team/users/2", json={"active": False})).status_code == 200
+    async with make_client(engine) as c:
+        token = reset["link"].rsplit("/", 1)[1]
+        assert (await c.post("/api/auth/reset", json={"token": token})).status_code == 404
+        assert (await c.post("/api/auth/invitation", json={"token": inv["link"].rsplit("/", 1)[1]})).status_code == 404
+        assert (await c.post("/api/auth/reset", json={"token": own["link"].rsplit("/", 1)[1]})).status_code == 200
+    team = (await admin.get("/api/team")).json()
+    assert [r["userId"] for r in team["resets"]] == [3] and team["invitations"] == []
+
+    # demotion (not deactivation) cancels them too; and an admin can revoke any pending reset link
+    await admin.patch("/api/team/users/2", json={"active": True})
+    async with make_client(engine) as pablo:
+        await login(pablo, "pablo@example.org")
+        reset = (await pablo.post("/api/team/users/3/reset-link")).json()
+    await admin.patch("/api/team/users/2", json={"role": "member"})
+    async with make_client(engine) as c:
+        assert (await c.post("/api/auth/reset", json={"token": reset["link"].rsplit("/", 1)[1]})).status_code == 404
+    own = (await admin.post("/api/team/users/3/reset-link")).json()
+    (pending,) = (await admin.get("/api/team")).json()["resets"]
+    assert (await admin.delete(f"/api/team/resets/{pending['id']}")).status_code == 204
+    assert (await admin.delete(f"/api/team/resets/{pending['id']}")).status_code == 404
+    async with make_client(engine) as c:
+        assert (await c.post("/api/auth/reset", json={"token": own["link"].rsplit("/", 1)[1]})).status_code == 404
+
+
+# ---------- body size ----------
+
+
+async def test_oversized_bodies_rejected_before_routing(client: httpx.AsyncClient) -> None:
+    big = b"x" * (1024 * 1024 + 1)
+    res = await client.post("/api/import", content=big, headers={"Content-Type": "application/json"})
+    assert res.status_code == 413 and res.json() == {"detail": "La petición es demasiado grande."}  # not 401
+
+    async def chunks():  # noqa: ANN202 - streamed without Content-Length
+        for _ in range(20):
+            yield b"x" * 100_000
+
+    res = await client.post("/api/import", content=chunks(), headers={"Content-Type": "application/json"})
+    assert res.status_code == 413
+    # the PDF route allows up to 16 MiB: a 2 MB body reaches the session check
+    res = await client.post("/api/analyze-pdf", content=b"x" * 2_000_000, headers={"Content-Type": "application/pdf"})
+    assert res.status_code == 401
+    assert (await client.post("/api/import", json={})).status_code == 401  # small bodies pass through
