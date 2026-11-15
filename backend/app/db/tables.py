@@ -1,4 +1,4 @@
-"""Table definitions (SQLAlchemy Core). Schema owner: alembic/versions/ (0001_init.py, 0002_bdns_editions.py).
+"""Table definitions (SQLAlchemy Core). Schema owner: alembic/versions/ (0001 init, 0002 + 0003 bdns_editions).
 
 Same tables and columns as supabase/migrations/0001_init.sql, so data and semantics carry over:
 rows hold the BASE opportunity (connector output + base fit); geographic and kind fit are applied at read time.
@@ -125,6 +125,7 @@ bdns_editions = Table(
     Column("awards_last", Date),
     Column("reforesta_importe", Numeric),  # set when Reforesta (G80428204) won this edition
     Column("peer_hits", JSONB),  # NIFs of curated environmental NGOs among the winners
+    Column("match", Numeric),  # title Jaccard with the current call (null for the current edition)
     Column("fetched_at", TSTZ, nullable=False, server_default=text("now()")),
     PrimaryKeyConstraint("call_numero", "numero"),
 )

@@ -17,8 +17,9 @@ the curated NGO list; raw award responses are never memoised, stored or logged.
 import re
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import Any
 from urllib.parse import quote
 
@@ -122,6 +123,20 @@ class ListedCall:
     numero: str
     title: str
     published_at: str  # YYYY-MM-DD (fechaRecepcion)
+    match: float | None = None  # Jaccard with the current call (set by match_editions)
+
+
+# Records of an organ that amend an earlier call instead of opening a new edition (es, ca, gl).
+_NOT_AN_EDITION = re.compile(
+    r"\b(modific\w*|rectifica\w*|correccion de (errores|erros)|correccio d.errades|prorroga\w*"
+    r"|(ampliacion|ampliacio|incremento|increment|aumento|amplia|amplian)( del?| do| el)? "
+    r"(credito|credit|plazo|termini|prazo))\b"
+)
+
+
+def is_amendment(title: str) -> bool:
+    """Amendment, credit increase, correction or term extension: not an edition of a call."""
+    return _NOT_AN_EDITION.search(_key(title)) is not None
 
 
 def title_tokens(title: str, organ_tokens: frozenset[str] = frozenset()) -> frozenset[str]:
@@ -142,13 +157,15 @@ def jaccard(a: frozenset[str], b: frozenset[str]) -> float:
 
 
 def match_editions(current: ListedCall, organ_tokens: frozenset[str], listed: list[ListedCall]) -> list[ListedCall]:
-    """Previous editions of `current` among its organ's calls, newest first: published before it, Jaccard >= 0.5,
-    at most one per calendar year (the best; the current edition already takes its own year)."""
+    """Previous editions of `current` among its organ's calls, newest first: published before it, not an amendment,
+    Jaccard >= 0.5, at most one per calendar year (the best; the current edition already takes its own year)."""
     mine = title_tokens(current.title, organ_tokens)
     best: dict[str, tuple[float, ListedCall]] = {}
     for c in listed:
         year = c.published_at[:4]
         if c.numero == current.numero or c.published_at >= current.published_at or year == current.published_at[:4]:
+            continue
+        if is_amendment(c.title):
             continue
         j = jaccard(mine, title_tokens(c.title, organ_tokens))
         if j < MIN_JACCARD:
@@ -156,7 +173,8 @@ def match_editions(current: ListedCall, organ_tokens: frozenset[str], listed: li
         prev = best.get(year)
         if prev is None or (j, c.published_at) > (prev[0], prev[1].published_at):
             best[year] = (j, c)
-    return sorted((c for _, c in best.values()), key=lambda c: c.published_at, reverse=True)
+    found = (replace(c, match=round(j, 2)) for j, c in best.values())
+    return sorted(found, key=lambda c: c.published_at, reverse=True)
 
 
 # ---------- edition details ----------
@@ -333,6 +351,7 @@ class EditionRow:
     closes_at: str | None
     window: str | None
     awards: dict[str, Any] | None = None  # reduce_awards() output; None = not checked
+    match: float | None = None  # title Jaccard with the current call (None for the current edition)
 
     @property
     def is_current(self) -> bool:
@@ -370,7 +389,9 @@ async def call_editions(
         awards = await fetch_awards(ctx, c.numero, c.published_at, today) if c.published_at >= AWARDS_FROM else None
         opened = det.get("opened_at") or c.published_at
         closes, window = det.get("closes_at"), det.get("window")
-        rows.append(EditionRow(numero, c.numero, organ_ids, c.title, c.published_at, opened, closes, window, awards))
+        rows.append(
+            EditionRow(numero, c.numero, organ_ids, c.title, c.published_at, opened, closes, window, awards, c.match)
+        )
     return rows
 
 
@@ -381,13 +402,20 @@ MONTHS = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agost
 
 
 def typical_opening(editions: list[EditionRow]) -> TypicalOpening | None:
-    """Month range of the opening dates (current + previous editions), measured around the year end if shorter."""
-    months = [int(e.opened_at[5:7]) for e in editions if e.opened_at]
-    if len(months) < 2:
+    """When it opens, from the current + previous editions. With one previous edition only, just when that one
+    opened. Irregularity is claimed only with >= 3 known editions and a gap of >= 2 years between two of them."""
+    dated = [(e, e.opened_at) for e in editions if e.opened_at]
+    previous = [opened for e, opened in dated if not e.is_current]
+    if not previous or len(dated) < 2:
         return None
+    if len(dated) == 2:
+        month = int(previous[0][5:7])
+        text = f"La edición anterior abrió en {MONTHS[month - 1]} de {previous[0][:4]}"
+        return TypicalOpening(from_=month, to=month, text=text, irregular=False)
+    months = [int(opened[5:7]) for _, opened in dated]
     spread, start = min((max((x - m) % 12 for x in months), m) for m in months)
     end = (start - 1 + spread) % 12 + 1
-    years = sorted({int(e.published_at[:4]) for e in editions}, reverse=True)
+    years = sorted({int(e.published_at[:4]) for e, _ in dated}, reverse=True)
     irregular = any(a - b >= 2 for a, b in zip(years, years[1:], strict=False))
     if irregular:
         text = "Convocatoria irregular: no sale todos los años"
@@ -448,6 +476,7 @@ def build_history(rows: list[EditionRow]) -> History | None:
                 opened_at=r.opened_at,
                 closes_at=r.closes_at,
                 window=r.window,
+                match=r.match,
                 awards=None
                 if r.awards is None
                 else EditionAwards(
@@ -486,6 +515,7 @@ def to_db(r: EditionRow) -> dict[str, Any]:
         "awards_last": iso(a["last"]) if a and a["last"] else None,
         "reforesta_importe": a["reforesta"] if a else None,
         "peer_hits": a["peers"] if a else None,
+        "match": None if r.match is None else Decimal(str(r.match)),
     }
 
 
@@ -514,4 +544,5 @@ def from_db(row: Any) -> EditionRow:
         closes_at=iso(row.closes_at),
         window=row.window_text,
         awards=awards,
+        match=float(row.match) if row.match is not None else None,
     )

@@ -97,6 +97,7 @@ class HistoryEdition(Contract):
     opened_at: str | None  # YYYY-MM-DD: start of applications, else journal extract date, else BDNS registration
     closes_at: str | None
     window: str | None  # "10 días hábiles", "30 días naturales"...
+    match: float | None = None  # title similarity (Jaccard) with the current call: 0.5-1.0
     awards: EditionAwards | None  # None: not checked (BDNS has awards only from 2022)
 
 
