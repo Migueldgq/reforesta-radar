@@ -67,6 +67,15 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
 
+      # Deploys are meant to cause no failed request (ADR 0044): deploy/probe.sh asks the public site for three pages
+      # every half second while the server deploys, and any answer that is not 2xx/3xx becomes a warning on the run.
+      - name: Start the availability probe
+        id: probe
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/probe.sh" "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$SHA/deploy/probe.sh"
+          nohup bash "$RUNNER_TEMP/probe.sh" "$URL" "$RUNNER_TEMP/probe.log" > "$RUNNER_TEMP/probe.out" 2>&1 &
+          echo $! > "$RUNNER_TEMP/probe.pid"
+
       - name: Deploy on the server
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
@@ -75,6 +84,14 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             -o ServerAliveInterval=30 "$DEPLOY_USER@$DEPLOY_HOST" "deploy $SHA"
+
+      - name: Availability during the deploy
+        if: always() && steps.probe.outcome == 'success'
+        run: |
+          pid=$(cat "$RUNNER_TEMP/probe.pid")
+          kill -TERM "$pid" 2>/dev/null || true
+          for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+          cat "$RUNNER_TEMP/probe.out"
 
       - name: Public health check
         run: |
