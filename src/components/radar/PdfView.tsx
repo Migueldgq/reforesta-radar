@@ -3,7 +3,7 @@
 import { CircleAlert, CircleCheck, CircleDashed, CircleDot, FileText, RotateCw, TriangleAlert, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import type { PdfAnalysisResult } from "@/lib/types";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,13 +16,27 @@ import { TIER_LABELS, tidy, workLineLabel } from "./model";
 export type PdfRequest = { docId: number; fileName: string } | { pdfUrl: string; fileName: string } | { sample: "madrid" | "miteco" } | File;
 
 export async function analyzePdf(req: PdfRequest): Promise<PdfAnalysisResult> {
-  if (!(req instanceof File)) return api<PdfAnalysisResult>("/api/analyze-pdf", { json: req });
+  if (!(req instanceof File)) return api<PdfAnalysisResult>("/api/analyze-pdf", { json: req, ownErrors: true });
   const fd = new FormData();
   fd.append("file", req);
-  return api<PdfAnalysisResult>("/api/analyze-pdf", { body: fd });
+  try {
+    return await api<PdfAnalysisResult>("/api/analyze-pdf", { body: fd, ownErrors: true });
+  } catch (e) {
+    // The API's wording is about official documents fetched by link; for the user's own file, say it about the file.
+    const msg = e instanceof ApiError ? UPLOAD_ERRORS[e.status] : undefined;
+    throw msg ? new ApiError(msg, (e as ApiError).status) : e;
+  }
 }
 
 const MAX_MB = 15;
+
+const UPLOAD_ERRORS: Record<number, string> = {
+  413: `Tu archivo pesa demasiado: el máximo es ${MAX_MB} MB. Prueba con una versión más ligera de las bases.`,
+  415: "No hemos podido leer texto en tu archivo. Puede ser un PDF escaneado (una imagen), estar protegido o no ser un PDF. Prueba con las bases descargadas de la web del organismo.",
+  422: "No hemos podido leer tu archivo. Comprueba que es un PDF y que se abre bien en tu ordenador.",
+};
+
+const isPdf = (f: File) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
 
 const VERDICT = {
   alto: "Merece la pena leer las bases con calma.",
@@ -128,7 +142,7 @@ function ListBlock({ title, items, empty, icon }: { title: string; items: string
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-muted-foreground/80">{empty}</p>
+        <p className="text-sm text-muted-foreground">{empty}</p>
       )}
     </section>
   );
@@ -164,12 +178,14 @@ export function PdfView() {
   const onFile = (f: File | undefined) => {
     if (!f) return;
     if (input.current) input.current.value = "";
-    if (f.size > MAX_MB * 1024 * 1024) {
+    const refuse = (msg: string) => {
       setLast(null);
       setResult(null);
-      setError(`El PDF supera ${MAX_MB} MB. Prueba con uno más ligero.`);
-      return;
-    }
+      setError(msg);
+    };
+    if (!isPdf(f)) return refuse(`«${f.name}» no es un PDF. Aquí solo se pueden analizar bases en PDF.`);
+    if (f.size > MAX_MB * 1024 * 1024)
+      return refuse(`Tu archivo pesa ${(f.size / 1024 / 1024).toLocaleString("es-ES", { maximumFractionDigits: 1 })} MB y el máximo es ${MAX_MB} MB. Prueba con una versión más ligera de las bases.`);
     void run(f, f.name);
   };
 
