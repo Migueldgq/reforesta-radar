@@ -100,8 +100,9 @@ def test_profile_tables_match_ts() -> None:
 
     p = TS["profile"]
     # frozen golden at v12; v13-14 added and tuned the BDNS history signal (app/scoring/history.py), v15 the deadline
-    # estimate of undated calls (score.estimated_end); none of them is in these tables
-    assert p["scoringVersion"] + 3 == SCORING_VERSION
+    # estimate of undated calls (score.estimated_end), v16 one estimated-deadline mechanism flagged as such (ADR 0029);
+    # none of them is in these tables
+    assert p["scoringVersion"] + 4 == SCORING_VERSION
     assert [{"line": g.line, "keywords": [k._asdict() for k in g.keywords]} for g in KEYWORD_RULES] == p["keywordRules"]
     assert list(ONG_POSITIVE_TERMS) == p["ongPositiveTerms"]
     assert [d._asdict() for d in DEALBREAKER_TERMS] == p["dealbreakerTerms"]

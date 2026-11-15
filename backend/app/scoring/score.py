@@ -64,6 +64,8 @@ class ScoreInput(Contract):
     # ("Dos meses desde el día siguiente a la publicación"), to estimate whether the window is over (step 6).
     fecha_publicacion: str | None = None
     texto_plazo: str | None = None
+    # fecha_fin_solicitud is an estimate (the source gives a term, not a date): reasons say so (ADR 0029).
+    deadline_estimated: bool = False
 
 
 def tier_for(score: int) -> Tier:
@@ -95,14 +97,15 @@ STALE_UNDATED_DAYS = 270
 _NUM_WORDS = {"un": 1, "una": 1, "uno": 1, "dos": 2, "dues": 2, "dous": 2, "tres": 3, "cuatro": 4, "quatre": 4,
               "catro": 4, "cinco": 5, "cinc": 5, "seis": 6, "sis": 6, "diez": 10, "deu": 10, "quince": 15,
               "quinze": 15, "veinte": 20, "vint": 20, "treinta": 30, "trenta": 30}  # fmt: skip
-# "N días hábiles / naturales" (es, ca, gl), "N meses / mesos", also "VEINTE (20) DÍAS HÁBILES"; a bare "N días" is
-# left out: whether it means working or calendar days is not said.
+# "N días hábiles / naturales" (es, ca, gl), "N meses / mesos", also "VEINTE (20) DÍAS HÁBILES" and "Diez días (10)
+# naturales". A bare "N días" counts as working days: Ley 39/2015, art. 30.2 ("cuando los plazos se señalen por días,
+# se entiende que éstos son hábiles").
 _TERM_RE = re.compile(
     r"(?<![a-z0-9])(" + "|".join(_NUM_WORDS) + r"|[0-9]{1,3})(?:\s*\([0-9]{1,3}\))?\s+"
-    r"(?:(?:dias?|dies)\s+)?(habiles|habils|naturales|naturals|meses|mesos|mes)(?![a-z])"
+    r"(?:(dias?|dies)(?![a-z])\s*(?:\([0-9]{1,3}\)\s*)?)?(habiles|habils|naturales|naturals|meses|mesos|mes)?(?![a-z])"
 )
 _SAME_DAY_NEXT_MONTH = re.compile(r"\b(mismo|mesmo) ordinal\b")  # Galicia: "mismo ordinal del mes siguiente"
-_FROM_PUBLICATION = re.compile(r"publicac|publicidad|publicacio|endema")
+_FROM_PUBLICATION = re.compile(r"publicac|publicidad|publicacio|\bpublic\b|endema|extract")
 _NO_FIXED_END = ("todo el ano", "tot l any", "todo o ano", "permanent", "hasta agotar", "fins a esgotar",
                  "ata esgotar", "mientras exista", "pendiente de", "no es necesario", "convocatoria abierta",
                  "de forma continua")  # fmt: skip
@@ -123,7 +126,11 @@ def estimated_end(term: str | None, published: str | None, opens: str | None) ->
     if not term or not (published or opens):
         return None
     text = normalize_text(term)
-    found = {(_NUM_WORDS.get(n) or int(n), "mes" if u.startswith("mes") else u[:5]) for n, u in _TERM_RE.findall(text)}
+    found = {
+        (_NUM_WORDS.get(n) or int(n), "mes" if u.startswith("mes") else u[:5] if u else "habil")
+        for n, d, u in _TERM_RE.findall(text)
+        if d or u
+    }
     if _SAME_DAY_NEXT_MONTH.search(text):
         found.add((1, "mes"))
     if len(found) != 1 or not _FROM_PUBLICATION.search(text):
@@ -146,7 +153,8 @@ def estimated_end(term: str | None, published: str | None, opens: str | None) ->
     return end, f"{label} desde {'la apertura del plazo' if opens else 'la publicación'}"
 
 
-def _short_date(d: date) -> str:
+def short_date(d: date) -> str:
+    """ "11 feb 2026"."""
     return f"{d.day} {_MONTHS_SHORT[d.month - 1]} {d.year}"
 
 
@@ -280,24 +288,18 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
         # started 45+ days ago, BDNS says not open and no end date: treat as closed
         deadline_state = "cerrada"
     elif inp.abierto is not True and inp.fecha_publicacion:
-        # no end date and BDNS does not say open: estimate from the term, else from the age of the publication
-        today_d = today_dt.date()
-        if est := estimated_end(inp.texto_plazo, inp.fecha_publicacion, inp.fecha_inicio_solicitud):
-            if est[0] < today_d:
-                deadline_state = "cerrada"
-                warnings.append(f"Plazo estimado: cerró hacia el {_short_date(est[0])} ({est[1]}).")
-        else:
-            try:
-                age = (today_d - date.fromisoformat(inp.fecha_publicacion[:10])).days
-            except ValueError:
-                age = 0
-            open_ended = normalize_text(f"{inp.texto_plazo or ''} {inp.titulo}")
-            if age >= STALE_UNDATED_DAYS and not any(t in open_ended for t in _NO_FIXED_END):
-                deadline_state = "cerrada"
-                warnings.append(
-                    f"Probablemente cerrada: sin fecha de cierre y publicada hace {age // 30} meses; "
-                    "confirmar en las bases."
-                )
+        # no end date (not even an estimate: the connector estimates from the term) and BDNS does not say open
+        try:
+            age = (today_dt.date() - date.fromisoformat(inp.fecha_publicacion[:10])).days
+        except ValueError:
+            age = 0
+        open_ended = normalize_text(f"{inp.texto_plazo or ''} {inp.titulo}")
+        if age >= STALE_UNDATED_DAYS and not any(t in open_ended for t in _NO_FIXED_END):
+            deadline_state = "cerrada"
+            warnings.append(
+                f"Probablemente cerrada: sin fecha de cierre y publicada hace {age // 30} meses; "
+                "confirmar en las bases."
+            )
 
     # Closed competitive grant open to non-profits = next year's pipeline: keep its fit, small timing
     # penalty only (an open equivalent gets +10, so it always ranks above). Anything else closed sinks.
@@ -312,18 +314,23 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
         raw += 4 if recurring_grant else -15
         if is_competitive and not hard_block:
             local_end = end.astimezone(settings.tz) if end else None
-            closed_on = f"cerró el {local_end.day}/{local_end.month}/{local_end.year}" if local_end else "ya cerró"
+            closed_on = "ya cerró"
+            if local_end:
+                on = f"{local_end.day}/{local_end.month}/{local_end.year}"
+                closed_on = f"cerró hacia el {on} (fecha estimada)" if inp.deadline_estimated else f"cerró el {on}"
             reasons.append(f"Convocatoria periódica: la edición actual {closed_on}; prepara la siguiente con tiempo.")
         else:
             warnings.append("Plazo cerrado.")
     elif deadline_state == "abierta":
         raw += 10
+        about = "unos " if inp.deadline_estimated else ""
+        estimated = " (fecha estimada)" if inp.deadline_estimated else ""
         if days_remaining is not None and days_remaining <= 7:
             plural = "" if days_remaining == 1 else "s"
-            warnings.append(f"Cierra en {days_remaining} día{plural}: valorar si da tiempo.")
+            warnings.append(f"Cierra en {about}{days_remaining} día{plural}{estimated}: valorar si da tiempo.")
         else:
             reasons.append(
-                f"Plazo abierto: quedan {days_remaining} días."
+                f"Plazo abierto: quedan {about}{days_remaining} días{estimated}."
                 if days_remaining is not None
                 else "Plazo de solicitud abierto."
             )

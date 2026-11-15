@@ -78,4 +78,5 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0025](0025-servidor-mcp-de-solo-lectura.md) | Servidor MCP de solo lectura para el asistente del equipo | Sustituida por 0026 | 2026-11-15 |
 | [0026](0026-servidor-mcp-de-solo-lectura-con-dos-niveles.md) | Servidor MCP de solo lectura en `/mcp`, con acceso público y de equipo | Aceptada | 2026-11-15 |
 | [0027](0027-tokens-personales-para-el-mcp.md) | Tokens personales de acceso para el servidor MCP | Aceptada | 2026-11-15 |
-| [0028](0028-plazo-estimado-de-las-convocatorias-sin-fecha.md) | Plazo estimado de las convocatorias BDNS sin fecha de cierre | Aceptada | 2026-11-15 |
+| [0028](0028-plazo-estimado-de-las-convocatorias-sin-fecha.md) | Plazo estimado de las convocatorias BDNS sin fecha de cierre | Sustituida por 0029 | 2026-11-15 |
+| [0029](0029-plazo-estimado-guardado-y-marcado.md) | Plazo estimado: se guarda como fecha de cierre, marcado como estimado | Aceptada | 2026-11-15 |

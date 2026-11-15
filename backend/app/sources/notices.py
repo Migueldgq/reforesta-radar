@@ -99,6 +99,29 @@ def extract_notice_details(text: str) -> tuple[str | None, str | None]:
     return (plazo.strip() if plazo else None, objeto.strip() if objeto else None)
 
 
+_DANGLING = frozenset(("de", "del", "la", "las", "el", "los", "en", "y", "e", "o", "a", "al", "que", "por", "para",
+                       "con", "su", "sus", "desde", "hasta", "tras"))  # fmt: skip
+
+
+def excerpt(text: str, limit: int = 110, source_limit: int = 100) -> str:
+    """A source's free text, ready to quote in a sentence: at most `limit` characters, cut at a word boundary, and
+    "…" when it was cut here or arrives cut by the source (BDNS truncates textInicio/textFin at `source_limit`
+    characters: "…y del extracto de"). A cut text loses its dangling last words ("de", "del", "y"…)."""
+    flat = " ".join(text.split())
+    words = flat.split(" ")
+    out: list[str] = []
+    for w in words:
+        if len(" ".join([*out, w])) > limit:
+            break
+        out.append(w)
+    cut = len(out) < len(words) or (len(flat) >= source_limit and not flat.endswith((".", ")", "»")))
+    if not cut:
+        return flat
+    while len(out) > 1 and normalize_text(out[-1].strip(",;:")) in _DANGLING:
+        out.pop()
+    return " ".join(out).rstrip(",;:. ") + "…"
+
+
 _MONTHS = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
            "noviembre", "diciembre")  # fmt: skip
 _NUMERIC_DATE = re.compile(r"\b([0-9]{1,2})[/.]([0-9]{1,2})[/.]([0-9]{4}|[0-9]{2})\b", re.ASCII)

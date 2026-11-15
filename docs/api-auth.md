@@ -254,6 +254,7 @@ or the team profile.
 ```ts
 // GET /api/oportunidades and GET /api/public/oportunidades
 type OpportunitiesResponse = { /* …as before… */ ingest: { running: boolean; startedAt: string | null } };
+type Opportunity = { /* …as before… */ deadlineEstimated: boolean };
 // SourceHealth.status in both responses and in GET /api/fuentes
 type HealthStatus = "ok" | "partial" | "error" | "disabled";
 ```
@@ -262,5 +263,9 @@ type HealthStatus = "ok" | "partial" | "error" | "disabled";
   than an hour ago); `startedAt` is its start (ISO), `null` when nothing runs. On a fresh install `items` is empty
   and `running` true until the first load finishes (a few minutes): show «Cargando las fuentes por primera vez…»
   instead of an empty radar, and poll. `lastIngestAt` still means the last *finished* ingest.
+- `deadlineEstimated: true`: `deadline` was estimated from the term the source gives ("10 días hábiles desde la
+  publicación"), not stated by it ([ADR 0029](adr/0029-plazo-estimado-guardado-y-marcado.md)). Keep using it to sort
+  and count days, but never show it as exact: «hacia el 18 nov · fecha estimada», «quedan unos 3 días». The fit
+  reasons and warnings already say so.
 - `"disabled"`: the source is switched off with `RADAR_DISABLED_SOURCES` (show «Desactivada»; `count` is 0 and
   `note` explains it). Its calls are left out of `items`.

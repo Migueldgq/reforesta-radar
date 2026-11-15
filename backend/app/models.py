@@ -94,6 +94,8 @@ class OpportunityBase(Contract):
     opens_at: str | None = None
     deadline: str | None = None
     deadline_text: str | None = None
+    # `deadline` was estimated from a term ("10 días hábiles desde la publicación"), not stated by the source (ADR 0029)
+    deadline_estimated: bool = False
     budget: float | None = None  # euros
     amount_text: str | None = None
     tipo: str | None = None
