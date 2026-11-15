@@ -26,7 +26,7 @@ Relación con los tres criterios de evaluación:
 2. **Funciona con convocatorias reales.** Todos los datos salen en vivo de fuentes oficiales. La prueba de la organización: las dos convocatorias de ejemplo del reto aparecen en la lista, ambas como convocatorias periódicas cerradas, con el motivo «la edición actual cerró el …; prepara la siguiente con tiempo»:
    - **BDNS 923290** — MITECO, ayudas para actividades de interés general en investigación científica y técnica y protección del medio ambiente, anualidad 2026 (cerró el 24/08/2026, fecha estimada).
    - **BDNS 904719** — Comunidad de Madrid, subvenciones a entidades sin ánimo de lucro para proyectos ambientales 2026 (Orden 1689/2026; cerró el 08/06/2026).
-3. **El lunes.** Se arranca con un solo `docker compose up` y se abre en el navegador: sin cuentas ni claves de API. Una ingesta programada consulta las fuentes cada mañana a las 9:00; si una fuente falla, se siguen mostrando sus últimos datos buenos y la vista Fuentes lo dice.
+3. **El lunes.** Se arranca con un solo `docker compose up` y se abre en el navegador, sin claves de API. El equipo entra con cuentas propias que un administrador crea por invitación; la portada es pública. Una ingesta programada consulta las fuentes cada mañana a las 9:00; si una fuente falla, se siguen mostrando sus últimos datos buenos y la vista Fuentes lo dice.
 
 ---
 
@@ -40,7 +40,7 @@ Relación con los tres criterios de evaluación:
 - Al abrir una oportunidad se ve el detalle: motivos y avisos, plazos, importe, beneficiarios, enlaces oficiales y documentos adjuntos, que se pueden analizar con un clic.
 - La última lista descargada se guarda en el navegador, así que la página se pinta al instante y se actualiza por detrás. Si la API no responde, se sigue viendo esa copia con un aviso.
 
-**Seguimiento.** Tablero con cuatro columnas: En estudio, A presentar, Presentada y Descartada. Las tarjetas se mueven arrastrándolas. Destaca la siguiente convocatoria que cierra. El estado se guarda en el navegador (ver limitaciones).
+**Seguimiento.** Tablero con cuatro columnas: En estudio, A presentar, Presentada y Descartada. Las tarjetas se mueven arrastrándolas. Destaca la siguiente convocatoria que cierra. Es del equipo: estado, responsable y notas se guardan en el servidor y cada persona ve los cambios de las demás en menos de un minuto.
 
 **Empresas.** Programas de fundaciones y empresas (6 a día de hoy, comprobados en la web de cada entidad el 15 nov 2026): importe y plazo tal como los publican, requisitos, territorio si lo limitan, por qué puede encajar y qué lo limita, con enlaces a la convocatoria y a las bases. Si una convocatoria está abierta sale como cualquier otra (con los días que quedan); si está cerrada, como próxima edición. Incluye una guía de tres pasos: elegir dos o tres, marcarlas «En estudio», leer las bases antes de preparar nada.
 
@@ -95,6 +95,8 @@ docker compose up -d --build   # Postgres + API + ingesta programada + web
 - API (FastAPI): http://localhost:8010, documentación en http://localhost:8010/docs.
 - La primera ingesta empieza sola al arrancar y tarda unos minutos; después se repite cada día a las 9:00 (hora de Madrid, `RADAR_INGEST_AT`; si el equipo estaba dormido, al despertar). Para lanzar una a mano: `docker compose run --rm ingest` (o `--source boe,rsc` para algunas fuentes).
 - Puertos, contraseña de Postgres e intervalo de ingesta: copiar `.env.example` a `.env` y editarlo.
+- Primera cuenta (administración): `docker compose run --rm api python -m app.users create-admin <correo> --name <nombre>` (enseña la contraseña una sola vez). Las demás se crean desde **Equipo → Invitar**, que da un enlace para enviar a mano.
+- Los enlaces de invitación y de restablecer contraseña se construyen con `RADAR_PUBLIC_URL` (por defecto `http://localhost:3010`). Pon ahí la dirección pública real; con `npm run dev` en el puerto 3000, cambia el puerto del enlace a mano. Detalles en [docs/api-auth.md](./docs/api-auth.md).
 
 Desarrollo del frontend (recarga en caliente, Node.js 20.9 o superior):
 
@@ -135,7 +137,6 @@ fuentes ──► ingesta (diaria, 9:00) ──► Postgres ◄── API (FastA
 
 - **Plazos de la BDNS.** Muchas convocatorias no publican fecha exacta, solo «20 días hábiles desde la publicación». En la foto del 15/11/2026, 311 de los 481 resultados de la BDNS no tienen fecha de cierre. En 89 casos la fecha se estima y lleva el aviso «confirmar en el extracto oficial».
 - **Fichas BDNS incompletas.** Solo se descarga la ficha completa de las 230 convocatorias más prometedoras de cada consulta. El resto se muestra con los datos de la búsqueda y un aviso; puede faltar plazo, tipo o beneficiarios.
-- **El seguimiento es de cada navegador.** El tablero se guarda en el navegador (`localStorage`): no se comparte entre el equipo ni entre dispositivos.
 - **Lista de empresas hecha a mano.** Los datos de la lista RSC se comprobaron en la web de cada entidad el 15 nov 2026, pero no se actualizan solos: al cerrar o abrir una edición hay que cambiarlos en `backend/app/sources/rsc.py`. Las bases de BBVA Futuro no se pudieron leer y su ficha lo indica.
 - **LIFE.** Ahora mismo no hay ninguna convocatoria LIFE de naturaleza abierta. La única LIFE abierta (European City Facility) es de transición energética y va dirigida a municipios. La mayoría de los fondos europeos que aparecen son de Horizon Europe, para consorcios de investigación.
 - **Las reglas se pueden equivocar.** La puntuación busca palabras, no entiende el texto: puede dar nota alta a algo que no encaja o pasar por alto una convocatoria redactada de forma poco habitual. Por eso siempre muestra sus motivos.
