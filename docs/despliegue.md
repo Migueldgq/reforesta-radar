@@ -17,8 +17,8 @@ Internet ──▶ cortafuegos de Oracle (lista de seguridad de la VCN: 22, 80, 
          ──▶ web :3000 (Next.js; reenvía /api/*, /mcp*, /oauth/*, /.well-known/oauth-* a la API)
          ──▶ api :8000 (FastAPI) ──▶ postgres :5432
              ingest-scheduler (carga diaria a las 9:00, hora de Madrid)
-Panel de Dokploy :3000 ── desde el propio servidor (túnel SSH); y, si se publica (ADR 0043),
-                          Traefik :443 solo para panel.miguelddev.com
+Panel de Dokploy :3000 ── desde el propio servidor (túnel SSH), y por Traefik :443 solo para
+                          panel.miguelddev.com (ADR 0043)
 ```
 
 Traefik solo ve `web`, por la red `reforesta-radar-edge`. `api` y `postgres` solo son alcanzables dentro de la red
@@ -29,7 +29,7 @@ del proyecto. Ningún servicio del radar publica puertos.
 | Servidor | Oracle Cloud Always Free, Frankfurt, una VM Ampere A1 (ARM, 2 OCPU, 12 GB, disco de 48 GB), Ubuntu 24.04, hora del sistema en UTC |
 | Acceso | `ssh ubuntu@<IP>` con la clave del responsable (usuario con `sudo`) |
 | Dokploy | v0.31.2 (servicios de Swarm `dokploy` y `dokploy-postgres`, contenedor `dokploy-traefik`); datos en `/etc/dokploy` y en los volúmenes `dokploy` y `dokploy-postgres` |
-| La app | Proyecto «Reforesta Radar» → app compose «Radar» (`<app>`). Su copia del repositorio: `/etc/dokploy/compose/<app>/code` (solo root) |
+| La app | Proyecto «Reforesta Radar» → app compose «Radar» (`<app>`). Su copia del repositorio: `/etc/dokploy/compose/<app>/code` (solo root: lo protege `/etc/dokploy/compose` en modo 700, que pone `setup-server.sh` y Dokploy no cambia; el `code/.env` que Dokploy reescribe en cada despliegue queda en 644 dentro) |
 | Ficheros de compose | `docker-compose.yml` + `docker-compose.prod.yml` (comando propio de la app, abajo) |
 | Secretos | En el entorno de la app en Dokploy (`RADAR_DOMAIN`, `RADAR_DB_PASSWORD` y, opcional, `GEMINI_API_KEY`), que Dokploy escribe en `code/.env` al desplegar. Nunca en git |
 | Configuración del servidor | `/etc/reforesta-radar/deploy.env` (app, id, dominio, rama; sin secretos), `/etc/reforesta-radar/dokploy-api-key` (600), `/etc/reforesta-radar/backup.env` (600, opcional) |
@@ -49,9 +49,9 @@ es la de GitHub Actions, que solo puede pedir `deploy <commit>`. Los comandos de
 
 ## El panel de Dokploy
 
-Hoy el panel **no** es alcanzable desde internet: el puerto 3000 está cerrado en Oracle y en el propio servidor
-(`DOCKER-USER`), y `setup-server.sh` quita la ruta que Dokploy crea en Traefik para `Host: dokploy.docker.localhost`.
-Se puede publicar en `https://panel.miguelddev.com` con 2FA obligatorio ([abajo](#el-panel-con-dominio-panelmiguelddevcom)).
+Hoy el panel está publicado en <https://panel.miguelddev.com>, con 2FA obligatorio
+([abajo](#el-panel-con-dominio-panelmiguelddevcom)). Su puerto 3000 sigue cerrado desde internet (Oracle y
+`DOCKER-USER`), y `setup-server.sh` quita la ruta que Dokploy crea en Traefik para `Host: dokploy.docker.localhost`.
 El túnel funciona siempre, publicado o no: es la entrada de emergencia. Para entrar por él, desde tu ordenador:
 
 ```bash
@@ -81,7 +81,7 @@ y abre <http://localhost:3300> (el 3000 local lo usa `npm run dev`). Cierra el t
 
 ### El panel con dominio (`panel.miguelddev.com`)
 
-[ADR 0043](adr/0043-panel-de-dokploy-con-dominio-publico.md) (propuesta). Más cómodo (entra desde el móvil), pero
+[ADR 0043](adr/0043-panel-de-dokploy-con-dominio-publico.md) (publicado el 2026-11-15). Más cómodo (entra desde el móvil), pero
 **el panel equivale a root en la máquina** (controla Docker): quien entre controla el servidor y todos los proyectos.
 Un interruptor en el servidor, `reforesta-panel` (`deploy/panel.sh`, instalado por `setup-server.sh`):
 
@@ -102,7 +102,7 @@ Let's Encrypt en segundos. `private` lo borra. El radar no se corta en ningún c
 3. En el servidor: `cd /opt/reforesta-radar && sudo git pull` (si aún no tiene este cambio),
    `sudo ./deploy/setup-server.sh` (instala `reforesta-panel`) y `sudo reforesta-panel public`.
 4. Desde fuera: `PANEL_URL=https://panel.miguelddev.com deploy/smoke.sh https://reforesta-radar.miguelddev.com`, y
-   entra en el panel. En el ADR 0043, estado «Aceptada».
+   entra en el panel.
 
 **Qué hace la ruta:** solo `Host: panel.miguelddev.com`, solo por https (en http, 301 a https); cualquier otro
 nombre, la IP sola o `dokploy.docker.localhost` dan 404. Certificado del resolvedor `letsencrypt` de siempre (cuenta
@@ -156,7 +156,8 @@ se saltaría CI. Por eso la app tiene **Auto Deploy apagado** y el script fija e
 
 La rama que acepta el script es `RADAR_DEPLOY_BRANCH` en `/etc/reforesta-radar/deploy.env` (`main`). La rama de la
 app en el panel solo la usa el botón **Deploy** (que no se usa); que diga `main` para que, si alguien lo pulsa, al
-menos clone `main`.
+menos clone `main`. Con el proveedor **Git** esa rama es el campo `customGitBranch` de la API (**General → Provider:
+Git → Branch**); el campo `branch` es el del proveedor GitHub y aquí no se usa. Compruébalo con `compose.one`.
 
 ### Desplegar a mano
 
