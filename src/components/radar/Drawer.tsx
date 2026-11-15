@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Award, CircleAlert, CircleCheck, FileText, Loader2, ScanSearch, Trash2 } from "lucide-react";
+import { ArrowUpRight, Award, CircleAlert, CircleCheck, FileText, Loader2, ScanSearch, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
 import { Fragment, useState, type FormEvent } from "react";
 import type { AwardsSummary, History, Opportunity, OpportunityDocument } from "@/lib/opportunity";
 import type { PdfAnalysisResult } from "@/lib/types";
@@ -11,7 +11,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { daysLeft, fmtDate, fmtDayShort, fmtEuros, joinEs, KIND_LABELS, parseDay, tidy, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel } from "./model";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSession } from "@/components/auth/session";
-import { fmtWhenShort, type BoardItem } from "@/lib/team";
+import { fmtWhenShort, type BoardItem, type VoteValue } from "@/lib/team";
+import { Input } from "@/components/ui/input";
 import { stub, useRadar } from "./store";
 import { analyzePdf, PdfResult } from "./PdfView";
 import { ConfirmDialog, DeadlineChip, GoneNote, PersonAvatar, ScoreChip, textareaClass } from "./ui";
@@ -118,6 +119,7 @@ function DrawerBody({ o }: { o: Opportunity }) {
       </ul>
     </section>,
     <TriagePicker key="triage" o={o} />,
+    <VoteSection key="vote" o={o} />,
     <TeamSection key="team" o={o} />,
     <section key="facts" className="space-y-3">
       <SectionTitle>Lo esencial</SectionTitle>
@@ -393,6 +395,93 @@ function TriagePicker({ o }: { o: Opportunity }) {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+/* ---------- "¿Os sirve?" votes (they tune the scoring rules over time) ---------- */
+
+const VOTE_LABEL: Record<VoteValue, string> = { sirve: "Nos sirve", no_sirve: "No nos sirve" };
+
+function VoteSection({ o }: { o: Opportunity }) {
+  const { votes, setVote, clearVote } = useRadar();
+  const { me } = useSession();
+  const all = votes.filter((v) => v.opportunityId === o.id);
+  const my = all.find((v) => v.user.id === me.id);
+  const others = all.filter((v) => v.user.id !== me.id);
+  const [reason, setReason] = useState(my?.reason ?? "");
+  const yes = all.filter((v) => v.vote === "sirve").length;
+  const no = all.length - yes;
+
+  const choose = (v: VoteValue) => setVote(o.id, v, reason.trim());
+
+  return (
+    <section aria-labelledby="vote-h" className="space-y-3">
+      <div className="space-y-0.5">
+        <SectionTitle id="vote-h">¿Os sirve esta convocatoria?</SectionTitle>
+        <p className="text-xs text-muted-foreground">Vuestros votos ayudan a ajustar cómo puntúa el radar.</p>
+      </div>
+      <div role="group" aria-labelledby="vote-h" className="flex flex-wrap gap-1.5">
+        {(["sirve", "no_sirve"] as const).map((v) => {
+          const on = my?.vote === v;
+          const Icon = v === "sirve" ? ThumbsUp : ThumbsDown;
+          return (
+            <Button key={v} size="sm" variant={on ? "default" : "outline"} aria-pressed={on} onClick={() => choose(v)}>
+              <Icon aria-hidden /> {VOTE_LABEL[v]}
+            </Button>
+          );
+        })}
+        {my && (
+          <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => clearVote(o.id)}>
+            Quitar mi voto
+          </Button>
+        )}
+      </div>
+      {my && (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (reason.trim() !== my.reason) choose(my.vote);
+          }}
+        >
+          <label htmlFor={`reason-${o.id}`} className="sr-only">
+            Por qué (opcional)
+          </label>
+          <Input
+            id={`reason-${o.id}`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            maxLength={500}
+            placeholder="Por qué (opcional): p. ej. «solo para ayuntamientos»"
+            className="h-8 flex-1"
+          />
+          <Button type="submit" size="sm" variant="outline" disabled={reason.trim() === my.reason}>
+            Guardar
+          </Button>
+        </form>
+      )}
+      {all.length > 0 && (
+        <div className="space-y-2 rounded-lg bg-muted/50 px-3.5 py-3">
+          <p className="text-xs text-muted-foreground tabular-nums">
+            Votos del equipo · Nos sirve: {yes} · No nos sirve: {no}
+          </p>
+          {others.length > 0 && (
+            <ul className="space-y-1.5">
+              {others.map((v) => (
+                <li key={v.user.id} className="flex items-start gap-2 text-sm">
+                  {v.vote === "sirve" ? <ThumbsUp className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden /> : <ThumbsDown className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />}
+                  <span className="min-w-0">
+                    <span className="font-medium">{v.user.name || "Alguien"}</span>
+                    <span className="text-muted-foreground">: {VOTE_LABEL[v.vote].toLowerCase()}</span>
+                    {v.reason && <span className="break-words text-muted-foreground"> · «{v.reason}»</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </section>
   );
 }

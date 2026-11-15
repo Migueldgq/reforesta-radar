@@ -12,7 +12,7 @@ import {
 } from "react";
 import { api, errorText } from "@/lib/api";
 import type { OpportunitiesResponse, Opportunity } from "@/lib/opportunity";
-import type { BoardItem, Note, PersonRef, TeamPerson } from "@/lib/team";
+import type { BoardItem, Note, PersonRef, TeamPerson, Vote, VoteValue } from "@/lib/team";
 import { useSession } from "@/components/auth/session";
 import { importLocalState } from "./import-local";
 import { DEFAULT_FILTERS, filtersFromUrl, noOpenHighFit, urlPinsAhora, withPlazoView, type Filters, type Triage } from "./model";
@@ -110,6 +110,11 @@ interface RadarState {
   setAssignee: (o: Snapshot, person: PersonRef | null) => void;
   addNote: (o: Snapshot, body: string) => Promise<boolean>;
   deleteNote: (id: string, noteId: number) => void;
+
+  /** Everyone's "¿Os sirve?" votes. */
+  votes: Vote[];
+  setVote: (id: string, vote: VoteValue, reason: string) => void;
+  clearVote: (id: string) => void;
 
   notices: Notice[];
   notify: (text: string, tone?: Notice["tone"]) => void;
@@ -342,9 +347,62 @@ export function RadarProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /* ----- Votes ----- */
+
+  const [votes, setVotes] = useState<Vote[]>([]);
+  const votesPending = useRef(0);
+  const refreshVotes = useCallback(async () => {
+    try {
+      const r = await api<{ votes: Vote[] }>("/api/votes");
+      if (votesPending.current === 0) setVotes(r.votes);
+    } catch {
+      /* keep what we have */
+    }
+  }, []);
+
+  const mine = useCallback((v: Vote, id: string) => v.opportunityId === id && v.user.id === me.id, [me.id]);
+
+  const setVote = useCallback<RadarState["setVote"]>(
+    (id, vote, reason) => {
+      let prev: Vote[] = [];
+      const optimistic: Vote = { opportunityId: id, user: { id: me.id, name: me.name }, vote, reason, updatedAt: new Date().toISOString() };
+      setVotes((vs) => {
+        prev = vs;
+        return [...vs.filter((v) => !mine(v, id)), optimistic];
+      });
+      votesPending.current++;
+      api<Vote>(`/api/votes/${encodeURIComponent(id)}`, { method: "PUT", json: { vote, reason } })
+        .then((saved) => setVotes((vs) => [...vs.filter((v) => !mine(v, id)), saved]))
+        .catch((e) => {
+          setVotes(prev);
+          notify(`No se ha guardado tu voto. ${errorText(e)}`, "error");
+        })
+        .finally(() => votesPending.current--);
+    },
+    [me, mine, notify],
+  );
+
+  const clearVote = useCallback<RadarState["clearVote"]>(
+    (id) => {
+      let prev: Vote[] = [];
+      setVotes((vs) => {
+        prev = vs;
+        return vs.filter((v) => !mine(v, id));
+      });
+      votesPending.current++;
+      api(`/api/votes/${encodeURIComponent(id)}`, { method: "DELETE" })
+        .catch((e) => {
+          setVotes(prev);
+          notify(`No se ha quitado tu voto. ${errorText(e)}`, "error");
+        })
+        .finally(() => votesPending.current--);
+    },
+    [mine, notify],
+  );
+
   const refreshTeam = useCallback(
-    () => Promise.all([refreshBoard(), refreshPeople(), refreshSettings()]).then(() => undefined),
-    [refreshBoard, refreshPeople, refreshSettings],
+    () => Promise.all([refreshBoard(), refreshPeople(), refreshSettings(), refreshVotes()]).then(() => undefined),
+    [refreshBoard, refreshPeople, refreshSettings, refreshVotes],
   );
 
   // Load once (after the first-login import), then every minute and whenever the tab comes back, so colleagues' changes show up.
@@ -496,6 +554,9 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       setAssignee,
       addNote,
       deleteNote,
+      votes,
+      setVote,
+      clearVote,
       notices,
       notify,
       dismiss,
@@ -505,7 +566,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       openDetail: setSelectedId,
       closeDetail: () => setSelectedId(null),
     }),
-    [data, rawData, profile, setProfile, settings, profileSave, loading, refreshing, error, reload, byId, board, boardLoaded, people, triageOf, setTriage, setAssignee, addNote, deleteNote, notices, notify, dismiss, filters, selectedId],
+    [data, rawData, profile, setProfile, settings, profileSave, loading, refreshing, error, reload, byId, board, boardLoaded, people, triageOf, setTriage, setAssignee, addNote, deleteNote, votes, setVote, clearVote, notices, notify, dismiss, filters, selectedId],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
