@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import type { OpportunitiesResponse, Opportunity } from "@/lib/opportunity";
-import { DEFAULT_FILTERS, filtersFromUrl, noOpenHighFit, withPlazoView, type Filters, type Triage } from "./model";
+import { DEFAULT_FILTERS, filtersFromUrl, noOpenHighFit, urlPinsAhora, withPlazoView, type Filters, type Triage } from "./model";
 import { applyProfileAll, DEFAULT_USER_PROFILE, isNeutral, loadProfile, saveProfile, subscribeProfile, type UserProfile } from "./profile";
 
 /* ---------- Last payload cached for instant paint ---------- */
@@ -215,7 +215,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       // Organisms in the URL win; otherwise restore the ones chosen last time.
       const init = filtersFromUrl() ?? DEFAULT_FILTERS;
       const organismo = init.dims.organismo.length ? init.dims.organismo : readOrgs();
-      if (!init.hideClosed || init.dims.plazo.length) toNextEditions.current = false;
+      if (!init.hideClosed || init.dims.plazo.length || urlPinsAhora()) toNextEditions.current = false;
       const start = { ...init, dims: { ...init.dims, organismo } };
       // Idempotent: Strict Mode runs this twice, and the second run must not undo the first decision.
       setFilters(cached && decideNextEditions(cached.items) ? withPlazoView(start, "ediciones") : start);

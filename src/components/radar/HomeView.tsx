@@ -124,11 +124,15 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
   const [more, setMore] = useState(false);
   const hay = useMemo(() => new Map(items.map((o) => [o.id, haystackOf(o)])), [items]);
 
-  // Keep the filters in the URL so links can be shared.
+  // Same rule the store uses to open on "Próximas ediciones": the whole radar, not the filtered list.
+  const quiet = useMemo(() => noOpenHighFit(items), [items]);
+
+  // Keep the filters in the URL so links can be shared. While the default is "Próximas ediciones",
+  // choosing "Para pedir ahora" is marked too, so a reload stays there.
   useEffect(() => {
-    const q = filtersToQuery(filters);
+    const q = filtersToQuery(filters, quiet && plazoViewOf(filters) === "ahora");
     if (window.location.pathname === "/" && window.location.search !== q) window.history.replaceState(null, "", `/${q}`);
-  }, [filters]);
+  }, [filters, quiet]);
 
   const subset = useMemo(
     () => (skip: Skip) => items.filter((o) => matches(o, filters, triageOf(o.id), hay.get(o.id)!, skip)),
@@ -212,8 +216,6 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
     todas: anyPlazo.length,
   };
   const setView = (v: PlazoView) => setFilters((f) => withPlazoView(f, v));
-  // Same rule the store uses to open on "Próximas ediciones": the whole radar, not the filtered list.
-  const quiet = useMemo(() => noOpenHighFit(items), [items]);
   // High fit across every deadline state: today the strongest matches may all be closed recurring grants.
   const allPlazo = withPlazoView(filters, "todas");
   const altoAll = items.filter((o) => o.fit.tier === "alto" && matches(o, allPlazo, triageOf(o.id), hay.get(o.id)!, "tier"));

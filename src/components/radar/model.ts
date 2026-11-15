@@ -329,8 +329,14 @@ export function noOpenHighFit(items: Opportunity[]): boolean {
 
 const URL_DIMS: Dim[] = ["plazo", "kind", "source", "organismo", "region", "workLine", "tier", "budget", "triage"];
 
-export function filtersToQuery(f: Filters): string {
+/** `vista=ahora` pins "Para pedir ahora" when the home would otherwise open on "Próximas ediciones". */
+export function urlPinsAhora(): boolean {
+  return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("vista") === "ahora";
+}
+
+export function filtersToQuery(f: Filters, pinAhora = false): string {
   const p = new URLSearchParams();
+  if (pinAhora) p.set("vista", "ahora");
   if (f.q.trim()) p.set("q", f.q.trim());
   for (const d of URL_DIMS) if (f.dims[d].length) p.set(d, f.dims[d].join("|"));
   if (!f.hideClosed) p.set("cerradas", "1");
