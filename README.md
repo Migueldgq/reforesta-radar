@@ -30,7 +30,9 @@ Proyecto para **1hack A Coruña: el reto de Reforesta** (Common Seeds / The Agil
 - Historial de cada convocatoria BDNS: cuándo suele abrir, cuánto plazo da y qué tipo de entidad la ganó (Reforesta
   incluida).
 - **Analizar PDF**: sube unas bases (hasta 15 MB) o un documento de la convocatoria y devuelve una ficha (quién puede
-  pedirla, dinero, plazos, requisitos, qué vigilar) con la misma puntuación.
+  pedirla, dinero, plazos, requisitos, qué vigilar). Si el PDF es de una convocatoria del radar (por su documento o su
+  código BDNS), lleva la misma nota que en la lista; si no, la nota sale solo del texto del PDF, y si el PDF tiene muy
+  poco texto lo dice en vez de puntuarlo.
 - **Perfil**: el equipo ajusta la nota a su criterio (palabras extra, términos excluidos, prioridad por línea y
   territorio, tipos, importe mínimo). Es uno para todo el equipo.
 

@@ -296,7 +296,8 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
     ):
         manual_source_match = "Comunidad de Madrid (ambiental)"
     outside_manual_sources = manual_source_match is None
-    if outside_manual_sources and inp.kind != "empresa":
+    # an unknown organism (a PDF whose heading names none) is not known to be outside them: no reason, no bonus
+    if outside_manual_sources and inp.kind != "empresa" and inp.organismo.strip():
         raw += 4
         reasons.append(
             "No es de los organismos que ya revisáis a mano (Fundación Biodiversidad, MITECO, Comunidad de Madrid, "

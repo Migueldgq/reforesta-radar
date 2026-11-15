@@ -277,5 +277,11 @@ type HealthStatus = "ok" | "partial" | "error" | "disabled";
   The Perfil step in `src/components/radar/profile.ts` must clamp any increase the same way `team_profile.py` does:
   `if (score > fit.score && fit.scoreCap != null) score = Math.max(fit.score, Math.min(score, fit.scoreCap))`, or a
   CENEAM security tender climbs from 30 to "alto" on an Educación bonus.
+- `POST /api/analyze-pdf` adds `scoreSource: "radar" | "pdf" | "none"`, `callId: string | null` and
+  `notice: string | null` ([ADR 0033](adr/0033-analizar-pdf-con-la-nota-del-radar.md)). `"radar"`: the PDF belongs
+  to the call `callId` (found by `docId` or by the BDNS code printed in the PDF) and `fit` is that call's fit exactly
+  as in the list, before the Perfil step (apply it as for list items). `"pdf"`: scored on the PDF text alone.
+  `"none"`: too little text to score; hide the score and show `notice` («No hemos podido leer lo suficiente de este
+  PDF para puntuarlo.»). `organism` may now be `null` with no reason about it.
 - `"disabled"`: the source is switched off with `RADAR_DISABLED_SOURCES` (show «Desactivada»; `count` is 0 and
   `note` explains it). Its calls are left out of `items`.

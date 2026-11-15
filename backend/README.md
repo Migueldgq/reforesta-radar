@@ -237,8 +237,10 @@ the product and are not to be ported.
 
 - `POST /api/analyze-pdf` (`app/api/analyze_pdf.py`, `app/pdf/`): same request shapes (`sample`, `docId`, `pdfUrl`,
   multipart `file`), JSON and Spanish errors as the TS route; 15 MB cap (uploads too), 415 on non-PDF, LRU cache
-  (50) for remote PDFs. Text extraction uses `pypdf` (BSD) with unpdf's page-merge normalisation; on both samples
-  every field matches the TS except `charCount`/`excerpt` of the MITECO sample (pypdf drops one line break).
+  (50, extracted text) for remote PDFs. Text extraction uses `pypdf` (BSD) with unpdf's page-merge normalisation.
+  Summary, beneficiaries, budget and requirements still match the TS on both samples; title, organism, deadlines and
+  fit changed on purpose: a PDF of a call in the radar carries the list's fit, a PDF with under 3,000 characters is
+  not scored (ADR 0033).
   `pdfUrl` keeps the TS host allow-list and adds SSRF guards (see `app/pdf/download.py`). The sample PDFs are read
   from the repo's `data/samples` (`RADAR_SAMPLES_DIR` overrides); compose mounts them at `/data/samples` read-only.
 - `GET /api/perfil` (`app/api/perfil.py`): byte-identical to the TS route (`tests/golden/perfil.json`).

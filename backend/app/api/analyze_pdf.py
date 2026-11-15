@@ -14,10 +14,14 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from starlette.datastructures import UploadFile
 
-from app.pdf.analyzer import PdfAnalysisResult, analyze_pdf_bytes
+from app.api.state import iso, read_histories
+from app.models import Opportunity
+from app.pdf.analyzer import PdfAnalysisResult, analyze_text, bdns_number, read_pdf
 from app.pdf.download import MAX_PDF_BYTES, BlockedUrl, LruCache, download_pdf
+from app.scoring.rank import adjusted_fit
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -56,7 +60,8 @@ TOO_LARGE_ERROR = f"El PDF supera {MAX_PDF_BYTES // 1024 // 1024} MB; ábrelo en
 PROCESSING_ERROR = "Error procesando el PDF. Comprueba que sea un PDF válido con texto."
 HOST_ERROR = "Host de PDF no permitido."
 
-_cache: LruCache[PdfAnalysisResult] = LruCache()
+# Extracted text by URL (not the result: the radar's score of the call changes with each ingest)
+_cache: LruCache[tuple[int, str]] = LruCache()
 
 
 def _error(message: str, status: int) -> JSONResponse:
@@ -77,8 +82,47 @@ def _js_string(v: object) -> str:
     return str(v)
 
 
-async def _analyze(data: bytes, file_name: str) -> PdfAnalysisResult:
-    return await run_in_threadpool(analyze_pdf_bytes, data, file_name)
+CALL_BY_DOC_SQL = text(
+    "select data, first_seen_at from opportunities where data->'documents' @> cast(:doc as jsonb) "
+    "order by gone_at is not null, last_seen_at desc limit 1"
+)
+CALL_BY_ID_SQL = text("select data, first_seen_at from opportunities where id = :id")
+
+
+async def radar_call(request: Request, doc_id: int | None, bdns: str | None) -> Opportunity | None:
+    """The stored call a PDF belongs to (by its BDNS document id, else by the BDNS number printed in it), with the
+    fit the list shows for it (geographic, kind and history steps included). None when unknown or on any error:
+    the PDF is then scored on its own text."""
+    engine = getattr(request.app.state, "engine", None)
+    if engine is None or (doc_id is None and bdns is None):
+        return None
+    try:
+        async with engine.connect() as conn:
+            row = None
+            if doc_id is not None:
+                row = (await conn.execute(CALL_BY_DOC_SQL, {"doc": json.dumps([{"docId": doc_id}])})).first()
+            if row is None and bdns is not None:
+                row = (await conn.execute(CALL_BY_ID_SQL, {"id": f"bdns:{bdns}"})).first()
+            if row is None:
+                return None
+            o = Opportunity.model_validate({**row.data, "firstSeenAt": iso(row.first_seen_at)})
+            history = (await read_histories(conn, [o.id])).get(o.id)
+    except Exception:  # noqa: BLE001 - the analysis still works without the radar's score
+        log.exception("radar call lookup failed")
+        return None
+    o = o.model_copy(update={"history": history})
+    return o.model_copy(update={"fit": adjusted_fit(o)})
+
+
+async def _score(
+    request: Request, read: tuple[int, str], file_name: str, doc_id: int | None = None
+) -> PdfAnalysisResult:
+    call = await radar_call(request, doc_id, bdns_number(read[1]))
+    return await run_in_threadpool(analyze_text, *read, file_name, call)
+
+
+async def _analyze(request: Request, data: bytes, file_name: str) -> PdfAnalysisResult:
+    return await _score(request, await run_in_threadpool(read_pdf, data), file_name)
 
 
 async def _read_upload(file: UploadFile) -> bytes | None:
@@ -109,7 +153,7 @@ async def analyze_pdf(request: Request) -> JSONResponse:
                 return _error(TOO_LARGE_ERROR, 413)
             if not is_pdf(data):
                 return _error(NOT_PDF_ERROR, 415)
-            result = await _analyze(data, file.filename or "")
+            result = await _analyze(request, data, file.filename or "")
             return JSONResponse(result.to_json())
 
         body = json.loads(await request.body())
@@ -119,7 +163,7 @@ async def analyze_pdf(request: Request) -> JSONResponse:
         sample = SAMPLE_FILES.get(body["sample"]) if isinstance(body.get("sample"), str) else None
         if sample:
             data = await run_in_threadpool((SAMPLES_DIR / sample[0]).read_bytes)
-            result = await _analyze(data, sample[1])
+            result = await _analyze(request, data, sample[1])
             return JSONResponse(result.to_json())
 
         if body.get("docId"):
@@ -128,7 +172,8 @@ async def analyze_pdf(request: Request) -> JSONResponse:
                 doc_id, safe="!'()*"
             )
             name = body.get("fileName") or f"BDNS-doc-{doc_id}.pdf"
-            return await _analyze_remote(url, str(name), "No se pudo descargar el PDF desde la BDNS.")
+            doc_num = int(doc_id) if doc_id.isdigit() else None
+            return await _analyze_remote(request, url, str(name), "No se pudo descargar el PDF desde la BDNS.", doc_num)
 
         if body.get("pdfUrl"):
             try:
@@ -139,7 +184,7 @@ async def analyze_pdf(request: Request) -> JSONResponse:
                 return _error(HOST_ERROR, 400)
             path = parsed.raw_path.split(b"?", 1)[0].decode("ascii", errors="replace")
             name = body.get("fileName") or path.split("/")[-1] or "documento.pdf"
-            return await _analyze_remote(str(parsed), str(name), "No se pudo descargar el PDF oficial.")
+            return await _analyze_remote(request, str(parsed), str(name), "No se pudo descargar el PDF oficial.")
 
         return _error("Parámetros inválidos para analizar PDF.", 400)
     except Exception:
@@ -147,12 +192,13 @@ async def analyze_pdf(request: Request) -> JSONResponse:
         return _error(PROCESSING_ERROR, 500)
 
 
-async def _analyze_remote(url: str, file_name: str, fail_msg: str) -> JSONResponse:
-    """Download (15 s total, size cap, SSRF checks) + analyze; results cached by URL so re-opening is instant."""
-    key = f"{url}|{file_name}"
-    hit = _cache.get(key)
+async def _analyze_remote(
+    request: Request, url: str, file_name: str, fail_msg: str, doc_id: int | None = None
+) -> JSONResponse:
+    """Download (15 s total, size cap, SSRF checks) + analyze; the text is cached by URL so re-opening is instant."""
+    hit = _cache.get(url)
     if hit is not None:
-        return JSONResponse(hit.to_json())
+        return JSONResponse((await _score(request, hit, file_name, doc_id)).to_json())
     try:
         data = await download_pdf(url)
     except BlockedUrl as e:
@@ -164,6 +210,6 @@ async def _analyze_remote(url: str, file_name: str, fail_msg: str) -> JSONRespon
         return _error(fail_msg, 502)
     if not is_pdf(data):
         return _error(NOT_PDF_ERROR, 415)
-    result = await _analyze(data, file_name)
-    _cache.set(key, result)
-    return JSONResponse(result.to_json())
+    read = await run_in_threadpool(read_pdf, data)
+    _cache.set(url, read)
+    return JSONResponse((await _score(request, read, file_name, doc_id)).to_json())
