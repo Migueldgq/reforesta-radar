@@ -9,11 +9,14 @@ import { isNeutral, parseProfile, PROFILE_KEY } from "./profile";
 
 const TRACKING_KEY = "reforesta-radar:seguimiento:v1";
 const ORGS_KEY = "reforesta-radar:organismos:v1";
+const MAX_TRACKING = 2000;
 const KEYS = [TRACKING_KEY, PROFILE_KEY, ORGS_KEY];
 
 type ImportResult = {
   trackingImported: number;
   trackingKept: number;
+  /** Calls the radar never saw: not imported. */
+  trackingSkipped?: number;
   profile: "imported" | "kept" | "none";
   organisms: "imported" | "kept" | "none";
 };
@@ -40,9 +43,13 @@ function message(r: ImportResult): string | null {
   if (r.trackingImported > 0) parts.push(r.trackingImported === 1 ? "1 convocatoria en seguimiento" : `${r.trackingImported} convocatorias en seguimiento`);
   if (r.profile === "imported") parts.push("el perfil");
   if (r.organisms === "imported") parts.push("los organismos elegidos");
-  if (parts.length) return `Hemos pasado a la cuenta del equipo lo que tenías guardado en este navegador: ${joinEs(parts)}.`;
+  const skipped = r.trackingSkipped ?? 0;
+  const tail =
+    skipped > 0 ? ` ${skipped === 1 ? "1 convocatoria ya no estaba en el radar y no se ha pasado" : `${skipped} convocatorias ya no estaban en el radar y no se han pasado`}.` : "";
+  if (parts.length) return `Hemos pasado a la cuenta del equipo lo que tenías guardado en este navegador: ${joinEs(parts)}.${tail}`;
   if (r.trackingKept > 0 || r.profile === "kept" || r.organisms === "kept")
-    return "Lo que tenías guardado en este navegador ya estaba en la cuenta del equipo, así que no hemos cambiado nada.";
+    return `Lo que tenías guardado en este navegador ya estaba en la cuenta del equipo, así que no hemos cambiado nada.${tail}`;
+  if (tail) return `No hemos pasado nada a la cuenta del equipo:${tail}`;
   return null;
 }
 
@@ -54,7 +61,13 @@ async function run(): Promise<string | null> {
   if (tracking === undefined && profile === undefined && organisms === undefined) return null;
 
   const body: Record<string, unknown> = {};
-  if (tracking && typeof tracking === "object" && !Array.isArray(tracking) && Object.keys(tracking).length) body.tracking = tracking;
+  if (tracking && typeof tracking === "object" && !Array.isArray(tracking)) {
+    // The API takes at most 2000 entries; "nueva" entries are never imported anyway.
+    const entries = Object.entries(tracking as Record<string, { status?: unknown }>)
+      .filter(([, e]) => e && typeof e === "object" && e.status !== "nueva")
+      .slice(0, MAX_TRACKING);
+    if (entries.length) body.tracking = Object.fromEntries(entries);
+  }
   if (profile !== undefined) {
     const p = parseProfile(profile);
     if (!isNeutral(p)) body.profile = p;
