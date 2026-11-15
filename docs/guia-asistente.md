@@ -31,7 +31,10 @@ ti. Se hace una vez y tarda un par de minutos.
 6. Pulsa **Permitir**. La ventana vuelve a Claude y el conector aparece como conectado.
 
 Si en el paso 5 ves una etiqueta amarilla «**No reconocido**» o una dirección que no es `claude.ai`, pulsa
-**Cancelar**: no es Claude.
+**No permitir**: no es Claude.
+
+Continúa solo si tú mismo acabas de pulsar «Conectar» en tu propio Claude; si alguien te ha enviado el enlace de esa
+página, pulsa **No permitir**, aunque diga «Claude».
 
 En una conversación nueva, comprueba que el conector «Reforesta Radar» está activado (en el menú de herramientas,
 debajo de donde escribes) y pregunta.
@@ -93,6 +96,6 @@ Pide siempre el enlace oficial: las bases de la convocatoria mandan sobre lo que
 | «Correo o contraseña incorrectos» | Son los de la web del radar, no los de Claude. Si no la recuerdas, pide a un administrador un enlace para restablecerla. |
 | Funcionaba y ahora Claude dice que hay que volver a conectar | Has cambiado la contraseña, te han desconectado o lleva más de un mes sin usarse. Pulsa Conectar otra vez. |
 | Claude responde pero no sabe nada del tablero | Seguramente usaste la dirección que termina en `/mcp` (solo datos públicos). Quita ese conector y añade el de `/mcp/equipo`. |
-| Ves «No reconocido» al conectar | No continúes si no lo has conectado tú. Pulsa Cancelar. |
+| Ves «No reconocido» al conectar | No continúes si no lo has conectado tú. Pulsa No permitir. |
 
 Si nada de esto lo arregla, avisa a quien mantiene el radar y dile qué paso falló y qué mensaje viste.

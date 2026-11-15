@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, CircleCheck, Info, Link2Off, Loader2, X } from "lucide-react";
+import { CircleAlert, CircleCheck, Info, Link2Off, Loader2, ShieldAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -12,7 +12,9 @@ import { BrandMark, useSession } from "./session";
 
 /**
  * /autorizar?solicitud=…: an assistant asks to read the radar with this person's account (ADR 0035). The request was
- * recorded by /oauth/authorize in this browser; Permitir / Cancelar send the browser back to the assistant.
+ * recorded by /oauth/authorize in this browser; Permitir / No permitir send the browser back to the assistant.
+ * Whatever the kind of client, the page warns that a link someone sent you is a reason to say no: the request
+ * can be started by anyone, only the person's decision here makes it count.
  */
 export function ConsentView() {
   const { me } = useSession();
@@ -74,7 +76,8 @@ export function ConsentView() {
             <div className="space-y-5">
               <div className="space-y-2">
                 <h1 className="text-lg font-semibold tracking-tight text-balance">
-                  <span className="break-words">{info.assistant}</span> quiere leer el radar de Reforesta con tu cuenta
+                  <span className="line-clamp-2 overflow-hidden break-words">{info.assistant}</span> quiere leer el radar de
+                  Reforesta con tu cuenta
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   Convocatorias, tablero del equipo, notas y votos. Solo lectura; no puede cambiar nada.
@@ -100,6 +103,12 @@ export function ConsentView() {
               </dl>
 
               <KindNote kind={info.kind} host={info.redirectHost} />
+              {info.kind !== "desconocido" && (
+                <div className="flex gap-2.5 rounded-lg border px-3 py-2.5 text-sm">
+                  <ShieldAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <SelfCheck />
+                </div>
+              )}
 
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 <li className="flex gap-2">
@@ -124,7 +133,7 @@ export function ConsentView() {
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button type="button" variant="outline" disabled={pending !== null} onClick={() => void decide(false)}>
                   {pending === "deny" && <Loader2 className="animate-spin" aria-hidden />}
-                  Cancelar
+                  No permitir
                 </Button>
                 <Button type="button" disabled={pending !== null} onClick={() => void decide(true)}>
                   {pending === "allow" && <Loader2 className="animate-spin" aria-hidden />}
@@ -135,7 +144,7 @@ export function ConsentView() {
           )}
         </div>
         <p className="mt-6 text-center text-sm text-muted-foreground">
-          ¿No lo has pedido tú? Pulsa Cancelar y{" "}
+          ¿No lo has pedido tú? Pulsa «No permitir» y{" "}
           <Link href="/" className="underline-offset-4 hover:text-foreground hover:underline">
             vuelve al radar
           </Link>
@@ -148,12 +157,16 @@ export function ConsentView() {
 
 function KindNote({ kind, host }: { kind: ConsentInfo["kind"]; host: string }) {
   if (kind === "conocido") {
-    return <p className="text-sm text-muted-foreground">Es la dirección de Claude ({host}): el permiso solo puede llegar a Claude.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        El permiso se envía a Claude ({host}), pero eso no dice de quién es la cuenta de Claude que lo recibe.
+      </p>
+    );
   }
   if (kind === "local") {
     return (
       <p className="text-sm text-muted-foreground">
-        El permiso vuelve a un programa de este ordenador. Continúa solo si acabas de conectarlo tú, por ejemplo desde Claude Code.
+        El permiso vuelve a un programa de este ordenador, por ejemplo Claude Code.
       </p>
     );
   }
@@ -163,9 +176,20 @@ function KindNote({ kind, host }: { kind: ConsentInfo["kind"]; host: string }) {
         <CircleAlert className="size-4 shrink-0" aria-hidden /> No reconocemos este asistente
       </p>
       <p>
-        Su nombre lo ha escrito él mismo. Permite solo si acabas de conectarlo tú y reconoces la dirección <span className="font-mono text-xs break-words">{host}</span>.
+        Su nombre lo ha escrito él mismo. Comprueba que reconoces la dirección <span className="font-mono text-xs break-words">{host}</span>.
       </p>
+      <SelfCheck />
     </div>
+  );
+}
+
+/** The one rule that holds for every client: only your own, just-made request. */
+function SelfCheck() {
+  return (
+    <p>
+      Continúa solo si tú mismo acabas de pulsar «Conectar» en tu propio asistente. Si alguien te ha enviado este enlace,
+      pulsa «No permitir».
+    </p>
   );
 }
 
@@ -184,7 +208,7 @@ function Done({ allowed }: { allowed: boolean }) {
   return (
     <p className="flex items-center gap-2 text-sm" role="status">
       {allowed ? <CircleCheck className="size-4 text-primary" aria-hidden /> : <X className="size-4 text-muted-foreground" aria-hidden />}
-      {allowed ? "Listo. Vuelve a tu asistente: ya puede leer el radar." : "Cancelado. Tu asistente no tendrá acceso."}
+      {allowed ? "Listo. Vuelve a tu asistente: ya puede leer el radar." : "No permitido. Ese asistente no tendrá acceso."}
     </p>
   );
 }
