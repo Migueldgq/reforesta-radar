@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
 import { BASE_URL, ON_CAMERA, demoPeople, login, seed } from "./demo-data.mjs";
 import { FPS, SCENES } from "./scenes.mjs";
+import { TIMING, durations, lines as voiceLines } from "./voice-lines.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -257,6 +258,33 @@ const skip = (fn) => ramp(Infinity, fn);
 /** Headline i of this beat starts typing (text lives in scenes.mjs). */
 const headline = (i) => ev("head", { i });
 
+/* ---------- Narration: the voice times the beat ---------- */
+// Line k of the current beat starts TIMING.lead after `say(k)` (the first no earlier than TIMING.first into the beat);
+// `say(k+1)` first waits, in OUTPUT time, until line k has finished plus TIMING.gap. Durations come from the voice files
+// (voice-lines.mjs); compose.mjs places the lines with the same rules and holds the picture if a new voice runs longer.
+let VOICE = {}; // name → seconds
+let beatVoice = []; // the current beat's line names
+let vcur = null; // { k, t } the line playing (output seconds)
+const voiceMs = (k) => (VOICE[beatVoice[k]] ?? 0) * 1000;
+/** Output seconds since the beat began (ramps applied, cuts removed). */
+function outNow() {
+  const t0 = take.events[0].t;
+  const tn = now() - t0;
+  return mapTime(segments(take.events, t0, tn), tn);
+}
+async function voiceWait(after = TIMING.gap) {
+  if (!vcur) return;
+  const start = vcur.k === 0 ? Math.max(TIMING.first, vcur.t + TIMING.lead) : vcur.t + TIMING.lead;
+  const remain = start + voiceMs(vcur.k) / 1000 + after - outNow();
+  if (remain > 0) await sleep(remain * 1000);
+}
+async function say(k) {
+  if (k >= beatVoice.length) throw new Error(`say(${k}): this beat has ${beatVoice.length} voice line(s) in scenes.mjs`);
+  await voiceWait();
+  ev("say", { k });
+  vcur = { k, t: outNow() };
+}
+
 /** Union of boxes, padded. */
 function region(boxes, pad = 20) {
   const bs = [boxes].flat();
@@ -321,8 +349,8 @@ async function click(page, x, y, pause = 250) {
  * Smooth-scroll the page's main scroller by dy (or so that `el` sits at `at` of the viewport height). Ramped.
  * `within` (CSS) limits the search for the scroller to that element, e.g. the open side sheet.
  */
-async function scroll(page, { dy = null, el = null, at = 0.3, ms = 900, within = null } = {}) {
-  await ramp(CONFIG.scrollSpeed, () =>
+async function scroll(page, { dy = null, el = null, at = 0.3, ms = 900, within = null, speed = CONFIG.scrollSpeed } = {}) {
+  await ramp(speed, () =>
     page.evaluate(
       async (dy, el, at, ms, within) => {
         const scope = within ? document.querySelector(within) : document;
@@ -449,11 +477,10 @@ async function goto(page, route, readySpecs) {
 
 /* ------------------------------------------------------------------ */
 /* Beats: `run` executes while recording; READY is awaited before.    */
-/* Each starts with headline(0) and a camera target; compose.mjs adds */
-/* a slow push-in while the headline types (~1 s), so hold for it.    */
+/* Each starts with headline(0), say(0) and a camera target; say(k)   */
+/* marks where voice line k starts and holds for the previous line.  */
 /* ------------------------------------------------------------------ */
 const S = CONFIG.sel;
-const TYPE_HOLD = 1100; // ms the first headline needs to type in before the action starts
 
 const DIALOG = "[role=dialog]";
 
@@ -470,23 +497,34 @@ async function textBox(page, re, what, root = "main") {
 
 const ACTIONS = {
   async inicio(page) {
-    const title = await box(await must(page, S.homeTitle, "home title"), { scroll: false });
-    const sub = await box(await must(page, S.homeSub, "home subtitle"), { scroll: false });
+    // The page opens scrolled just past its header (PREPARE): the four tiles, the charts, then the list.
     const a = await box(await must(page, [S.statTiles[0]], "Abiertas ahora tile"), { scroll: false });
     const d = await box(await must(page, [S.statTiles[1]], "Próximas ediciones tile"), { scroll: false });
     headline(0);
-    await cam(region([title, sub, a, d], 28), { dur: 0 });
-    await glide(page, sub.x + sub.width * 0.6, sub.cy + 2, 600);
-    await sleep(TYPE_HOLD + 500);
-    // The honest notice and the top of the ranked list.
+    await say(0);
+    await cam(region([a, d], 28), { dur: 0 });
+    await glide(page, a.x + a.width * 0.5, a.cy + 10, 900, 1.4);
+    await sleep(900);
+    await glide(page, d.x + d.width * 0.45, d.cy + 10, 1400, 1.4);
+    // Line 1: the same list by work line and by territory (the charts filter it when pressed).
+    // the charts card sits between the tiles and «Más gráficos» (a filter chip further down has the same label)
+    const more = await textBox(page, /^Más gráficos$/, "Más gráficos");
+    const top = a.y + a.height + 12;
+    await say(1);
+    headline(1);
+    await cam(region({ x: a.x, y: top, width: d.x + d.width - a.x, height: more.y - top - 4 }, 12), { dur: 0.8 });
+    await glide(page, a.x + 220, top + 70, 800, 1.4);
+    await sleep(700);
+    await glide(page, d.x + d.width * 0.1, top + 200, 1300, 1.4);
+    // Line 2: the honest notice and the top of the ranked list.
     const notice = await must(page, S.notice, "quiet notice");
+    await say(2);
+    headline(2);
     await scroll(page, { el: notice, at: 0.16, ms: 900 });
     const n = await box(notice, { scroll: false });
     const r = await box(await must(page, S.row(CONFIG.examples.won.row), "first row"), { scroll: false });
-    headline(1);
     await cam(region([n, { ...r, height: r.height + 60 }], 20), { dur: 0.8 });
-    await glide(page, n.x + n.width * 0.45, n.cy, 500);
-    await sleep(2300);
+    await glide(page, n.x + n.width * 0.45, n.cy, 700, 1.4);
   },
 
   async ganasteis(page) {
@@ -494,65 +532,94 @@ const ACTIONS = {
     await skip(() => scroll(page, { el: row, at: 0.45, ms: 50 }));
     const r = await box(row, { scroll: false });
     headline(0);
+    await say(0);
     await cam(region({ x: r.x, y: r.y - 30, width: r.width, height: r.height + 60 }, 10), { dur: 0 });
-    await glide(page, r.x + 320, r.cy, 600);
-    await sleep(TYPE_HOLD + 200);
+    await glide(page, r.x + 320, r.cy, 1000, 1.4);
+    // Line 1: open it — the score and its reasons.
+    await say(1);
+    headline(1);
     await click(page, r.x + 320, r.cy, 150);
-    await skip(() => must(page, [{ css: "[role=dialog] [aria-label='¿Encaja?']" }], "detail sheet"));
+    await skip(() => must(page, S.drawerFit, "detail sheet"));
     const sh = await sheet(page);
     await cam({ ...region({ x: sh.left, y: 0, width: sh.width, height: 460 }, 0), curtain: sh.left }, { dur: 0.6, wait: false });
-    await sleep(600); // camera glides to the sheet
+    await sleep(700);
     const fit = await box(await must(page, S.drawerFit, "¿Encaja? section"), { scroll: false });
-    await cam(region({ x: fit.x, y: fit.y, width: fit.width, height: 130 }, 18), { dur: 0.6 });
-    await glide(page, fit.x + 260, fit.y + 100, 400);
-    await sleep(1300);
-    // Down to the past editions: the whole sheet first, then push in on the facts.
-    headline(1);
+    await cam(region({ x: fit.x, y: fit.y, width: fit.width, height: Math.min(fit.height, 330) }, 18), { dur: 0.7 });
+    await glide(page, fit.x + 260, fit.y + 120, 700, 1.4);
+    await sleep(600);
+    await glide(page, fit.x + 300, fit.y + 230, 900, 1.4);
+    // Line 2: the past editions — who won it (Reforesta included).
     const hist = await must(page, S.drawerHist, "Ediciones anteriores");
+    await say(2);
+    headline(2);
     await cam({ ...region({ x: sh.left, y: 120, width: sh.width, height: 560 }, 0), curtain: sh.left }, { dur: 0.7, wait: false });
     await scroll(page, { el: hist, at: 0.3, ms: 900, within: DIALOG });
     await sleep(300);
     const h = await box(hist, { scroll: false });
-    const quien = await textBox(page, /^Quién la ganó$/, "Quién la ganó", DIALOG);
+    const cuando = await textBox(page, /^Cuándo abre$/, "Cuándo abre", DIALOG);
     // The strongest fact: a closer push than the usual 2x limit (slightly upscaled, on purpose).
-    await cam(region({ x: h.x, y: h.y, width: h.width, height: quien.y - h.y - 4 }, 14), { dur: 0.9, max: 2.5 });
-    await glide(page, h.x + h.width * 0.93, h.y + 52, 500);
-    await sleep(2400);
+    await cam(region({ x: h.x, y: h.y, width: h.width, height: cuando.y - h.y - 4 }, 14), { dur: 0.9, max: 2.5 });
+    await glide(page, h.x + h.width * 0.93, h.y + 52, 700, 1.4);
+    // Line 3: when it opens, how long it stays open, who wins it.
+    const quien = await textBox(page, /^Quién la ganó$/, "Quién la ganó", DIALOG);
     const rows = await box(await must(page, S.drawerHistRows, "editions list"), { scroll: false });
-    await cam(region({ x: h.x, y: quien.y, width: h.width, height: rows.y - quien.y + 150 }, 14), { dur: 0.9 });
-    await sleep(1700);
+    await say(3);
+    await cam(region({ x: h.x, y: cuando.y, width: h.width, height: rows.y - cuando.y - 6 }, 14), { dur: 0.9 });
+    await glide(page, h.x + h.width * 0.55, cuando.y + 36, 700, 1.4);
+    await sleep(Math.max(0, voiceMs(3) * 0.45));
+    await glide(page, h.x + h.width * 0.62, quien.y + 40, 900, 1.4);
   },
 
   async motivos(page) {
     const sh = await sheet(page);
     const fit = await box(await must(page, S.drawerFit, "¿Encaja? section"), { scroll: false });
+    log(`  motivos: score shown «${await page.evaluate((el) => el.innerText.split("\n").slice(0, 3).join(" · "), await must(page, S.drawerFit, "fit"))}»`);
     headline(0);
-    await cam({ ...region({ x: fit.x, y: fit.y, width: fit.width, height: 170 }, 18), curtain: sh.left }, { dur: 0 });
-    await glide(page, fit.x + 200, fit.y + 30, 500);
-    await sleep(TYPE_HOLD + 700);
+    await say(0);
+    // Line 0: what looks right (Madrid, forestry), then the warning that pulls it down.
+    await cam({ ...region({ x: fit.x, y: fit.y, width: fit.width, height: 210 }, 18), curtain: sh.left }, { dur: 0 });
+    await glide(page, fit.x + 330, fit.y + 150, 900, 1.4);
+    await sleep(Math.max(400, voiceMs(0) * 0.3));
     const w1 = await textBox(page, /^Fecha de cierre estimada/, "estimated-date warning", DIALOG);
     const w2 = await textBox(page, /^Ninguna de las \d+ ayudas anteriores|^Solo \d+ de \d+ ayudas anteriores/, "companies warning", DIALOG);
-    headline(1);
     await cam(region([{ ...w1, x: fit.x, width: fit.width }, { ...w2, x: fit.x, width: fit.width }], 18), { dur: 0.8 });
-    await glide(page, w2.x + w2.width * 0.5, w2.cy, 500);
-    await sleep(2300);
+    await glide(page, w2.x + w2.width * 0.5, w2.cy, 800, 1.4);
+    // Line 1: the score, and rules, not a black box — every reason and warning at once.
+    await say(1);
+    headline(1);
+    await cam(region({ x: fit.x, y: fit.y, width: fit.width, height: w2.y + w2.height - fit.y }, 18), { dur: 0.9 });
+    await glide(page, fit.x + 70, fit.y + 40, 900, 1.4);
+    await sleep(Math.max(400, voiceMs(1) * 0.3));
+    await glide(page, fit.x + fit.width * 0.75, fit.y + 120, 900, 1.4);
   },
 
   async empresas(page) {
+    // Line 0: the page says it in its own words — checked by hand, each card dated.
+    const intro = await box(await must(page, [{ css: "main p", text: /^Esta lista no es automática/ }], "manual-list note"), { scroll: false });
+    const title = await box(await must(page, [{ css: "main h1" }], "page title"), { scroll: false });
     const card = await must(page, S.empresasCard(CONFIG.examples.company), "Fundación Unicaja card");
-    const k = await box(card, { scroll: false });
-    const why = await textBox(page, /^Por qué puede encajar$/, "Por qué puede encajar");
-    const lim = await textBox(page, /^Qué lo limita$/, "Qué lo limita");
     headline(0);
-    await cam(region({ x: k.x, y: k.y, width: k.width, height: why.y - k.y - 6 }, 8), { dur: 0 });
-    await glide(page, k.x + k.width * 0.85, k.y + 30, 600);
-    await sleep(TYPE_HOLD + 900);
+    await say(0);
+    await cam(region([title, intro], 24), { dur: 0 });
+    await glide(page, intro.x + intro.width * 0.55, intro.cy + 4, 900, 1.4);
+    // Line 1: one programme — its deadline and what limits it.
+    await say(1);
     headline(1);
-    // Closer on the right column (deadline + limits); the curtain hides the left column so no half-words show.
+    await skip(() => scroll(page, { el: card, at: 0.06, ms: 50 }));
+    const k = await box(card, { scroll: false });
+    const lim = await textBox(page, /^Qué lo limita$/, "Qué lo limita");
     const last = await textBox(page, /^Último plazo$/, "Último plazo");
+    await cam(region({ x: k.x, y: k.y, width: k.width, height: last.y + 60 - k.y }, 10), { dur: 0 });
+    await glide(page, k.x + k.width * 0.55, last.y + 30, 900, 1.4);
+    await sleep(Math.max(0, voiceMs(1) * 0.35));
+    // Closer on the right column (deadline + limits); the curtain hides the left column so no half-words show.
     await cam({ ...region({ x: lim.x, y: last.y - 4, width: k.x + k.width - lim.x - 12, height: lim.y + 96 - last.y }, 14), curtain: lim.x - 20 }, { dur: 0.8 });
-    await glide(page, lim.x + 300, lim.y + 92, 500); // under the text, not on it
-    await sleep(2200);
+    await glide(page, lim.x + 300, lim.y + 92, 700, 1.4); // under the text, not on it
+    // Line 2: the card's own check date.
+    const checked = await textBox(page, /^Comprobado el /, "Comprobado el");
+    await say(2);
+    await cam({ ...region({ x: k.x, y: checked.y - 150, width: k.width, height: 200 }, 12), curtain: false }, { dur: 0.9 });
+    await glide(page, checked.x + checked.width + 40, checked.cy + 18, 800, 1.4);
   },
 
   async equipo(page) {
@@ -564,24 +631,27 @@ const ACTIONS = {
     const x = sh.left + 20;
     const w = sh.width - 40;
     headline(0);
+    await say(0);
     await cam({ ...region({ x, y: tr.y - 34, width: w, height: votes.y + votes.height - tr.y + 34 }, 10), curtain: sh.left }, { dur: 0 });
     const est = await box(await must(page, S.triageEstudio, "En estudio"), { scroll: false });
-    await glide(page, est.cx, est.cy, 600);
-    await sleep(TYPE_HOLD - 200);
-    await click(page, est.cx, est.cy, 700);
+    await glide(page, est.cx, est.cy, 1000, 1.4);
+    await sleep(Math.max(300, voiceMs(0) * 0.45));
+    await click(page, est.cx, est.cy, 600);
+    await say(1);
     headline(1);
     const yes = await box(await must(page, S.voteYes, "Nos sirve"), { scroll: false });
-    await glide(page, yes.cx, yes.cy, 500);
+    await glide(page, yes.cx, yes.cy, 800, 1.4);
     await sleep(500);
     await click(page, yes.cx, yes.cy, 900);
-    // Assign and leave a note.
-    headline(2);
+    // Line 2: assign and leave a note.
     const asg = await must(page, S.assignee, "Responsable");
+    await say(2);
+    headline(2);
     await scroll(page, { el: asg, at: 0.36, ms: 700, within: DIALOG });
     const a = await box(asg, { scroll: false });
     const notes = await box(await must(page, S.notes, "Notas"), { scroll: false });
     await cam(region({ x, y: a.y - 34, width: w, height: notes.y + notes.height - a.y + 34 }, 10), { dur: 0.7 });
-    await glide(page, a.x + 120, a.cy, 400);
+    await glide(page, a.x + 120, a.cy, 500, 1.4);
     await sleep(150);
     // The open list is cut from the film: it names every account in the database, and the only one we may show is
     // the demo team. Picked with the keyboard, so the pointer does not jump; the click sound lands on the cut.
@@ -593,36 +663,41 @@ const ACTIONS = {
       await sleep(450); // list closed and its fade-out finished
       if (!(await page.evaluate((el) => el.innerText, asg)).includes(DEMO_TEAM.assignee)) throw new Error("assignee not set");
     });
-    await sleep(500);
+    await sleep(400);
     const ta = await box(await must(page, S.noteInput, "note box"), { scroll: false });
-    await glide(page, ta.x + 160, ta.y + 22, 400);
+    await glide(page, ta.x + 160, ta.y + 22, 500, 1.4);
     await click(page, ta.x + 160, ta.y + 22, 150);
     await ramp(1.6, () => page.keyboard.type(DEMO_TEAM.note, { delay: 38 }));
     await sleep(200);
     const add = await box(await must(page, S.noteAdd, "Añadir nota"), { scroll: false });
-    await glide(page, add.cx, add.cy, 400);
-    await click(page, add.cx, add.cy, 1500);
+    await glide(page, add.cx, add.cy, 500, 1.4);
+    await click(page, add.cx, add.cy, 900);
   },
 
   async fuentes(page) {
     const sum = await box(await must(page, S.sourcesSummary, "sources summary"), { scroll: false });
     const t = await box(await must(page, S.sourcesTable, "sources table"), { scroll: false });
     headline(0);
-    // The whole table (name, state, results, note), then down through the seven sources.
+    await say(0);
+    // The whole table (name, state, results, note), then slowly down through the seven sources while they are named.
     await cam(region({ x: t.x, y: sum.y, width: t.width, height: 400 }, 20), { dur: 0 });
-    await glide(page, t.x + t.width * 0.42, t.y + 64, 500);
-    await sleep(TYPE_HOLD + 700);
-    await scroll(page, { dy: 560, ms: 1800 });
-    await sleep(1100);
-    // Back up to the admin's «Actualizar ahora»: hovered, never pressed (an ingest would change the data).
-    headline(1);
+    await glide(page, t.x + t.width * 0.2, t.y + 64, 700, 1.4);
+    await sleep(1200);
+    await scroll(page, { dy: 640, ms: Math.max(2500, voiceMs(0) * 0.55), speed: 1 });
+    // Line 1: per source, its results and how the last load went.
+    await say(1);
     await scroll(page, { dy: -2000, ms: 900 });
+    const t2 = await box(await must(page, S.sourcesTable, "sources table"), { scroll: false });
+    const st = await textBox(page, /^Estado$/, "Estado header");
+    await cam(region({ x: t.x, y: t2.y, width: t.width, height: 330 }, 16), { dur: 0.8 });
+    await glide(page, st.x + 30, t2.y + 70, 800, 1.4);
+    // Line 2: the admin's «Actualizar ahora»: hovered, never pressed (an ingest would change the data).
+    await say(2);
+    headline(1);
     const hd = await box(await must(page, S.sourcesHeader, "header"), { scroll: false });
     const b = await box(await must(page, S.ingestNow, "Actualizar ahora"), { scroll: false });
-    const t2 = await box(await must(page, S.sourcesTable, "sources table"), { scroll: false });
     await cam(region({ x: hd.x, y: hd.y, width: t.width, height: t2.y + 150 - hd.y }, 20), { dur: 0.8 });
-    await glide(page, b.cx, b.cy, 600);
-    await sleep(2400);
+    await glide(page, b.cx, b.cy, 1000, 1.4);
   },
 
   async analizar(page) {
@@ -630,36 +705,41 @@ const ACTIONS = {
     const drop = await box(await must(page, S.pdfDrop, "drop zone"), { scroll: false });
     const pick = await box(await must(page, S.pdfPick, "Elegir archivo"), { scroll: false });
     headline(0);
+    await say(0);
     await cam(region([hd, drop], 24), { dur: 0 });
-    await glide(page, pick.cx, pick.cy, 700);
-    await sleep(TYPE_HOLD - 200);
+    await glide(page, pick.cx, pick.cy, 1100, 1.4);
+    await sleep(Math.max(300, voiceMs(0) * 0.5));
     const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 10000 }), click(page, pick.cx, pick.cy, 0)]);
     await chooser.accept([CONFIG.examples.pdf]);
     await sleep(500); // «Leyendo el PDF…» shows for a moment; the rest of the wait is cut
     const score = await skip(() => must(page, S.pdfScore, "PDF score", { timeout: 60000 }));
     await skip(() => sleep(400));
-    headline(1);
+    // Line 1: the radar's own score for this call, then its reasons and warnings.
     const title = await box(await must(page, [{ css: "main [data-slot=card] h2" }], "result title"), { scroll: false });
     const same = await box(await must(page, S.pdfSame, "same-score line"), { scroll: false });
-    await cam(region({ x: title.x, y: title.y, width: title.width, height: same.y + same.height - title.y }, 20), { dur: 0.7 });
+    await say(1);
+    headline(1);
+    // The text extract under the score line is not part of the shot: the camera stops at the line (`floor`) and the
+    // cut to the reasons happens with the extract scrolled out of the page.
+    await cam({ ...region({ x: title.x, y: title.y, width: title.width, height: same.y + same.height - title.y }, 20), floor: same.y + same.height + 10 }, { dur: 0.7 });
     const sc = await box(score, { scroll: false });
-    await glide(page, sc.x + sc.width + 140, sc.cy + 26, 500);
-    await sleep(2000);
-    // Its reasons and warnings: the same ones as the call's detail in the list.
+    await glide(page, sc.x + sc.width + 140, sc.cy + 26, 700, 1.4);
+    await sleep(Math.max(1200, voiceMs(1) * 0.45));
     const mot = await must(page, S.pdfMotivos, "Motivos");
-    await scroll(page, { el: mot, at: 0.12, ms: 800 });
+    await skip(() => scroll(page, { el: mot, at: 0.02, ms: 50 }));
     const m = await box(mot, { scroll: false });
-    await cam(region({ x: title.x, y: m.y, width: title.width, height: Math.min(m.height, 430) }, 18), { dur: 0.8 });
-    await sleep(2600);
+    await cam(region({ x: title.x, y: m.y, width: title.width, height: Math.min(m.height, 430) }, 18), { dur: 0 });
+    await glide(page, title.x + title.width * 0.3, m.y + 90, 800, 1.4);
   },
 
   async invitar(page) {
     const ppl = await box(await must(page, S.teamPeople, "Personas"), { scroll: false });
     const inv = await box(await must(page, S.teamInvite, "Invitar"), { scroll: false });
     headline(0);
+    await say(0);
     await cam(region(ppl, 20), { dur: 0 });
-    await glide(page, inv.cx, inv.cy, 700);
-    await sleep(TYPE_HOLD - 100);
+    await glide(page, inv.cx, inv.cy, 900, 1.4);
+    await sleep(500);
     await click(page, inv.cx, inv.cy, 400);
     const dlg = await box(await must(page, S.dialog, "invite dialog"), { scroll: false });
     await cam(region(dlg, 16), { dur: 0.6 });
@@ -680,19 +760,22 @@ const ACTIONS = {
     await sleep(350);
     const rd = await box(await must(page, S.dialog, "link dialog"), { scroll: false });
     await cam(region(rd, 16), { dur: 0.6 });
-    await sleep(1900);
-    // Close it: the people and their roles, with the new invitation pending.
+    // Line 1: one use, seven days.
+    await say(1);
+    const once = await textBox(page, /Sirve una (sola )?vez/, "one-use note", DIALOG).catch(() => null);
+    if (once) await glide(page, once.x + once.width * 0.6, once.cy + 18, 800, 1.4);
+    // Line 2: close it — the people and their roles, with the new invitation pending.
+    await say(2);
     headline(1);
     const done = await box(await must(page, S.inviteDone, "Hecho"), { scroll: false });
-    await glide(page, done.cx, done.cy, 400);
+    await glide(page, done.cx, done.cy, 500);
     await click(page, done.cx, done.cy, 0);
     // The dialog's fade-out briefly shows another title (its text resets as it closes): cut it.
     await skip(() => sleep(450));
     const p2 = await box(await must(page, S.teamPeople, "Personas"), { scroll: false });
     const links = await box(await must(page, S.teamLinks, "Enlaces pendientes"), { scroll: false });
     await cam(region([p2, links], 20), { dur: 0.8 });
-    await glide(page, links.x + links.width * 0.55, links.y + links.height + 40, 500);
-    await sleep(2600);
+    await glide(page, p2.x + p2.width * 0.62, p2.y + 120, 900, 1.4);
   },
 
   async seguimiento(page) {
@@ -705,11 +788,19 @@ const ACTIONS = {
     card ??= await must(page, [{ css: "[data-col='estudio'] [data-slot=card]" }], "card in En estudio", { index: 1 });
     const c = await box(card, { scroll: false });
     headline(0);
+    await say(0);
     await cam(region({ x: colA.x, y: colA.y, width: colD.x + colD.width - colA.x, height: 470 }, 16), { dur: 0 });
+    // The pointer walks the four columns while they are named.
+    for (const col of ["estudio", "presentar", "presentada", "descartada"]) {
+      const k = await box(await must(page, S.boardColumn(col), col), { scroll: false });
+      await glide(page, k.x + 60, k.y + 18, 700, 1.4);
+      await sleep(250);
+    }
+    await say(1);
     const start = { x: c.cx, y: c.y + 28 };
     const end = { x: colB.cx, y: colB.y + 160 };
     await glide(page, start.x, start.y, 600);
-    await sleep(TYPE_HOLD);
+    await sleep(300);
     await page.mouse.down();
     ev("click", { x: start.x, y: start.y });
     await glide(page, start.x + 12, start.y + 6, 120, 1);
@@ -717,12 +808,19 @@ const ACTIONS = {
     await sleep(150);
     await page.mouse.up();
     ev("drop", { x: end.x, y: end.y });
-    await sleep(1600);
   },
 };
 
 /** Before recording: put the page back in its starting state (runs after the page loads, outside the take). */
 const PREPARE = {
+  // Start just past the page header (the list and its tiles are the subject), with the pointer off the map.
+  async inicio(page) {
+    mousePos = { x: CONFIG.viewport.width * 0.5, y: CONFIG.viewport.height * 0.2 };
+    await page.mouse.move(mousePos.x, mousePos.y);
+    const a = await box(await must(page, [S.statTiles[0]], "Abiertas ahora tile"), { scroll: false });
+    await scroll(page, { dy: a.y - 14, ms: 50 });
+    await sleep(400);
+  },
   // An invitation left by an earlier take would already be listed: revoke it (through the page, so the privacy
   // filter applies) and reload.
   async invitar(page) {
@@ -889,6 +987,7 @@ async function main() {
       return pg;
     };
     // Signed in as the demo admin (fictional account, see demo-data.mjs); the cookie is shared by every tab.
+    VOICE = durations();
     const session = await login("lucia");
     const [name, value] = session.split(/=(.*)/s);
     CONFIG.cookies.push({ name, value, httpOnly: true });
@@ -909,8 +1008,12 @@ async function main() {
           await PREPARE[scene.id]?.(page);
           await assertOnlyDemoEmails(page);
           take = new Take(page, path.join(CONFIG.captureDir, "raw", scene.id));
+          beatVoice = voiceLines().filter((l) => l.beat === scene.id).map((l) => l.name);
+          vcur = null;
           await take.start();
           await ACTIONS[scene.id](page);
+          await voiceWait(TIMING.tail); // the last line ends before the beat does
+          vcur = null;
           await assertOnlyDemoEmails(page);
           await take.stop();
           const { duration } = encode(scene.id, take);
