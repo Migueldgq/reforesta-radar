@@ -53,13 +53,16 @@ const CONFIG = {
   // Output seconds a camera move takes (compose.mjs uses the same value per event).
   camMove: 0.7,
   triageStorageKey: "reforesta-radar:seguimiento:v1",
+  // Saved UI state that would filter the lists: cleared before every page load so each beat starts unfiltered.
+  clearStorageKeys: ["reforesta-radar:organismos:v1"],
   apiPath: "/api/oportunidades",
   examples: {
     madrid: { id: "bdns:904719", row: /proyectos ambientales 2026/i },
   },
   sel: {
     homeReady: [{ css: "tbody tr" }],
-    statTiles: [{ css: "main button", text: /^Abiertas ahora/ }, { css: "main button", text: /^Fuera de tus/ }],
+    // first and last home stat tile; the last one shares its label with a table tab, which has no second line
+    statTiles: [{ css: "main button", text: /^Abiertas ahora/ }, { css: "main button", text: /^Próximas ediciones\n\d+\n/ }],
     chartCard: [{ css: "main [data-slot=card]", text: /^Cuándo cierran/ }],
     chartTitle: [{ css: "main *", text: /^Cuándo cierran$/, smallest: true }],
     weekBar: [{ css: "main button", attr: ["aria-label", /^Semana del .*: [1-9]\d* convocatorias/] }],
@@ -385,7 +388,7 @@ const ACTIONS = {
 
   async inicio(page) {
     const a = await box(await must(page, [S.statTiles[0]], "Abiertas ahora tile"), { scroll: false });
-    const d = await box(await must(page, [S.statTiles[1]], "Fuera de tus fuentes tile"), { scroll: false });
+    const d = await box(await must(page, [S.statTiles[1]], "Próximas ediciones tile"), { scroll: false });
     headline(0);
     await cam(region([a, d], 28), { dur: 0 });
     await sleep(TYPE_HOLD);
@@ -702,6 +705,7 @@ async function main() {
       const pg = await browser.newPage();
       await pg.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }, { name: "prefers-reduced-motion", value: "no-preference" }]);
       await pg.evaluateOnNewDocument(CURSOR_SCRIPT, CONFIG.hideCss);
+      await pg.evaluateOnNewDocument((keys) => keys.forEach((k) => { try { localStorage.removeItem(k); } catch {} }), CONFIG.clearStorageKeys);
       await pg.setCookie(...CONFIG.cookies.map((c) => ({ ...c, url: CONFIG.baseUrl })));
       return pg;
     };

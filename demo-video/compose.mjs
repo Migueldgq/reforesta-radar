@@ -29,6 +29,7 @@ const MAX_SCALE = 2.0; // …but never past 2 canvas px per CSS px (the capture 
 const OVERLAP = 0.32; // s: beats overlap by this much (blur swap)
 const CPS = 0.034; // s per typed character
 const CARD_RADIUS = 18;
+const TOPBAR = 57; // CSS px: height of the app's sticky top bar (breadcrumb) incl. its border
 const RAIL = 52; // CSS px: width of the app's collapsed sidebar rail in the capture
 
 /* ---------- audio ---------- */
@@ -252,11 +253,22 @@ timed.forEach((s, idx) => {
     const push = camera({ x: first.x - first.w * 0.06, y: first.y - first.h * 0.06, w: first.w * 1.12, h: first.h * 1.12 }, vp);
     anim.push(`tl.set("#${vid}", { transformOrigin: "0 0", x: ${push.x}, y: ${push.y}, scale: ${push.scale} }, 0);`);
     anim.push(`tl.to("#${vid}", { x: ${c0.x}, y: ${c0.y}, scale: ${c0.scale}, duration: 1.5, ease: "power2.out" }, ${r3(s.start + 0.05)});`);
+    // The app's sticky top bar (breadcrumb) would cut across the framed UI when the page is scrolled: a white band
+    // hides everything above css y = TOPBAR and follows the camera. It steps aside when a side sheet opens.
+    const tb = `tb-${s.id}`;
+    const tbY = (k) => r3(k.y + k.scale * TOPBAR - STAGE.h);
+    html.push(`<div id="${tb}" class="clip topcut" ${win(s.start, s.duration)} style="z-index:${z + 1}"></div>`);
+    anim.push(`tl.set("#${tb}", { y: ${tbY(push)} }, 0);`);
+    anim.push(`tl.fromTo("#${tb}", { opacity: 0 }, { opacity: 1, duration: 0.42, ease: "power3.out" }, ${r3(s.start)});`);
+    anim.push(`tl.to("#${tb}", { y: ${tbY(c0)}, duration: 1.5, ease: "power2.out" }, ${r3(s.start + 0.05)});`);
+    anim.push(`tl.to("#${tb}", { opacity: 0, duration: 0.3, ease: "power2.in" }, ${r3(s.end - 0.3)});`);
     let curtainX = null;
     for (const c of cams.slice(1)) {
       const k = camera(c, vp);
       const d = Math.max(0.2, c.dur ?? 0.7);
       anim.push(`tl.to("#${vid}", { x: ${k.x}, y: ${k.y}, scale: ${k.scale}, duration: ${d}, ease: "power3.inOut" }, ${r3(s.start + c.t)});`);
+      if (c.curtain != null && curtainX == null) anim.push(`tl.to("#${tb}", { opacity: 0, duration: 0.2 }, ${r3(s.start + c.t)});`);
+      else if (curtainX == null) anim.push(`tl.to("#${tb}", { y: ${tbY(k)}, duration: ${d}, ease: "power3.inOut" }, ${r3(s.start + c.t)});`);
       if (c.curtain != null && curtainX == null) {
         // Hide what lies left of css x = c.curtain (e.g. the dimmed list behind a side sheet): a white curtain
         // whose right edge follows the camera.
@@ -390,6 +402,7 @@ const page = `<!doctype html>
       }
       .screen { position: absolute; left: 0; top: 0; width: 1440px; height: 810px; will-change: transform; }
       .greenbg { background: var(--accent); }
+      .topcut { inset: auto; left: 0; top: ${STAGE.top}px; width: ${W}px; height: ${STAGE.h}px; background: var(--ground); opacity: 0; }
       .curtain { right: auto; width: ${W}px; top: ${STAGE.top}px; background: var(--ground); }
       .placeholder { display: grid; place-items: center; top: ${STAGE.top}px; }
       .placeholder span { font-size: 32px; color: var(--muted); }
