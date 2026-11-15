@@ -28,9 +28,11 @@ x-backend: &backend
     SMTP_USER: ${SMTP_USER:-}
     SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     SMTP_FROM: ${SMTP_FROM:-}
-    # uvicorn takes the client IP (login throttling, logs) from X-Forwarded-For set by the Next.js proxy. The API
-    # port is bound to 127.0.0.1 only; narrow this to the proxy's address if the API is ever exposed.
-    FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+    # Addresses whose X-Forwarded-For uvicorn believes (client IP for login throttling and logs). Default: none
+    # reachable from outside, because Next.js passes on whatever X-Forwarded-For the browser sends. Only when a
+    # reverse proxy in front of `web` overwrites that header, set this to the compose network (e.g. 172.16.0.0/12).
+    FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+    RADAR_ARGON2_CONCURRENCY: ${RADAR_ARGON2_CONCURRENCY:-2}
   depends_on:
     postgres:
       condition: service_healthy

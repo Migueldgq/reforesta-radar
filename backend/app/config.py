@@ -40,6 +40,8 @@ class Settings:
     # Secure flag on the session cookie. Off by default because local runs are plain http; on behind https.
     cookie_secure: bool = field(default_factory=lambda: _bool(os.getenv("RADAR_COOKIE_SECURE", "")))
     session_days: int = field(default_factory=lambda: int(os.getenv("RADAR_SESSION_DAYS", "30")))
+    # Argon2 hashes/verifications running at once (64 MiB each); the rest wait.
+    argon2_concurrency: int = field(default_factory=lambda: int(os.getenv("RADAR_ARGON2_CONCURRENCY", "2")))
     # First admin on a fresh install (used only while the users table is empty); prefer `python -m app.users`.
     bootstrap_admin_email: str = field(default_factory=lambda: os.getenv("RADAR_BOOTSTRAP_ADMIN_EMAIL", ""))
     bootstrap_admin_password: str = field(default_factory=lambda: os.getenv("RADAR_BOOTSTRAP_ADMIN_PASSWORD", ""))
