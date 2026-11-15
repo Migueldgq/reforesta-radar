@@ -3,6 +3,7 @@
 #   docker compose up -d postgres api               # backend only (for `npm run dev` on :3000)
 #   docker compose run --rm ingest                  # one ingest run now (all sources)
 #   docker compose run --rm ingest --source boe,rsc # a subset
+#   docker compose run --rm api python -m app.users create-admin ana@example.org   # first admin (prompts password)
 # Ports, password and daily ingest time: defaults below, overridable in a root .env (see .env.example).
 name: reforesta-radar
 
@@ -15,6 +16,21 @@ x-backend: &backend
     RADAR_TZ: ${RADAR_TZ:-Europe/Madrid}
     INGEST_SOURCE_TIMEOUT_S: ${INGEST_SOURCE_TIMEOUT_S:-480}
     RADAR_INGEST_AT: ${RADAR_INGEST_AT:-09:00} # daily scheduled ingest, local time in RADAR_TZ
+    # Accounts (docs/api-auth.md). Invitation/reset links point at RADAR_PUBLIC_URL; set RADAR_COOKIE_SECURE=true
+    # behind https. Bootstrap admin: only used while the users table is empty (prefer `python -m app.users`).
+    RADAR_PUBLIC_URL: ${RADAR_PUBLIC_URL:-http://localhost:3010}
+    RADAR_COOKIE_SECURE: ${RADAR_COOKIE_SECURE:-false}
+    RADAR_BOOTSTRAP_ADMIN_EMAIL: ${RADAR_BOOTSTRAP_ADMIN_EMAIL:-}
+    RADAR_BOOTSTRAP_ADMIN_PASSWORD: ${RADAR_BOOTSTRAP_ADMIN_PASSWORD:-}
+    # Optional e-mail of links + self-service "forgot password" (off while SMTP_HOST is empty).
+    SMTP_HOST: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-587}
+    SMTP_USER: ${SMTP_USER:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SMTP_FROM: ${SMTP_FROM:-}
+    # uvicorn takes the client IP (login throttling, logs) from X-Forwarded-For set by the Next.js proxy. The API
+    # port is bound to 127.0.0.1 only; narrow this to the proxy's address if the API is ever exposed.
+    FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
   depends_on:
     postgres:
       condition: service_healthy
@@ -56,9 +72,10 @@ services:
     entrypoint: ["sh", "-c", 'alembic upgrade head && exec python -m app.ingest "$$@"', "ingest"]
     command: []
 
-  # Part of the default `up`: ingests once a day at RADAR_INGEST_AT (09:00 Madrid), checking every 5 min so a
+  # Part of the default `up`: ingests once a day at RADAR_INGEST_AT (09:00 Madrid), checking every 30 s so a
   # sleeping host catches up on waking; also right away if the database was never ingested (app/ingest/scheduler.py).
-  # A failed source keeps its previous rows; a failed run is recorded and retried an hour later.
+  # A failed source keeps its previous rows; a failed run is recorded and retried an hour later. It also runs an
+  # admin's "update now" request (POST /api/ingest) within ~30 s; the API itself never ingests.
   ingest-scheduler:
     <<: *backend
     entrypoint: ["sh", "-c", "alembic upgrade head && exec python -m app.ingest.scheduler"]
