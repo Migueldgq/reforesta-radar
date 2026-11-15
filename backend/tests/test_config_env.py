@@ -35,7 +35,9 @@ def test_every_variable_is_passed_through_compose() -> None:
 
 
 def test_every_variable_is_listed_in_env_example() -> None:
-    missing = sorted(v for v in _read_by_code() - NOT_IN_ENV_EXAMPLE if not re.search(rf"^#?\s*{v}=", ENV_EXAMPLE, re.M))
+    missing = sorted(
+        v for v in _read_by_code() - NOT_IN_ENV_EXAMPLE if not re.search(rf"^#?\s*{v}=", ENV_EXAMPLE, re.M)
+    )
     assert not missing, f"read by the backend but not listed in .env.example: {missing}"
 
 
