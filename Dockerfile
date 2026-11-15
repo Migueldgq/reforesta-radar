@@ -30,6 +30,8 @@ RUN addgroup -S -g 1001 nodejs && adduser -S -u 1001 -G nodejs nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Waits RADAR_DRAIN_SECONDS after SIGTERM before stopping Next (zero-downtime deploys, ADR 0044)
+COPY --chmod=755 scripts/web-start.sh ./web-start.sh
 USER nextjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["./web-start.sh"]
