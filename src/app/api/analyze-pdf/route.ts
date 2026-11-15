@@ -79,13 +79,8 @@ export async function POST(req: NextRequest) {
         "www.fundacion-biodiversidad.es",
         "ec.europa.eu",
         "api.tech.ec.europa.eu",
-        "ted.europa.eu",
-        "www.juntadeandalucia.es",
-        "bocyl.jcyl.es",
-        "www.bocyl.jcyl.es",
         "contrataciondelestado.es",
         "www.contrataciondelestado.es",
-        "www.fundacionmontemadrid.es",
       ];
       if (!allowedHosts.includes(parsed.hostname)) {
         return NextResponse.json(

@@ -99,10 +99,6 @@ const SOURCE_NOTES: Record<string, { name: string; what: string; how: string }> 
   bocm: { name: "BOCM", what: "Sumarios de la Comunidad de Madrid de los últimos 21 días.", how: "XML oficial" },
   dog: { name: "DOG", what: "Diario Oficial de Galicia, últimos 45 días.", how: "Web" },
   fb: { name: "Fundación Biodiversidad", what: "Buscador de convocatorias de la Fundación Biodiversidad.", how: "Web" },
-  boja: { name: "BOJA", what: "Boletín de la Junta de Andalucía.", how: "Feed Atom" },
-  bocyl: { name: "BOCYL", what: "Boletín de Castilla y León, últimos 10 días.", how: "Web" },
-  ted: { name: "TED", what: "Licitaciones forestales y ambientales de la UE en España.", how: "API TED" },
-  montemadrid: { name: "Fundación Montemadrid", what: "Página pública de convocatorias de la fundación.", how: "Web" },
   rsc: { name: "RSC", what: "Programas de empresas y fundaciones seleccionados a mano.", how: "En el código" },
 };
 

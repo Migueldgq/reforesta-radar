@@ -5,7 +5,7 @@ Proyecto para **1hack A Coruña — El reto de Reforesta** (Common Seeds / The A
 - Vídeo de la demo: **pendiente** <!-- TODO: enlace al vídeo -->
 - Despliegue: **pendiente** <!-- TODO: URL pública -->
 
-Reforesta presenta 4 o 5 solicitudes al año porque encuentra las convocatorias revisando a mano cuatro fuentes y leyendo bases de decenas de páginas. Reforesta Radar consulta once fuentes públicas y privadas, junta todo en una sola lista, puntúa cada convocatoria según el perfil de Reforesta y explica por qué encaja o por qué no. El equipo marca lo que le interesa y lo sigue en un tablero hasta presentarlo. No usa inteligencia artificial generativa ni claves de API: todas las reglas están en el código y se pueden leer. **No redacta propuestas**: eso lo excluye el propio reto, y Reforesta ya sabe hacerlo.
+Reforesta presenta 4 o 5 solicitudes al año porque encuentra las convocatorias revisando a mano cuatro fuentes y leyendo bases de decenas de páginas. Reforesta Radar consulta las siete fuentes públicas y privadas que propone el reto, junta todo en una sola lista, puntúa cada convocatoria según el perfil de Reforesta y explica por qué encaja o por qué no. El equipo marca lo que le interesa y lo sigue en un tablero hasta presentarlo. No usa inteligencia artificial generativa ni claves de API: todas las reglas están en el código y se pueden leer. **No redacta propuestas**: eso lo excluye el propio reto, y Reforesta ya sabe hacerlo.
 
 ---
 
@@ -15,7 +15,7 @@ El cuello de botella no es escribir, es **encontrar y decidir**. El radar ataca 
 
 | Dolor de Reforesta (RETO.md) | Qué hace el radar |
 |---|---|
-| Revisan siempre las mismas 4 fuentes | Lee 11 fuentes y marca con **«Fuera de tus 4 fuentes»** lo que no habrían visto. En la foto del 14/11/2026, 513 de 547 resultados vienen de fuera de MITECO, Fundación Biodiversidad, Comunidad de Madrid y Agenda 2030. |
+| Revisan siempre las mismas 4 fuentes | Lee 7 fuentes y marca con **«Fuera de tus 4 fuentes»** lo que no habrían visto. En la foto del 15/11/2026, 497 de 528 resultados vienen de fuera de MITECO, Fundación Biodiversidad, Comunidad de Madrid y Agenda 2030. |
 | Leer decenas de páginas para saber si encaja | Cada resultado trae una puntuación de 0 a 100 con sus **motivos** y sus **avisos** en frases cortas («Concurrencia competitiva…», «Dirigida a ayuntamientos…»). Las bases en PDF se resumen en una ficha. |
 | Las convocatorias anuales se pasan de fecha | Las convocatorias competitivas que cerraron en los últimos 12 meses **se conservan a propósito** como aviso de «próxima edición», para preparar la siguiente con tiempo. |
 | El canal de empresas (RSC) está a cero | Vista **Empresas** con programas privados seleccionados a mano, el motivo de encaje y un ángulo para el primer contacto. |
@@ -52,24 +52,20 @@ Relación con los tres criterios de evaluación:
 
 ## De dónde salen los datos
 
-Foto del **14/11/2026 a las 18:35** (hora peninsular), tomada del endpoint `/api/oportunidades`. Las cifras cambian cada día.
+Foto del **15/11/2026 a las 01:42** (hora peninsular), tomada del endpoint `/api/oportunidades`. Las cifras cambian cada día.
 
 | Fuente | Qué se lee | Cómo | Resultados |
 |---|---|---|---|
-| **BDNS** (infosubvenciones.es) | 68 búsquedas de los últimos 12 meses: temas ambientales en castellano, catalán y euskera; convocatorias genéricas del tercer sector (interés general, IRPF, 0,7 %); y por organismo (MITECO, Fundación Biodiversidad, OAPN, confederaciones hidrográficas…). Ficha completa de las 230 más prometedoras. | API JSON oficial | 486 |
+| **BDNS** (infosubvenciones.es) | 68 búsquedas de los últimos 12 meses: temas ambientales en castellano, catalán y euskera; convocatorias genéricas del tercer sector (interés general, IRPF, 0,7 %); y por organismo (MITECO, Fundación Biodiversidad, OAPN, confederaciones hidrográficas…). Ficha completa de las 230 más prometedoras. | API JSON oficial | 481 |
 | **BOE** | Sumarios de los últimos 30 días: extractos de convocatorias y licitaciones abiertas con encaje ambiental; se lee el texto de cada anuncio para sacar plazo y objeto. | API de datos abiertos (JSON) + HTML del anuncio | 5 |
 | **UE · Funding & Tenders** | 5 búsquedas (LIFE, bosques, biodiversidad, restauración, especies invasoras), solo con plazo futuro. | API SEDIA oficial (JSON) | 25 (24 Horizon Europe, 1 LIFE) |
-| **TED** (licitaciones UE en España) | Anuncios forestales y ambientales de los últimos 75 días por códigos CPV, solo abiertos. | API TED v3 (JSON) | 10 |
 | **Fundación Biodiversidad** | Buscador de convocatorias y ficha de cada una. | HTML | 10 (todas cerradas, como referencia) |
 | **BOCM** (Comunidad de Madrid) | Sumarios de los últimos 21 días y el texto de cada anuncio candidato. | XML oficial + HTML | 1 |
-| **BOCYL** (Castilla y León) | Sumarios de los últimos 10 días. | HTML | 4 |
 | **DOG** (Galicia) | Secciones I–III y VI de los últimos 45 días. | HTML | 0 |
-| **BOJA** (Andalucía) | Feed de los últimos boletines y sumarios anteriores. | Atom (XML) + HTML | 0 |
-| **Fundación Montemadrid** | Página pública de convocatorias. | HTML | 0 |
 | **RSC · empresas y fundaciones** | Lista seleccionada a mano en `src/lib/rsc-opportunities.ts`. | Datos en el código | 6 |
-| **Total** (tras quitar duplicados) | | | **547** |
+| **Total** (tras quitar duplicados) | | | **528** |
 
-Resumen de esa foto: 40 abiertas, 20 que abren próximamente, 161 cerradas (próxima edición) y 326 sin fecha publicada. Por encaje: 17 alto, 197 medio, 333 bajo. Una fuente con 0 resultados no está rota: significa que ese día no publicó nada con encaje ambiental (la nota de la vista Fuentes lo detalla).
+Resumen de esa foto: 30 abiertas, 20 que abren próximamente, 165 cerradas (próxima edición) y 313 sin fecha publicada. Por encaje: 20 alto, 97 medio, 411 bajo. Una fuente con 0 resultados no está rota: significa que ese día no publicó nada con encaje ambiental (la nota de la vista Fuentes lo detalla).
 
 ---
 
@@ -121,11 +117,11 @@ Next.js 16 (App Router, TypeScript), Tailwind CSS v4 y `unpdf` para leer PDF. No
 
 - `src/lib/aggregate.ts` — lista de fuentes, con la caducidad y el tiempo máximo de espera de cada una; junta los resultados, quita duplicados y ordena por encaje y fecha.
 - `src/lib/opportunity.ts` — modelo común `Opportunity`, al que se traduce cada fuente.
-- `src/lib/bdns.ts`, `boe.ts`, `sources/multi-source.ts` (UE, BOCM, DOG, Fundación Biodiversidad), `sources/extra.ts` (BOJA, BOCYL, TED, Montemadrid), `rsc-opportunities.ts` — un conector por fuente.
+- `src/lib/bdns.ts`, `boe.ts`, `sources/multi-source.ts` (UE, BOCM, DOG, Fundación Biodiversidad), `rsc-opportunities.ts` — un conector por fuente.
 - `src/lib/scoring.ts` + `reforesta-profile.ts` — reglas de encaje y perfil de Reforesta.
 - `src/lib/cache.ts` — caché del servidor:
   - *stale-while-revalidate*: siempre responde al momento con lo último que tiene y refresca por detrás si tiene más de 10 minutos;
-  - caducidad por fuente según cuánto publica cada una (de 2 h la BDNS a 12 h Montemadrid);
+  - caducidad por fuente según cuánto publica cada una (de 2 h la BDNS a 6 h la UE y la Fundación Biodiversidad);
   - si una fuente falla o tarda más de 25 s (35 s la BDNS), se usan sus últimos datos buenos, marcados como «Parcial»;
   - las fichas BDNS y los sumarios de días pasados se guardan aparte para no volver a pedirlos;
   - copia en disco en `.cache/`.
@@ -137,15 +133,15 @@ Next.js 16 (App Router, TypeScript), Tailwind CSS v4 y `unpdf` para leer PDF. No
 
 ## Limitaciones conocidas
 
-- **Plazos de la BDNS.** Muchas convocatorias no publican fecha exacta, solo «20 días hábiles desde la publicación». En la foto del 14/11/2026, 320 de los 486 resultados de la BDNS no tienen fecha de cierre. En 85 casos la fecha se estima y lleva el aviso «confirmar en el extracto oficial».
+- **Plazos de la BDNS.** Muchas convocatorias no publican fecha exacta, solo «20 días hábiles desde la publicación». En la foto del 15/11/2026, 311 de los 481 resultados de la BDNS no tienen fecha de cierre. En 89 casos la fecha se estima y lleva el aviso «confirmar en el extracto oficial».
 - **Fichas BDNS incompletas.** Solo se descarga la ficha completa de las 230 convocatorias más prometedoras de cada consulta. El resto se muestra con los datos de la búsqueda y un aviso; puede faltar plazo, tipo o beneficiarios.
 - **El seguimiento es de cada navegador.** El tablero se guarda en el navegador (`localStorage`): no se comparte entre el equipo ni entre dispositivos.
 - **Importes de empresas orientativos.** Los importes y calendarios de la lista RSC son aproximados, no están verificados con cada entidad y hay que confirmarlos en su web.
 - **LIFE.** Ahora mismo no hay ninguna convocatoria LIFE de naturaleza abierta. La única LIFE abierta (European City Facility) es de transición energética y va dirigida a municipios. La mayoría de los fondos europeos que aparecen son de Horizon Europe, para consorcios de investigación.
 - **Las reglas se pueden equivocar.** La puntuación busca palabras, no entiende el texto: puede dar nota alta a algo que no encaja o pasar por alto una convocatoria redactada de forma poco habitual. Por eso siempre muestra sus motivos.
-- **Fuentes frágiles.** Los boletines leídos en HTML (DOG, BOCYL, BOJA, Fundación Biodiversidad, Montemadrid) dejan de funcionar si cambian su web. Si una fuente falla, la vista Fuentes lo indica y se siguen mostrando sus últimos datos buenos.
+- **Fuentes frágiles.** Los boletines leídos en HTML (DOG, Fundación Biodiversidad) dejan de funcionar si cambian su web. Si una fuente falla, la vista Fuentes lo indica y se siguen mostrando sus últimos datos buenos.
 - **Alojamiento serverless.** En plataformas sin disco persistente (p. ej. Vercel) se pierde la copia de `.cache/`, y cada arranque en frío vuelve a tardar 20–28 s. Conviene un servidor Node con disco.
-- **Cobertura autonómica parcial.** Hoy se leen 4 boletines autonómicos (Madrid, Galicia, Andalucía y Castilla y León). Los demás territorios llegan solo a través de la BDNS. Los boletines provinciales y municipales no se leen directamente.
+- **Cobertura autonómica parcial.** Hoy se leen 2 boletines autonómicos (Madrid y Galicia), los que propone el reto. Los demás territorios llegan solo a través de la BDNS. Los boletines provinciales y municipales no se leen directamente.
 
 ---
 

@@ -106,6 +106,8 @@ export interface IngestInput {
   sources: SourceRunInput[];
   memo: PersistedMemo[];
   dryRun: boolean;
+  /** Every source id the app still has; live rows of any other source are marked gone. */
+  registered: string[];
 }
 
 export interface IngestResult {
@@ -114,6 +116,8 @@ export interface IngestResult {
   perSource: Record<string, SourceDiff>;
   changedFields: Record<string, number>;
   duplicateGroups: { key: string; ids: string[] }[];
+  /** Rows marked gone because their source is no longer registered, per source. */
+  retired: Record<string, number>;
 }
 
 /** A malformed date from a scraper must not abort the whole transaction: keep it in `data`, null the column. */
@@ -218,6 +222,12 @@ export async function writeIngest(input: IngestInput): Promise<IngestResult> {
       : [];
     for (const r of goneRows) perSource[r.source].gone++;
 
+    // Sources removed from the app: their rows would otherwise stay live forever.
+    const retiredRows = await tx<{ id: string; source: string }[]>`
+      select id, source from opportunities where gone_at is null and source <> all(${input.registered})`;
+    const retired: Record<string, number> = {};
+    for (const r of retiredRows) retired[r.source] = (retired[r.source] ?? 0) + 1;
+
     // Candidate duplicates among the items seen in this run (reported only, never merged in this tranche).
     const keyed = new Map<string, string[]>();
     for (const r of rows) {
@@ -226,12 +236,12 @@ export async function writeIngest(input: IngestInput): Promise<IngestResult> {
     }
     const duplicateGroups = Array.from(keyed, ([key, group]) => ({ key, ids: group })).filter((g) => g.ids.length > 1);
 
-    if (input.dryRun) return { runId: null, duplicateGroups };
+    if (input.dryRun) return { runId: null, duplicateGroups, retired };
 
     const [run] = await tx<{ id: string }[]>`
       insert into ingest_runs (started_at, finished_at, status, trigger, scoring_version, totals)
       values (${input.startedAt}, ${now}, ${status}, ${input.trigger}, ${input.scoringVersion},
-              ${tx.json({ perSource, changedFields, items: rows.length, duplicateGroups: duplicateGroups.length } as never)})
+              ${tx.json({ perSource, changedFields, items: rows.length, duplicateGroups: duplicateGroups.length, retired } as never)})
       returning id`;
 
     for (const part of chunks(rows)) {
@@ -249,7 +259,7 @@ export async function writeIngest(input: IngestInput): Promise<IngestResult> {
     for (const part of chunks(changes)) {
       await tx`insert into opportunity_changes ${tx(part.map((c) => ({ ...c, run_id: run.id, changed_at: now })) as never, "opportunity_id", "run_id", "changed_at", "previous_hash", "new_hash", "diff")}`;
     }
-    for (const part of chunks(goneRows.map((r) => r.id), 2000)) {
+    for (const part of chunks([...goneRows, ...retiredRows].map((r) => r.id), 2000)) {
       await tx`update opportunities set gone_at = ${now} where id = any(${part})`;
     }
     await tx`insert into source_runs ${tx(
@@ -275,10 +285,10 @@ export async function writeIngest(input: IngestInput): Promise<IngestResult> {
     }
     // Keep the memo table bounded: drop entries expired for more than 30 days.
     await tx`delete from fetch_cache where expires_at < now() - interval '30 days'`;
-    return { runId: run.id, duplicateGroups };
+    return { runId: run.id, duplicateGroups, retired };
   });
 
-  return { runId: result.runId, status, perSource, changedFields, duplicateGroups: result.duplicateGroups };
+  return { runId: result.runId, status, perSource, changedFields, duplicateGroups: result.duplicateGroups, retired: result.retired };
 }
 
 /** Best-effort record of a run whose main transaction failed, so the app's health view shows it. */

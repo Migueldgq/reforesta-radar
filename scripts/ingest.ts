@@ -17,6 +17,7 @@ function arg(name: string): string | undefined {
 
 const dryRun = process.argv.includes("--dry-run");
 const only = arg("source")?.split(",").map((s) => s.trim()).filter(Boolean);
+const REGISTERED = [...SOURCES.map((s) => s[0]), "rsc"];
 const trigger = arg("trigger") || process.env.INGEST_TRIGGER || process.env.GITHUB_EVENT_NAME || "manual";
 
 // The web timeouts in SOURCES are tuned for an interactive request; a cold batch run (no memo, BDNS doing
@@ -85,6 +86,8 @@ function printSummary(runs: SourceRunInput[], res: IngestResult | null, t0: numb
     );
     console.log(`${pad("TOTAL", 22)}${num(runs.reduce((a, r) => a + r.items.length, 0), 6)}${num(t.new, 6)}${num(t.changed, 6)}${num(t.unchanged, 6)}${num(t.gone, 6)}`);
     const fields = Object.entries(res.changedFields).sort((a, b) => b[1] - a[1]);
+    const retired = Object.entries(res.retired);
+    console.log(`removed sources: ${retired.reduce((a, [, n]) => a + n, 0)} rows marked gone${retired.length ? ` (${retired.map(([k, n]) => `${k}×${n}`).join(", ")})` : ""}`);
     if (fields.length) console.log(`changed fields: ${fields.map(([k, n]) => `${k}×${n}`).join(", ")}`);
     if (res.duplicateGroups.length) {
       console.log(`candidate duplicate groups (not merged): ${res.duplicateGroups.length}`);
@@ -102,7 +105,7 @@ async function main(): Promise<number> {
     return 1;
   }
   if (!jobs.length) {
-    console.error(`No source matches --source ${only?.join(",")}. Known: ${[...SOURCES.map((s) => s[0]), "rsc"].join(", ")}`);
+    console.error(`No source matches --source ${only?.join(",")}. Known: ${REGISTERED.join(", ")}`);
     return 1;
   }
   console.log(`[ingest] ${jobs.map((j) => j.id).join(", ")} · trigger=${trigger} · scoring v${SCORING_VERSION}${dryRun ? " · DRY RUN" : ""}`);
@@ -118,7 +121,7 @@ async function main(): Promise<number> {
   let res: IngestResult | null = null;
   if (hasDb()) {
     try {
-      res = await writeIngest({ startedAt, trigger, scoringVersion: SCORING_VERSION, sources: runs, memo: persistedMemoSince(memoSince), dryRun });
+      res = await writeIngest({ startedAt, trigger, scoringVersion: SCORING_VERSION, sources: runs, memo: persistedMemoSince(memoSince), dryRun, registered: REGISTERED });
     } catch (e) {
       console.error("[ingest] database write failed (rolled back):", e);
       if (!dryRun) await recordFailedRun(startedAt, trigger, SCORING_VERSION, String((e as Error)?.message ?? e)).catch(() => {});
@@ -127,7 +130,7 @@ async function main(): Promise<number> {
     }
   } else {
     // dry run without a database: everything is "new"
-    res = { runId: null, status, perSource: Object.fromEntries(runs.filter((r) => r.health.status !== "error").map((r) => [r.health.id, { new: r.items.length, changed: 0, unchanged: 0, gone: 0 }])), changedFields: {}, duplicateGroups: [] };
+    res = { runId: null, status, perSource: Object.fromEntries(runs.filter((r) => r.health.status !== "error").map((r) => [r.health.id, { new: r.items.length, changed: 0, unchanged: 0, gone: 0 }])), changedFields: {}, duplicateGroups: [], retired: {} };
   }
   printSummary(runs, res, t0);
   if (status === "error") {

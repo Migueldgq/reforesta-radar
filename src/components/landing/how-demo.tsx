@@ -13,7 +13,7 @@ const v = (o: Record<string, string | number>) => o as CSSProperties;
 export function FindScene({ data }: { data: LandingData | null }) {
   const names = data
     ? [...data.sources].sort((a, b) => b.count - a.count).slice(0, 5).map((s) => s.name.split(" · ")[0])
-    : ["BDNS", "BOE", "UE", "TED", "BOCYL"];
+    : ["BDNS", "BOE", "UE", "BOCM", "DOG"];
   return (
     <div className="lp-scene grid h-full grid-cols-[auto_1fr] items-center gap-4" aria-hidden>
       <ul className="space-y-1.5">
