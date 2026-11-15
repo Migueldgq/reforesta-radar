@@ -77,7 +77,8 @@ backend/
       __init__.py        registry (SOURCES) and SOURCE_ORDER
       memo.py            fetch_cache-backed TTL memo (same keys/values as the TS)
       notices.py         decode_html, is_call_notice, is_open_tender, extract_notice_details,
-                         parse_deadline, deadline_from_days, es_date_to_iso (BOE, BOCM, DOG, BDNS)
+                         parse_deadline, deadline_from_days, es_date_to_iso, excerpt (BOE, BOCM, DOG, BDNS)
+      names.py           organism display names: Spanish title case, accents, aliases (ADR 0030)
       boe.py             ported connectors
       rsc.py             hand-checked private programmes (the only copy; the web reads them from the API)
       eu.py, fb.py, bocm.py, dog.py  ports of src/lib/sources/multi-source.ts
@@ -99,7 +100,8 @@ backend/
                        auth, __main__.py stdio (python -m app.mcp)
     db/                tables (SQLAlchemy Core) and async engine
   alembic/             migrations (0001 = supabase/migrations/0001_init.sql, 0002-0003 = bdns_editions,
-                       0004 = accounts and team state, 0005 = personal tokens)
+                       0004 = accounts and team state, 0005 = personal tokens, 0006 = per-field saved-by/at
+                       in org_settings, 0007 = organism display names on stored rows)
   tests/               parity, connectors on recorded fixtures, store semantics
 ```
 

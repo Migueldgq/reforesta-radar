@@ -38,6 +38,7 @@ from app.scoring.rank import clean_items
 from app.sources import SOURCES
 from app.sources.base import Source, SourceContext, score_raw
 from app.sources.memo import Memo
+from app.sources.names import organism_name
 
 log = logging.getLogger("ingest")
 
@@ -56,7 +57,9 @@ async def run_source(source: Source, ctx: SourceContext, timeout_s: float) -> So
             health=SourceHealth(**health, note=error), items=[], started_at=started, finished_at=datetime.now(UTC),
             error=error,
         )  # fmt: skip
-    items = clean_items([o for o in (score_raw(r) for r in result.items) if source.keep(o)])
+    # one display name per organism across sources (app/sources/names.py); scoring reads score_input, not this
+    named = (r.model_copy(update={"organismo": organism_name(r.organismo)}) for r in result.items)
+    items = clean_items([o for o in (score_raw(r) for r in named) if source.keep(o)])
     health = result.health.model_copy(
         update={"id": source.id, "count": len(items), "note": result.health.note.replace("{count}", str(len(items)))}
     )
