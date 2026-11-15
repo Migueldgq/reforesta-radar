@@ -173,7 +173,7 @@ class McpEndpoint:
             # refreshes or signs in again, and other callers' junk (all behind one IP) must not change that. Tokens
             # are 256-bit random, so there is nothing to guess; malformed ones never reach the database.
             log.info("mcp: invalid token on %s ip=%s", TEAM_PATH, ip)
-            await _reply(send, 401, "La sesión del asistente no es válida, ha caducado o se ha desconectado.",
+            await _reply(send, 401, "La sesión del agente de IA no es válida, ha caducado o se ha desconectado.",
                          {"WWW-Authenticate": challenge("invalid_token")})  # fmt: skip
         return user
 

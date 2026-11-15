@@ -120,8 +120,8 @@ const NOT_DOING = [
     body: "Esta página es pública; el radar, no. Las cuentas solo se crean con una invitación de alguien del equipo.",
   },
   {
-    title: "Tu asistente de IA solo puede leer.",
-    body: "Si usáis un asistente compatible con MCP (como Claude), podéis conectarlo al radar desde «Mi cuenta» para que busque convocatorias por vosotros. Solo consulta: nunca cambia nada.",
+    title: "Tu agente de IA solo puede leer.",
+    body: "Si usáis un agente compatible con MCP (como Claude), podéis conectarlo al radar desde «Mi cuenta» para que busque convocatorias por vosotros. Solo consulta: nunca cambia nada.",
   },
   {
     title: "Las reglas se pueden equivocar.",

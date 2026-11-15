@@ -27,7 +27,7 @@ router = APIRouter(tags=["assistants"])
 
 GONE = (
     "Esta solicitud ya no vale: ha caducado, ya se usó o se abrió en otro navegador. "
-    "Vuelve a conectar desde tu asistente."
+    "Vuelve a conectar desde tu agente de IA."
 )
 
 RequestId = Annotated[str, Field(min_length=1, max_length=100)]
@@ -140,6 +140,6 @@ async def disconnect(grant_id: int, user: User, conn: Db) -> Response:
         .values(revoked_at=provider._now())
     )
     if res.rowcount == 0:
-        raise HTTPException(404, detail="No tienes ningún asistente conectado con ese id.")
+        raise HTTPException(404, detail="No tienes ningún agente conectado con ese id.")
     log.info("oauth: grant %d disconnected by user %d", grant_id, user.id)
     return Response(status_code=204)

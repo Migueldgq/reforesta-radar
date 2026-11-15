@@ -28,7 +28,7 @@ export function ConsentView() {
   useEffect(() => {
     let alive = true;
     if (!request) {
-      void Promise.resolve().then(() => setGone("Falta la solicitud. Vuelve a conectar desde tu asistente."));
+      void Promise.resolve().then(() => setGone("Falta la solicitud. Vuelve a conectar desde tu agente de IA."));
       return;
     }
     api<ConsentInfo>("/api/oauth/consent", { json: { request } })
@@ -87,7 +87,7 @@ export function ConsentView() {
 
               <dl className="divide-y rounded-lg border text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2.5">
-                  <dt className="text-muted-foreground">Asistente</dt>
+                  <dt className="text-muted-foreground">Agente de IA</dt>
                   <dd className="flex min-w-0 items-center gap-2">
                     <span className="truncate font-medium">{info.assistant}</span>
                     <AssistantKindChip kind={info.kind} />
@@ -114,11 +114,11 @@ export function ConsentView() {
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 <li className="flex gap-2">
                   <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
-                  Lo que lea, lo verá también la empresa del asistente.
+                  Lo que lea, lo verá también la empresa del agente.
                 </li>
                 <li className="flex gap-2">
                   <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
-                  Puedes desconectarlo cuando quieras en Mi cuenta → Conectar un asistente.
+                  Puedes desconectarlo cuando quieras en Mi cuenta → Conectar un agente de IA.
                 </li>
               </ul>
 
@@ -174,7 +174,7 @@ function KindNote({ kind, host }: { kind: ConsentInfo["kind"]; host: string }) {
   return (
     <div className="space-y-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
       <p className="flex items-center gap-1.5 font-medium">
-        <CircleAlert className="size-4 shrink-0" aria-hidden /> No reconocemos este asistente
+        <CircleAlert className="size-4 shrink-0" aria-hidden /> No reconocemos este agente
       </p>
       <p>
         Su nombre lo ha escrito él mismo. Comprueba que reconoces la dirección <span className="font-mono text-xs break-words">{host}</span>.
@@ -188,7 +188,7 @@ function KindNote({ kind, host }: { kind: ConsentInfo["kind"]; host: string }) {
 function SelfCheck() {
   return (
     <p>
-      Continúa solo si tú mismo acabas de pulsar «Conectar» en tu propio asistente. Si alguien te ha enviado este enlace,
+      Continúa solo si tú mismo acabas de pulsar «Conectar» en tu propio agente. Si alguien te ha enviado este enlace,
       pulsa «No permitir».
     </p>
   );
@@ -209,7 +209,7 @@ function Done({ allowed }: { allowed: boolean }) {
   return (
     <p className="flex items-center gap-2 text-sm" role="status">
       {allowed ? <CircleCheck className="size-4 text-primary" aria-hidden /> : <X className="size-4 text-muted-foreground" aria-hidden />}
-      {allowed ? "Listo. Vuelve a tu asistente: ya puede leer el radar." : "No permitido. Ese asistente no tendrá acceso."}
+      {allowed ? "Listo. Vuelve a tu agente: ya puede leer el radar." : "No permitido. Ese agente no tendrá acceso."}
     </p>
   );
 }

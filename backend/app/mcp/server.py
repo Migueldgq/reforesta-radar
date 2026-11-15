@@ -42,7 +42,7 @@ log = logging.getLogger("mcp")
 USER_STATE_KEY = "radar_mcp_user"  # set by app/mcp/http.py on the ASGI scope's state: the token's person, or None
 NEEDS_TOKEN = (
     "Para ver el tablero del equipo, conecta la dirección del equipo (la del radar terminada en /mcp/equipo) e inicia "
-    "sesión con tu cuenta del radar; o usa un token personal (web: «Mi cuenta» → «Conectar un asistente») como "
+    "sesión con tu cuenta del radar; o usa un token personal (web: «Mi cuenta» → «Conectar un agente de IA») como "
     "cabecera `Authorization: Bearer rr_pat_…`."
 )
 ESTIMATED_NOTE = (

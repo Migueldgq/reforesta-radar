@@ -92,7 +92,7 @@ def clean_name(raw: str | None) -> str:
             out.append(c)
             marks = 0
     text = re.sub(r"\s+", " ", "".join(out)).strip()
-    return text[:MAX_NAME].strip() or "Asistente sin nombre"
+    return text[:MAX_NAME].strip() or "Agente sin nombre"
 
 
 def kind_of(redirect_uri: str) -> Kind:

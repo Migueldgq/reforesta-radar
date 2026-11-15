@@ -178,14 +178,14 @@ ERROR_PAGE = """<!doctype html><html lang="es"><head><meta charset="utf-8">
 main{{max-width:28rem;margin:12vh auto;padding:1.5rem;background:#fff;border:1px solid #e3e3e3;border-radius:.75rem}}
 h1{{font-size:1.125rem;margin:0 0 .5rem}}p{{margin:.5rem 0;color:#555}}code{{font-size:.8rem;color:#777}}</style>
 </head><body><main><h1>No se puede conectar</h1><p>{message}</p>
-<p>Vuelve a tu asistente y pulsa «Conectar» otra vez. Si no lo has pedido tú, cierra esta página.</p>
+<p>Vuelve a tu agente de IA y pulsa «Conectar» otra vez. Si no lo has pedido tú, cierra esta página.</p>
 <p><code>{code}</code></p></main></body></html>"""
 ERROR_MESSAGES = {
-    "invalid_target": "El asistente ha pedido una dirección del radar que no existe.",
-    "unsupported_response_type": "El asistente ha hecho una petición que el radar no admite.",
+    "invalid_target": "El agente de IA ha pedido una dirección del radar que no existe.",
+    "unsupported_response_type": "El agente de IA ha hecho una petición que el radar no admite.",
     "temporarily_unavailable": "Hay demasiadas peticiones ahora mismo. Espera unos minutos.",
     "busy": "Hay demasiadas solicitudes de conexión pendientes. Entra en el radar con tu cuenta en este navegador y "
-    "vuelve a pulsar «Conectar» en tu asistente: con la sesión iniciada no hace falta esperar.",
+    "vuelve a pulsar «Conectar» en tu agente de IA: con la sesión iniciada no hace falta esperar.",
 }
 ERROR_HEADERS = {
     **NO_STORE,
@@ -197,7 +197,7 @@ ERROR_HEADERS = {
 
 def _error_page(code: str, status: int = 400, headers: dict[str, str] | None = None) -> Response:
     safe = code if code.replace("_", "").isalpha() else "invalid_request"
-    message = ERROR_MESSAGES.get(safe, "La solicitud de conexión no es válida o el asistente no está registrado.")
+    message = ERROR_MESSAGES.get(safe, "La solicitud de conexión no es válida o el agente de IA no está registrado.")
     safe = "temporarily_unavailable" if safe == "busy" else safe
     return HTMLResponse(ERROR_PAGE.format(message=message, code=safe), status_code=status,
                         headers={**ERROR_HEADERS, **(headers or {})})  # fmt: skip

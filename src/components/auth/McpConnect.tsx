@@ -60,7 +60,7 @@ function Snippet({ label, text }: { label: string; text: string }) {
 }
 
 /**
- * "Conectar un asistente" in Mi cuenta. Leads with the simple path (paste the team address in the assistant, sign in,
+ * "Conectar un agente de IA" in Mi cuenta. Leads with the simple path (paste the team address in the assistant, sign in,
  * Permitir; ADR 0035) and the assistants connected that way; personal tokens and the public address are the
  * technical option underneath.
  */
@@ -89,10 +89,10 @@ export function McpConnect() {
     <section className="space-y-4" aria-labelledby="mcp-title">
       <div className="space-y-1.5">
         <h3 id="mcp-title" className="text-sm font-semibold">
-          Conectar un asistente
+          Conectar un agente de IA
         </h3>
         <p className="text-sm text-muted-foreground">
-          Tu asistente de IA (Claude) puede consultar el radar por ti: buscar convocatorias y ver el tablero del equipo. Solo lee; nunca cambia nada.
+          Tu agente (por ejemplo, Claude) puede consultar el radar por ti: buscar convocatorias y ver el tablero del equipo. Solo lee; nunca cambia nada.
         </p>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -121,12 +121,12 @@ export function McpConnect() {
             </ol>
           ) : (
             <p className="text-sm text-muted-foreground">
-              En este radar no se puede iniciar sesión desde el asistente (falta publicarlo con https). Usa un token personal, en «Para uso técnico».
+              En este radar no se puede iniciar sesión desde el agente (falta publicarlo con https). Usa un token personal, en «Para uso técnico».
             </p>
           )}
 
           <ConnectedList assistants={info.assistants} onChange={() => void load()} />
-          <p className="text-xs text-muted-foreground">Lo que lea tu asistente lo verá también la empresa que lo ofrece.</p>
+          <p className="text-xs text-muted-foreground">Lo que lea tu agente lo verá también la empresa que lo ofrece.</p>
 
           <Collapsible className="rounded-lg border">
             <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
@@ -176,11 +176,11 @@ function Step({ n, children }: { n: number; children: ReactNode }) {
 function ConnectedList({ assistants, onChange }: { assistants: ConnectedAssistant[]; onChange: () => void }) {
   return (
     <div className="space-y-2">
-      <h4 className="text-sm font-medium">Asistentes conectados</h4>
+      <h4 className="text-sm font-medium">Agentes de IA conectados</h4>
       {assistants.length === 0 ? (
         <p className="text-sm text-muted-foreground">Todavía no has conectado ninguno.</p>
       ) : (
-        <ul className="divide-y rounded-lg border" aria-label="Asistentes conectados">
+        <ul className="divide-y rounded-lg border" aria-label="Agentes de IA conectados">
           {assistants.map((a) => (
             <AssistantRow key={a.id} assistant={a} onChange={onChange} />
           ))}
@@ -352,7 +352,7 @@ function TokenRow({ token, onChange }: { token: PersonalToken; onChange: () => v
       </div>
       {confirming && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm">El asistente que lo use dejará de ver el tablero.</span>
+          <span className="text-sm">El agente que lo use dejará de ver el tablero.</span>
           <Button type="button" variant="destructive" size="sm" disabled={pending} onClick={() => void revoke()}>
             {pending && <Loader2 className="animate-spin" aria-hidden />}
             Revocar
