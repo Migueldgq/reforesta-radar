@@ -64,7 +64,7 @@ backend/
                          parse_deadline, deadline_from_days, es_date_to_iso (BOE, BOCM, DOG, BDNS)
       boe.py, rsc.py     ported connectors
       eu.py, fb.py, bocm.py, dog.py  ports of src/lib/sources/multi-source.ts
-      bdns.py            BDNS connector (68 searches + up to 230 memoised details; retries 429 up to 3 times)
+      bdns.py            BDNS connector (68 searches + a memoised detail for every candidate; retries 429 x3)
     ingest/
       __main__.py        CLI (python -m app.ingest), per-source run, summary table
       store.py           one-transaction write: upsert, change log, gone, run records, fetch_cache
@@ -103,6 +103,19 @@ Details that matter when porting more code:
 - Known TS quirks kept for parity (fixing one changes the frozen expectations; bump `SCORING_VERSION`):
   `deadline_from_days(..., "1 mes")` returns one day early in Madrid (the TS prints local midnight with
   `toISOString()`).
+- Deliberate deviations from the TS connectors (fetching only; the scoring functions are unchanged and still match
+  the goldens):
+  - BDNS reads the detail ("ficha") of **every** candidate that survives the pre-score (~1 000 of ~1 600 unique
+    calls today), not only the best 230. The TS cap existed because it fetched live inside a 35 s web request; the
+    ingest is a background batch (8 min per source) and details are memoised in `fetch_cache`. `MAX_ENRICH` (2 000)
+    is now only a safety bound. Cold run ≈ 2 min (BDNS answers about half the first attempts with 429; retries
+    absorb all but a handful), warm run ≈ 10 s. "Lite" items (search row only: no deadline, type or beneficiaries;
+    −5 and the "Ficha BDNS no cargada" warning) now appear only when a detail fails or past the bound. With details,
+    `keep()` sees the real call type and beneficiaries: non-competitive calls are dropped, and generic calls from
+    priority searches (IRPF, tercer sector, MITECO organs) open to NGOs are kept without a work line, as in the TS.
+  - BDNS retries 429/5xx/network errors up to 3 times (the TS retried once).
+  - `tests/test_parity_golden.py` still rebuilds the golden's 286 lite items as lite (the golden is the TS output),
+    so it keeps covering the lite adjustment; a live ingest no longer produces them in bulk.
 - The golden still holds items from sources dropped from the product (`ted`, `bocyl`); they are kept as extra
   scoring-parity cases only (`tests/golden_reconstruct.py` rebuilds their inputs), not as sources to port.
 
@@ -146,7 +159,7 @@ existing connector" (e.g. `app/sources/boe.py`), and "the TS output" as the expe
 
 | id | TS | notes |
 |---|---|---|
-| `bdns` | `src/lib/bdns.ts` (`getBdnsOpportunities`, `detailToOpportunity`, `rawToOpportunity`, `preScore`, `searchPaged`, `RADAR_QUERIES`, `PRE_DROP_TERMS`) | 68 paged searches + up to `MAX_ENRICH` details; memo `bdns:detail:N` (TTL 24 h with end date, 3 h without); needs `infer_comunidad_autonoma`, `parse_deadline`, `deadline_from_days`; adjustments: conflict (`sin_fecha`, −12, cap 60), estimated-deadline warning, lite (−5 + warning); `keep()` uses isCompetitive / score ≥ 25 / workLines / priority. The TS `fetchJsonShared` dedupes identical concurrent GETs: add that to `Http` if needed. **Ported** (`app/sources/bdns.py`, `tests/test_bdns.py`): 481/481 ids and fields identical to the live TS route; no in-flight dedupe needed (every BDNS URL is unique per run). |
+| `bdns` | `src/lib/bdns.ts` (`getBdnsOpportunities`, `detailToOpportunity`, `rawToOpportunity`, `preScore`, `searchPaged`, `RADAR_QUERIES`, `PRE_DROP_TERMS`) | 68 paged searches + up to `MAX_ENRICH` details (TS: 230; Python: every candidate, see deviations above); memo `bdns:detail:N` (TTL 24 h with end date, 3 h without); needs `infer_comunidad_autonoma`, `parse_deadline`, `deadline_from_days`; adjustments: conflict (`sin_fecha`, −12, cap 60), estimated-deadline warning, lite (−5 + warning); `keep()` uses isCompetitive / score ≥ 25 / workLines / priority. The TS `fetchJsonShared` dedupes identical concurrent GETs: add that to `Http` if needed. **Ported** (`app/sources/bdns.py`, `tests/test_bdns.py`): 481/481 ids and fields identical to the live TS route; no in-flight dedupe needed (every BDNS URL is unique per run). |
 | `eu` | `src/lib/sources/multi-source.ts` (`scrapeEu`, `sediaSearch`, `EN_TOPIC`, `EU_OFFTOPIC`, `nextFutureDeadline`) | SEDIA search is a multipart POST; scoring titulo/extraText are Spanish terms; Horizon (−12, cap 58, warning), LIFE (prepend reason), municipalities warning. **Ported** (`app/sources/eu.py`, `EN_TOPIC` now lives there). |
 | `bocm` | `multi-source.ts` (`scrapeBocm`, `bocmXmlUrl`, `parseBocmXml`) | XML summaries; notice details via `extract_notice_details`; tipo depends on body text. **Ported** (`app/sources/bocm.py`). |
 | `dog` | `multi-source.ts` (`scrapeDog`) | Pre-score then details like BOE. **Ported** (`app/sources/dog.py`). |

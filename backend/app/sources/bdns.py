@@ -1,8 +1,9 @@
 """BDNS (Base de Datos Nacional de Subvenciones): port of getBdnsOpportunities in src/lib/bdns.ts.
 
 68 paged searches over the last 365 days (topic keywords, generic third-sector queries, MITECO-family organs),
-deduped by call number, pre-scored to drop nominative/direct calls and to choose the MAX_ENRICH most relevant,
-whose detail ("ficha") is read and memoised; the rest become "lite" items built from the search row only.
+deduped by call number and pre-scored to drop nominative/direct calls. Every remaining candidate's detail ("ficha")
+is read and memoised; only details that fail (or candidates past the MAX_ENRICH safety bound) become "lite" items
+built from the search row only.
 """
 
 import math
@@ -20,7 +21,10 @@ from app.sources.base import FetchResult, RawOpportunity, Source, SourceContext,
 from app.sources.notices import deadline_from_days, parse_deadline
 
 BDNS_BASE = "https://www.infosubvenciones.es/bdnstrans/api"
-MAX_ENRICH = 230
+# The TS read only the 230 best details: it fetched live inside a 35 s web request. The ingest is a background batch
+# (per-source timeout INGEST_SOURCE_TIMEOUT_S, 8 min) with details memoised in fetch_cache, so every candidate that
+# survives the pre-score gets its detail (~1 000 today). This is only a safety bound against a runaway search.
+MAX_ENRICH = 2000
 SEARCH_WINDOW_DAYS = 365
 DAY_S = 86400
 # BDNS answers bursts with HTTP 429. The TS retried once (fetchText default); a cold run (no memo) then lost ~15% of
