@@ -96,7 +96,7 @@ Correctness over elegance: same numbers, same Spanish strings, same order of rea
 The goldens and the `expected.json` fixtures are **frozen**: they were dumped from the TypeScript backend before it
 was deleted (the dump tools `tools/dump_ts_*.ts` and `tools/capture_*_inputs.py` went with it; see git history
 before the Python cutover). They pin the scoring as it was at parity. When you change the scoring on purpose,
-update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 13: the
+update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 14: the
 BDNS history signal; it is stored in `ingest_runs.scoring_version`).
 
 Details that matter when porting more code:
@@ -137,15 +137,18 @@ editions are never opportunities.
 
 - **Matching** (`app/sources/bdns_history.py`): BDNS has no series id. The detail's organ names are resolved to ids
   with `/organos?idAdmon=C|A|L`; every call of that organ since 2018 is listed (`organos=<ids>&pageSize=2000`) and
-  titles are compared locally: published before the current one, Jaccard >= 0.5 on title tokens (no numbers,
-  stopwords, boilerplate or the organ's own name), at most one per calendar year (the best; the current edition
-  takes its own year). The newest 4 previous editions are read in detail and, from mid-2021, their awards.
+  titles are compared locally: published before the current one, not an amendment (modification, credit increase,
+  correction, term extension; es/ca/gl), Jaccard >= 0.5 on title tokens (no numbers, stopwords, boilerplate or the
+  organ's own name), at most one per calendar year (the best; the current edition takes its own year). Opening:
+  with one previous edition only "La edición anterior abrió en mayo de 2025"; "irregular" only with >= 3 editions
+  and a gap of >= 2 years. The newest 4 previous editions are read in detail and, from mid-2021, their awards.
 - **Privacy**: award rows name natural persons. Only counts by NIF class (G non-profit, A/B companies, P local bodies,
   Q public bodies, masked/DNI/NIE persons...), amounts, dates and hits of a curated NGO list (by NIF) are kept; the
   memo stores that reduced summary, never the raw response.
 - **Scoring** (`app/scoring/history.py`, applied in `rank.adjusted_fit`): Reforesta (G80428204) won a past edition
   +8; curated peer NGOs won +3; >= 70 % of >= 5 past awards to non-profits +6; < 20 % −10 and a warning; none at all:
-  also capped at 45. The delta goes on the base fit (territorial and kind caps still bound it), the cap last (a
+  also capped at 45. These two penalties need a trustworthy basis (every counted edition matched with Jaccard
+  >= 0.6, or >= 2 counted editions that each agree); otherwise the counts are shown in `history.awards` only. The delta goes on the base fit (territorial and kind caps still bound it), the cap last (a
   ceiling geographic bonuses cannot lift), the reasons first. The web Perfil adds its deltas on top of this fit.
 - **Cost and failure**: 3 requests in flight, memoised in `fetch_cache` (organ trees and lists 7 d, edition details
   90 d, awards 7/30/90 d by age). Cold start on 2026-11-15: 255 calls, 1 146 requests (108 answered 429 and were

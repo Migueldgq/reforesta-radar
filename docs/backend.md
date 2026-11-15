@@ -28,7 +28,7 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
 - Si Postgres no responde, la API devuelve 503; si la API no responde, la web muestra un estado de error (o la
   última copia guardada en el navegador, con un aviso). La portada se pinta sin cifras.
 - Esquema: migraciones de Alembic en `backend/alembic/` (la API las aplica al arrancar).
-- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 13) se guarda en cada `ingest_runs`; súbelo cuando
+- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 14) se guarda en cada `ingest_runs`; súbelo cuando
   cambie la puntuación.
 - Historial BDNS: tras guardar la ingesta, un paso aparte busca ediciones anteriores de las convocatorias BDNS
   relevantes (cuándo suelen abrir, cuánto plazo dan) y quién las ganó (solo recuentos por tipo de entidad, nunca
