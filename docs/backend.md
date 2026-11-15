@@ -107,8 +107,15 @@ la ingesta programada es el servicio `ingest-scheduler` (`backend/app/ingest/sch
 
 ## Antes de publicarlo en internet
 
-- [ ] Proxy inverso (Caddy, nginx) con https delante de `web` que **sobrescriba** `X-Forwarded-For`; solo entonces
-      `FORWARDED_ALLOW_IPS` = red de compose (p. ej. `172.16.0.0/12`). Sin proxy, déjalo en `127.0.0.1`.
+- [ ] Proxy inverso (Caddy, nginx) con https delante de `web` que **sobrescriba** `X-Forwarded-For` (nginx:
+      `proxy_set_header X-Forwarded-For $remote_addr;`, no `$proxy_add_x_forwarded_for`); solo entonces
+      `FORWARDED_ALLOW_IPS` = red de compose (p. ej. `172.16.0.0/12`). Sin proxy, déjalo en `127.0.0.1`: todos los
+      clientes comparten entonces la IP de `web` (y el cupo sin token de `/mcp`).
+- [ ] Con ese proxy, el contenedor `web` no debe ser alcanzable directamente (puerto solo en `127.0.0.1` o sin
+      publicar): Next solo pone `X-Forwarded-For` si falta, así que saltándose el proxy el cliente elige su IP y se
+      salta todos los límites, el de login incluido.
+- [ ] Tiempos máximos de petición y de lectura del cuerpo en el proxy; no registrar la cabecera `Authorization`.
+- [ ] Opcional: caché corta en el proxy para `GET /api/public/oportunidades` (igual para todos).
 - [ ] Límite de tamaño de cuerpo también en el proxy (16 MB basta: el PDF más grande).
 - [ ] `RADAR_COOKIE_SECURE=true` y `RADAR_PUBLIC_URL=https://…` (los enlaces de invitación usan esa URL).
 - [ ] El puerto de la API (`8010`) solo en `127.0.0.1` (como ya está) o sin publicar; si se expone, quitar `/docs`

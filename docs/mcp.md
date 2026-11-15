@@ -94,7 +94,7 @@ las bases), cualquier escritura y el filtro de organismos del equipo en las bús
 | `RADAR_MCP_PUBLIC` | `true` | Herramientas públicas sin token. `false`: todo pide token (401 sin él). |
 | `RADAR_MCP_PUBLIC_RATE` | `60` | Peticiones sin token por minuto y por IP (429 después). |
 | `RADAR_MCP_URL` | `RADAR_PUBLIC_URL` + `/mcp` | URL que muestra «Mi cuenta» en los comandos. |
-| `RADAR_MCP_ALLOWED_HOSTS` / `RADAR_MCP_ALLOWED_ORIGINS` | – | `Host` / `Origin` aceptados además de localhost, `api` y los de `RADAR_PUBLIC_URL` y `RADAR_MCP_URL` (`host:*` = cualquier puerto). Otro `Host` → 421, otro `Origin` → 403. |
+| `RADAR_MCP_ALLOWED_HOSTS` / `RADAR_MCP_ALLOWED_ORIGINS` | – | `Host` / `Origin` aceptados además de localhost, `api` y los de `RADAR_PUBLIC_URL` y `RADAR_MCP_URL` (`host:*` = cualquier puerto). Otro `Origin` → 403; otro `Host` → 421, pero solo al llamar al puerto de la API directamente: a través de la web el rewrite de Next cambia el `Host` a `api:8000`, así que ahí protege solo el `Origin`. |
 | `RADAR_MCP_USER` | – | Solo stdio: correo de la cuenta cuya vista de equipo se usa. |
 
 ## Antes de publicarlo en internet
@@ -103,7 +103,17 @@ las bases), cualquier escritura y el filtro de organismos del equipo en las bús
       aceptados y los comandos de Mi cuenta.
 - [ ] El proxy inverso deja pasar `POST /mcp` sin almacenar la respuesta y sin registrar la cabecera
       `Authorization`.
-- [ ] Sin un proxy que fije `X-Forwarded-For` (docs/backend.md), todos los clientes comparten la IP del contenedor
-      `web`: el límite sin token (60/min) y el de tokens no válidos (30 en 15 min) son comunes a todos.
+- [ ] Hasta que un proxy inverso dé la IP real del cliente, todos los que llegan por la web comparten la IP del
+      contenedor `web`: el cupo sin token (60/min) es uno para todos, y los tokens no válidos de cualquiera agotan
+      los 30 en 15 min para todos (un token válido nunca se rechaza por eso). Para tener IP real:
+      - el proxy **sobrescribe** `X-Forwarded-For` (nginx: `proxy_set_header X-Forwarded-For $remote_addr;`, no
+        `$proxy_add_x_forwarded_for`, que añade a lo que mande el cliente);
+      - `FORWARDED_ALLOW_IPS` = red de compose (p. ej. `172.16.0.0/12`);
+      - el contenedor `web` no es alcanzable sin pasar por el proxy (puerto publicado solo en `127.0.0.1` o sin
+        publicar). Si no, Next solo pone `X-Forwarded-For` cuando falta, la cabecera la decide el cliente y todos
+        los límites (también el de login) se saltan cambiándola.
+- [ ] Tiempos máximos de petición y de lectura del cuerpo en el proxy (las respuestas de `/mcp` son JSON, no
+      streams: unos segundos bastan).
+- [ ] Opcional: caché corta en el proxy para `GET /api/public/oportunidades` (es igual para todos).
 - [ ] Decidir si se quiere la parte pública (`RADAR_MCP_PUBLIC`).
 - [ ] Explicar al equipo que lo que devuelve el radar con token lo ve el proveedor de su asistente.

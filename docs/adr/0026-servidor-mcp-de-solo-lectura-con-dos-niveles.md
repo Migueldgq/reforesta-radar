@@ -29,7 +29,9 @@ token en el caso común.
     nunca una vista pública.
 - **Protecciones de `/mcp`:** límite de cuerpo de 1 MiB (el mismo middleware que `/api/`), `Host` y `Origin`
   validados con la protección contra DNS rebinding del SDK (valores de `RADAR_PUBLIC_URL`, `RADAR_MCP_URL` y
-  `RADAR_MCP_ALLOWED_HOSTS` / `_ORIGINS`), la cookie de sesión no se lee (sin superficie CSRF).
+  `RADAR_MCP_ALLOWED_HOSTS` / `_ORIGINS`; el `Host` solo cuenta al llamar a la API directamente, porque el rewrite
+  de Next lo cambia a `api:8000`: por la web protege el `Origin`), la cookie de sesión no se lee (sin superficie
+  CSRF).
 - **Fuera:** `analizar_pdf` (descarga PDFs remotos: coste y superficie SSRF por una función que el asistente puede
   hacer con la URL de las bases), escritura de cualquier tipo, el filtro de organismos del equipo en las búsquedas
   (se devuelve en `perfil_reforesta`) y OAuth.

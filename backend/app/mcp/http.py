@@ -2,7 +2,8 @@
 
 Order of checks on every request (all before any MCP parsing):
 1. body size: `BodyLimitMiddleware` (1 MiB, app/body_limit.py) and the SDK's own limit;
-2. Host and Origin (DNS-rebinding protection, the SDK's `TransportSecurityMiddleware`): 421 / 403;
+2. Host and Origin (DNS-rebinding protection, the SDK's `TransportSecurityMiddleware`): 421 / 403. Through the web
+   origin the Next rewrite sets `Host: api:8000`, so there only the Origin check applies;
 3. credentials. Only `Authorization: Bearer rr_pat_…` (app/auth/pats.py) is read: the session cookie and query
    strings are ignored, so there is no CSRF surface.
    - no Authorization header: public tools (when RADAR_MCP_PUBLIC), at most RADAR_MCP_PUBLIC_RATE requests per
