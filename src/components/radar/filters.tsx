@@ -1,7 +1,6 @@
 "use client";
 
 import { Check, PlusCircle, Search, X } from "lucide-react";
-import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,8 +8,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
-import { DEFAULT_FILTERS, EMPTY_DIMS, fmtDayShort, type Dim } from "./model";
+import { DEFAULT_FILTERS, EMPTY_DIMS, fmtDayShort, normalize, type Dim } from "./model";
 import { useRadar } from "./store";
 
 export interface Option {
@@ -27,12 +25,14 @@ function FacetedFilter({
   selected,
   onToggle,
   onClear,
+  wide,
 }: {
   label: string;
   options: Option[];
   selected: string[];
   onToggle: (key: string) => void;
   onClear: () => void;
+  wide?: boolean;
 }) {
   const n = selected.length;
   return (
@@ -51,8 +51,9 @@ function FacetedFilter({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 p-0" align="start">
-        <Command>
+      <PopoverContent className={cn("p-0", wide ? "w-[min(24rem,calc(100vw-2rem))]" : "w-64")} align="start">
+        {/* Plain accent-insensitive substring match: cmdk's fuzzy default matches unrelated long names. */}
+        <Command filter={(value, search) => (normalize(value).includes(normalize(search.trim())) ? 1 : 0)}>
           {options.length > 7 && <CommandInput placeholder={label} />}
           <CommandList>
             <CommandEmpty>Sin resultados.</CommandEmpty>
@@ -70,7 +71,9 @@ function FacetedFilter({
                     >
                       {on && <Check className="size-3 text-primary-foreground" strokeWidth={3} />}
                     </span>
-                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                    <span className="min-w-0 flex-1 truncate" title={o.label}>
+                      {o.label}
+                    </span>
                     <span className="ml-auto text-xs text-muted-foreground tabular-nums">{o.count}</span>
                   </CommandItem>
                 );
@@ -99,28 +102,25 @@ export interface BarDim {
   dim: Dim;
   label: string;
   options: Option[];
+  wide?: boolean;
 }
 
 export function FilterBar({
   dims,
   chips,
   total,
-  fueraCount,
 }: {
   dims: BarDim[];
   chips: { key: string; label: string; remove: () => void }[];
   total: number;
-  fueraCount: number;
 }) {
   const { filters, setFilters } = useRadar();
-  const switchId = useId();
 
   const toggle = (dim: Dim, key: string) =>
     setFilters((f) => {
       const cur = f.dims[dim];
       return { ...f, dims: { ...f.dims, [dim]: cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key] } };
     });
-  const fuera = filters.flags.includes("fuera");
   const clear = () => setFilters((f) => ({ ...DEFAULT_FILTERS, hideClosed: f.hideClosed, dims: EMPTY_DIMS }));
 
   return (
@@ -145,6 +145,7 @@ export function FilterBar({
             selected={filters.dims[d.dim]}
             onToggle={(k) => toggle(d.dim, k)}
             onClear={() => setFilters((f) => ({ ...f, dims: { ...f.dims, [d.dim]: [] } }))}
+            wide={d.wide}
           />
         ))}
         {chips.length > 0 && (
@@ -153,16 +154,6 @@ export function FilterBar({
             <X aria-hidden />
           </Button>
         )}
-        <div className="ml-auto flex h-9 items-center gap-2 pl-1">
-          <Switch
-            id={switchId}
-            checked={fuera}
-            onCheckedChange={(v) => setFilters((f) => ({ ...f, flags: v ? [...f.flags, "fuera"] : f.flags.filter((x) => x !== "fuera") }))}
-          />
-          <label htmlFor={switchId} className="cursor-pointer text-sm whitespace-nowrap">
-            Fuera de tus 4 fuentes <span className="text-muted-foreground tabular-nums">{fueraCount}</span>
-          </label>
-        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -180,7 +171,9 @@ export function FilterBar({
 function FilterBadge({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
     <Badge variant="secondary" className="max-w-full gap-0.5 py-0 pr-0.5 font-normal">
-      <span className="truncate">{label}</span>
+      <span className="truncate" title={label}>
+        {label}
+      </span>
       <button
         type="button"
         onClick={onRemove}

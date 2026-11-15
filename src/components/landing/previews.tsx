@@ -258,30 +258,6 @@ export function FitCard({ data }: { data: LandingData | null }) {
   );
 }
 
-/* ---------- Outside the four manual sources ---------- */
-
-export function OutsideBar({ data }: { data: LandingData | null }) {
-  if (!data) return <Unavailable>Sin datos en este momento.</Unavailable>;
-  const pct = Math.round((data.outside / data.total) * 100);
-  return (
-    <div className="p-5 sm:p-6">
-      <p className="text-5xl font-semibold tracking-tight">
-        <CountUp value={pct} suffix="%" />
-      </p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {data.outside} de {data.total} resultados vienen de fuera de las cuatro fuentes que Reforesta revisa a mano.
-      </p>
-      <div className="mt-6 flex h-2.5 overflow-hidden rounded-full bg-border" role="img" aria-label={`${pct}% fuera de tus 4 fuentes`}>
-        <span className="lp-meter h-full bg-primary" style={{ width: `${pct}%` }} />
-      </div>
-      <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-        <span>Fuera de tus 4 fuentes</span>
-        <span>Dentro</span>
-      </div>
-    </div>
-  );
-}
-
 /* ---------- Next edition ---------- */
 
 export function NextEditionList({ data }: { data: LandingData | null }) {
