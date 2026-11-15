@@ -13,6 +13,11 @@ docs
 *.tsbuildinfo
 .DS_Store
 .impeccable
+# end-to-end tests (e2e/README.md): not part of the image
+e2e
+playwright.config.ts
+playwright-report
+test-results
 # database dumps and other local artefacts that must never end up in an image
 backups
 radar-backups
