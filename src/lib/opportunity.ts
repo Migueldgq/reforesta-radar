@@ -28,6 +28,12 @@ export interface Opportunity {
   fit: FitAnalysis;           // existing type in src/lib/types.ts
   firstSeenAt?: string;       // ISO; only with the Postgres store (first ingest that saw it)
   history?: History | null;   // BDNS only: previous editions and who won them (null/absent when unknown)
+  aiReview?: AiReview;        // «Revisión por IA» (ADR 0041): absent when off or not reviewed yet; never changes `fit`
+}
+/** A second opinion on the topic from an AI: "no" takes the call out of the default list, unless the team acted on it. */
+export interface AiReview {
+  verdict: "si" | "no" | "dudoso";
+  reason: string;           // one short Spanish sentence, plain text
 }
 /** Facts of a private programme, checked by hand on the funder's own site (backend/app/sources/rsc.py). */
 export interface RscInfo {

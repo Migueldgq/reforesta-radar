@@ -1,6 +1,6 @@
 "use client";
 
-import { AlarmClock, ArrowRight, Check, ChevronDown, DoorOpen, Loader2, Repeat, Target, TriangleAlert, UsersRound, X } from "lucide-react";
+import { AlarmClock, ArrowRight, Check, ChevronDown, DoorOpen, EyeOff, Loader2, Repeat, Target, TriangleAlert, UsersRound, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { PersonRef } from "@/lib/team";
 import Link from "next/link";
@@ -45,7 +45,7 @@ import { BarList, WeekBars, type BarRow, type WeekBin } from "./charts";
 import { TerritoryPanel } from "./SpainMap";
 import { FilterBar, weekChipLabel, type BarDim } from "./filters";
 import { ResultsTable } from "./ResultsTable";
-import { ErrorState, PageHeader } from "./ui";
+import { ErrorState, PageHeader, ScoreChip } from "./ui";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -120,7 +120,7 @@ function IngestStaleAlert({ lastIngestAt }: { lastIngestAt: string }) {
 }
 
 function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fetchedAt: string; sourceCount: number }) {
-  const { filters, setFilters, markPush, triageOf, refreshing, error, offline, profile, teamOrgs, settings } = useRadar();
+  const { filters, setFilters, markPush, triageOf, refreshing, error, offline, profile, teamOrgs, settings, discarded } = useRadar();
   const teamOrgsOn = teamOrgs.length > 0 && sameOrgs(filters.dims.organismo, teamOrgs);
   const orgsSaved = savedBy(settings, "organisms");
   const [more, setMore] = useState(false);
@@ -135,6 +135,11 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
     [items, filters, triageOf, hay],
   );
   const visible = useMemo(() => subset(null), [subset]);
+  // Out of the list and of every count above; shown apart, under the same filters, so the team can check them.
+  const discardedVisible = useMemo(
+    () => discarded.filter((o) => matches(o, filters, triageOf(o.id), haystackOf(o))),
+    [discarded, filters, triageOf],
+  );
   const total = visible.length;
 
   const agg = (dim: Dim, keys?: readonly string[]): BarRow[] => {
@@ -356,8 +361,59 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
         <div id="lista-convocatorias" className={cn("transition-opacity", refreshing && "opacity-90")}>
           <ResultsTable items={visible} onClear={clearAll} />
         </div>
+        <DiscardedByAi items={discardedVisible} />
       </section>
     </div>
+  );
+}
+
+/**
+ * What the «Revisión por IA» took out of the list (ADR 0041), closed by default. Each call opens in the drawer, where
+ * «Sí encaja» brings it back.
+ */
+function DiscardedByAi({ items }: { items: Opportunity[] }) {
+  const { openDetail } = useRadar();
+  const [open, setOpen] = useState(false);
+  if (!items.length) return null;
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="rounded-lg border" data-testid="descartadas-ia">
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-4 py-3 text-left text-sm outline-none hover:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <EyeOff className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="font-medium">Descartadas por la IA</span>
+          <span className="text-muted-foreground tabular-nums">{items.length}</span>
+          <ChevronDown className={cn("ml-auto size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} aria-hidden />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <p className="border-t px-4 py-3 text-sm text-muted-foreground">
+          La revisión por IA cree que estas convocatorias no tienen que ver con vuestro trabajo: no salen en la lista ni en las cifras de
+          arriba. Su nota sigue siendo la de las reglas. Si alguna sí encaja, ábrela y pulsa «Sí encaja».
+        </p>
+        <ul className="divide-y border-t">
+          {items.map((o) => (
+            <li key={o.id} className="relative flex gap-3 px-4 py-3">
+              <ScoreChip fit={o.fit} />
+              <div className="min-w-0 flex-1 space-y-1">
+                <button
+                  type="button"
+                  data-opener={o.id}
+                  onClick={(e) => openDetail(o.id, e.currentTarget)}
+                  className="block cursor-pointer rounded-sm text-left leading-snug font-medium outline-none after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                  {tidy(o.titulo)}
+                </button>
+                <p className="truncate text-xs text-muted-foreground">{o.organismo}</p>
+                <p className="text-sm text-muted-foreground">Revisión por IA: {o.aiReview?.reason}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 

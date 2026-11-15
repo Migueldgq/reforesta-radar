@@ -5,6 +5,8 @@ import {
   Award,
   CalendarClock,
   CalendarDays,
+  CircleCheck,
+  CircleQuestionMark,
   CircleSlash,
   Clock,
   EyeOff,
@@ -13,7 +15,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import type { Opportunity } from "@/lib/opportunity";
+import type { AiReview, Opportunity } from "@/lib/opportunity";
 import type { FitAnalysis } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { initials } from "@/lib/team";
@@ -126,6 +128,36 @@ export function Deadline({ o, className }: { o: Opportunity; className?: string 
         </span>
       )}
     </div>
+  );
+}
+
+/* ---------- «Revisión por IA» (ADR 0041): neutral chips, never the score's colours ---------- */
+
+export const AI_VERDICT = {
+  si: { Icon: CircleCheck, label: "Encaja" },
+  no: { Icon: CircleSlash, label: "No encaja" },
+  dudoso: { Icon: CircleQuestionMark, label: "Dudosa" },
+} as const;
+
+/** The AI's verdict on its own, e.g. next to the «Revisión por IA» title in the drawer. */
+export function AiVerdictChip({ review }: { review: AiReview }) {
+  const { Icon, label } = AI_VERDICT[review.verdict];
+  return (
+    <Badge variant="outline" className={cn(badge, CHIP_TONE.muted)}>
+      <Icon aria-hidden />
+      {label}
+    </Badge>
+  );
+}
+
+/** In lists, only for a doubtful verdict (a "no" is not in the list, a "si" needs no flag); the reason on hover. */
+export function AiDoubtChip({ o, className }: { o: Opportunity; className?: string }) {
+  if (o.aiReview?.verdict !== "dudoso") return null;
+  return (
+    <Badge variant="outline" className={cn(badge, CHIP_TONE.muted, className)} title={`Revisión por IA: ${o.aiReview.reason}`}>
+      <CircleQuestionMark aria-hidden />
+      Revisión por IA: dudosa
+    </Badge>
   );
 }
 

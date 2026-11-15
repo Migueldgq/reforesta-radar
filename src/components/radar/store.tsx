@@ -26,6 +26,7 @@ import {
   plazoViewOf,
   urlPinsAhora,
   withPlazoView,
+  hiddenByAi,
   type Filters,
   type Triage,
 } from "./model";
@@ -55,7 +56,8 @@ function writePayload(p: Payload) {
 
 async function request(): Promise<{ data?: Payload; error?: string }> {
   try {
-    return { data: await api<Payload>("/api/oportunidades") };
+    // Also the calls the «Revisión por IA» took out: the store decides which ones to hide (it knows the board and votes).
+    return { data: await api<Payload>("/api/oportunidades?descartadas=1") };
   } catch (e) {
     return { error: errorText(e) };
   }
@@ -123,8 +125,10 @@ export type Notice = { id: number; text: string; tone: "info" | "error" };
 interface RadarState {
   /** Server payload with the team's Perfil adjustments applied (what every view should use). */
   data: Payload | null;
-  /** Untouched server payload. */
+  /** Server payload before the Perfil. Neither includes the calls in `discarded`. */
   rawData: Payload | null;
+  /** Calls the «Revisión por IA» said "no" to and the team has not acted on (Perfil applied): out of every list. */
+  discarded: Opportunity[];
   /** The team's Perfil (what the API has, or the change being saved). */
   profile: UserProfile;
   /** Applies at once and saves for the whole team shortly after (several quick changes become one save). */
@@ -192,7 +196,16 @@ export function RadarProvider({ children }: { children: ReactNode }) {
   const { me } = useSession();
   const path = usePathname();
   const offline = useSyncExternalStore(serverStatus.subscribe, serverStatus.isDown, () => false);
-  const [rawData, setData] = useState<Payload | null>(null);
+  const [allData, setData] = useState<Payload | null>(null);
+  // Declared here because what the AI review hides depends on them (the rest of the board and votes code is below).
+  const [board, setBoard] = useState<Board>({});
+  const [votes, setVotes] = useState<Vote[]>([]);
+  const kept = useMemo(() => new Set([...Object.keys(board), ...votes.filter((v) => v.vote === "sirve").map((v) => v.opportunityId)]), [board, votes]);
+  const [rawData, discardedRaw] = useMemo<[Payload | null, Opportunity[]]>(() => {
+    const out = allData?.items.filter((o) => hiddenByAi(o, kept)) ?? [];
+    if (!allData || !out.length) return [allData, out];
+    return [{ ...allData, items: allData.items.filter((o) => !hiddenByAi(o, kept)) }, out];
+  }, [allData, kept]);
   // Organisms in the server's latest answer (not the saved copy, which may predate a rename).
   const [knownOrgs, setKnownOrgs] = useState<Set<string> | null>(null);
   const knownOrgsRef = useRef<Set<string> | null>(null);
@@ -205,6 +218,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
     () => (rawData && !isNeutral(profile) ? { ...rawData, items: applyProfileAll(rawData.items, profile) } : rawData),
     [rawData, profile],
   );
+  const discarded = useMemo(() => applyProfileAll(discardedRaw, profile), [discardedRaw, profile]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -281,7 +295,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
         setKnownOrgs(known);
         setFiltersRaw(pruneOrgs);
         writePayload(r.data);
-        latestItems.current = r.data.items;
+        latestItems.current = r.data.items.filter((o) => o.aiReview?.verdict !== "no");
         maybeDecide();
       }
       setError(r.error ?? null);
@@ -333,7 +347,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
         setData(cached);
         setLoading(false);
         setRefreshing(true);
-        latestItems.current = cached.items;
+        latestItems.current = cached.items.filter((o) => o.aiReview?.verdict !== "no");
       }
       readUrl(true);
       setUrlLoaded(true);
@@ -431,7 +445,6 @@ export function RadarProvider({ children }: { children: ReactNode }) {
 
   /* ----- Team board ----- */
 
-  const [board, setBoard] = useState<Board>({});
   const [boardLoaded, setBoardLoaded] = useState(false);
   const [people, setPeople] = useState<TeamPerson[]>([]);
   const pending = useRef(new Map<string, Pending>());
@@ -468,7 +481,6 @@ export function RadarProvider({ children }: { children: ReactNode }) {
 
   /* ----- Votes ----- */
 
-  const [votes, setVotes] = useState<Vote[]>([]);
   const votesPending = useRef(0);
   const refreshVotes = useCallback(async () => {
     try {
@@ -685,7 +697,8 @@ export function RadarProvider({ children }: { children: ReactNode }) {
     [blocked, notify],
   );
 
-  const byId = useMemo(() => new Map((data?.items ?? []).map((o) => [o.id, o])), [data]);
+  // Discarded calls too: the drawer opens them from the «Descartadas por la IA» list or a link.
+  const byId = useMemo(() => new Map([...(data?.items ?? []), ...discarded].map((o) => [o.id, o])), [data, discarded]);
 
   /* ----- URL: filters and page on Inicio, `?c=<id>` for the open call everywhere ----- */
 
@@ -757,6 +770,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
     () => ({
       data,
       rawData,
+      discarded,
       profile,
       setProfile,
       settings,
@@ -792,7 +806,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       closeDetail,
       detailOpener,
     }),
-    [data, rawData, profile, setProfile, settings, profileSave, loading, refreshing, error, reload, byId, board, boardLoaded, people, triageOf, setTriage, setAssignee, addNote, deleteNote, votes, setVote, clearVote, notices, notify, dismiss, filters, setFilters, markPush, page, teamOrgs, offline, selectedId, openDetail, closeDetail, detailOpener],
+    [data, rawData, discarded, profile, setProfile, settings, profileSave, loading, refreshing, error, reload, byId, board, boardLoaded, people, triageOf, setTriage, setAssignee, addNote, deleteNote, votes, setVote, clearVote, notices, notify, dismiss, filters, setFilters, markPush, page, teamOrgs, offline, selectedId, openDetail, closeDetail, detailOpener],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
