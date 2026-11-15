@@ -116,26 +116,33 @@ la ingesta programada es el servicio `ingest-scheduler` (`backend/app/ingest/sch
 
 ## Antes de publicarlo en internet
 
-Publicado en <https://reforesta-radar.miguelddev.com> con `docker-compose.prod.yml` y `deploy/Caddyfile`
-([despliegue.md](despliegue.md), ADR 0037). Marcado lo que ese despliegue ya resuelve:
+Publicado en <https://reforesta-radar.miguelddev.com> con Dokploy y `docker-compose.prod.yml`
+([despliegue.md](despliegue.md), ADR 0039). Marcado lo que ese despliegue ya resuelve (comprobado el 2026-11-15):
 
-- [x] Proxy inverso con https delante de `web` que **sobrescribe** `X-Forwarded-For`: Caddy (no confía en ningún
-      proxy, así que pone la IP del que conecta). `FORWARDED_ALLOW_IPS` = la subred fija de compose
-      (`RADAR_NET_SUBNET`, `172.28.89.0/24`). Comprobado: la API registra la IP pública del cliente, no la de `web`, y
-      un `X-Forwarded-For` falso no pasa.
-- [x] `web` no es alcanzable sin pasar por Caddy: en producción solo Caddy publica puertos (80 y 443).
-- [x] Tiempos máximos en el proxy (cabeceras 10 s, cuerpo 2 min) y el log no registra `Authorization`, cookies,
-      `Referer` ni cadenas de consulta.
+- [x] Proxy inverso con https delante de `web` que **sobrescribe** `X-Forwarded-For`: Traefik (sin
+      `forwardedHeaders.trustedIPs`, así que descarta el del cliente y pone la IP del que conecta).
+      `FORWARDED_ALLOW_IPS` = la subred fija del proyecto (`RADAR_NET_SUBNET`, `172.28.90.0/24`). Comprobado: con un
+      `X-Forwarded-For: 6.6.6.6` falso la API registra la IP pública real del cliente.
+- [x] `web` no es alcanzable sin pasar por Traefik: ningún servicio publica puertos y solo `web` está en la red de
+      Traefik (`reforesta-radar-edge`); otros proyectos de Dokploy no llegan a él.
+- [x] Tiempo máximo para leer una petición en el proxy: 2 min (`deploy/traefik.yml`). Traefik no guarda log de
+      accesos; el de la API no guarda cadenas de consulta, cabeceras ni cuerpos.
 - [ ] Opcional: caché corta en el proxy para `GET /api/public/oportunidades` (no hecho; la API ya manda
       `Cache-Control: public, max-age=60`).
-- [x] Límite de cuerpo también en el proxy: 1 MiB, 16 MiB en `/api/analyze-pdf`.
-- [x] `RADAR_COOKIE_SECURE=true` y `RADAR_PUBLIC_URL=https://<RADAR_DOMAIN>` (los pone `docker-compose.prod.yml`).
-- [x] El puerto de la API sin publicar en producción (ni el de Postgres).
-- [x] El log del proxy no guarda los tokens de `/invitacion/*` ni `/restablecer/*` (los sustituye por `REDACTED`).
+- [x] Límite de cuerpo: lo pone la app, no el proxy (1 MiB, 16 MiB en `/api/analyze-pdf`, 16 KiB en `/oauth/*`;
+      comprobado: 2 MiB a `/api/auth/login`, `/mcp` y `/oauth/register` y 17 MiB a `/api/analyze-pdf` → 413). El
+      middleware `buffering` de Traefik retendría también las respuestas (ADR 0039).
+- [x] `RADAR_COOKIE_SECURE=true` y `RADAR_PUBLIC_URL=https://<RADAR_DOMAIN>` (los pone `docker-compose.prod.yml`;
+      comprobado: la cookie de sesión sale `Secure; HttpOnly; SameSite=lax`).
+- [x] El puerto de la API sin publicar en producción (ni el de Postgres, ni el panel de Dokploy, ni el de Traefik:
+      escaneo de 3000, 3010, 5432, 5440, 8000, 8010, 8080 → cerrados).
+- [x] Cabeceras de seguridad: HSTS en Traefik; `nosniff`, `Referrer-Policy`, `X-Frame-Options` y
+      `Permissions-Policy` en `next.config.ts`, sin pisar las más estrictas de `/autorizar` y de los enlaces.
 - [ ] Quitar `RADAR_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` del `.env` tras el primer arranque (en producción no se
       usan: el primer admin se crea con `python -m app.users`); al menos dos admins.
 - [ ] Valorar una vida máxima absoluta de la sesión (hoy: 30 días desde el último uso, sin tope absoluto).
-- [x] Copias de seguridad diarias de Postgres (`deploy/backup.sh`, 14 días). Pendiente: copia fuera del servidor.
+- [x] Copias de seguridad diarias de Postgres (`deploy/backup.sh`, 14 días) y restauración probada. Copia fuera del
+      servidor preparada (`BACKUP_PAR_URL`), pendiente de que exista el bucket.
 - [x] Servidor MCP e inicio de sesión desde el agente de IA: ver la lista de
       [mcp.md](mcp.md#antes-de-publicarlo-en-internet). El emisor OAuth es exactamente
       `https://reforesta-radar.miguelddev.com` (comprobado).
@@ -144,10 +151,10 @@ Publicado en <https://reforesta-radar.miguelddev.com> con `docker-compose.prod.y
 
 | Riesgo | Salvaguarda |
 |---|---|
-| Copias de Postgres en el mismo disco que la base | En producción, copia diaria con `deploy/backup.sh` (14 días, [despliegue.md](despliegue.md#copias-de-seguridad-y-restauración)); falta una copia fuera del servidor. En local: [mantenimiento.md](mantenimiento.md#copias-de-seguridad). |
+| Copias de Postgres en el mismo disco que la base | En producción, copia diaria con `deploy/backup.sh` (14 días, [despliegue.md](despliegue.md#copias-de-seguridad-y-restauración)); la copia fuera del servidor se activa con `BACKUP_PAR_URL` (pendiente del bucket). En local: [mantenimiento.md](mantenimiento.md#copias-de-seguridad). |
 | Equipo apagado o dormido a las 9:00 | `ingest-scheduler` comprueba cada 30 s e ingesta al despertar si no hubo ninguna ingesta correcta desde las 9:00. |
 | Una fuente cambia su HTML | Se registra en `source_runs`; sus filas anteriores siguen visibles y la fuente sale como parcial o error. |
-| IP del cliente poco fiable | Next reenvía el `X-Forwarded-For` que manda el navegador y no añade el suyo, así que la API no se lo cree (`FORWARDED_ALLOW_IPS=127.0.0.1` por defecto): todos los navegadores comparten la IP del contenedor `web`. Por eso una contraseña correcta nunca se rechaza por fallos ajenos (solo el tope de 50 fallos por cuenta bloquea a todos). Con un proxy inverso delante que sobrescriba `X-Forwarded-For`, poner en `FORWARDED_ALLOW_IPS` la red de compose (p. ej. `172.16.0.0/12`). En producción ya es así (Caddy, `docker-compose.prod.yml`). |
+| IP del cliente poco fiable | Next reenvía el `X-Forwarded-For` que manda el navegador y no añade el suyo, así que la API no se lo cree (`FORWARDED_ALLOW_IPS=127.0.0.1` por defecto): todos los navegadores comparten la IP del contenedor `web`. Por eso una contraseña correcta nunca se rechaza por fallos ajenos (solo el tope de 50 fallos por cuenta bloquea a todos). Con un proxy inverso delante que sobrescriba `X-Forwarded-For`, poner en `FORWARDED_ALLOW_IPS` la red de compose (p. ej. `172.16.0.0/12`). En producción ya es así (Traefik, `docker-compose.prod.yml`). |
 
 ## Siguiente tramo
 
