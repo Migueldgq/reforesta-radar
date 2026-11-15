@@ -86,11 +86,32 @@ export const SCENES = [
     voice: [
       { text: "La nota también avisa. Esta, de Madrid y forestal, parece buena, pero ninguna de las ayudas anteriores fue a una entidad sin ánimo de lucro." },
       {
-        text: "Y se queda en un 45. La nota sale de reglas a la vista. Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver.",
-        say: "Y se queda en un cuarenta y cinco. La nota sale de reglas a la vista. Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver.",
+        text: "Y se queda en un 45. La nota sale de reglas a la vista, que podéis ajustar en el Perfil.",
+        say: "Y se queda en un cuarenta y cinco. La nota sale de reglas a la vista, que podéis ajustar en el Perfil.",
         notes: "«45» se lee «cuarenta y cinco».",
       },
     ],
+  },
+  {
+    // Read-only: the team's real saved profile is shown, never changed (no clicks). The keyword chips under
+    // «Palabras que os interesan» are the team's own entries and stay out of the shot (capture.mjs, `floor`).
+    id: "perfil",
+    kind: "screen",
+    route: "/perfil",
+    headlines: ["Las reglas, *las ajustáis vosotros*"],
+    voice: [
+      { text: "Ahí dais más o menos peso a cada línea de trabajo, elegís las palabras que os interesan o que descartáis, y priorizáis territorios." },
+    ],
+  },
+  {
+    // The AI review (ADR 0041) only takes out what has nothing to do with the team; it never sets the score.
+    // Real verdicts only: the «Descartadas por la IA» block opened, then one of them in the detail sheet with its
+    // «Revisión por IA» section and «Sí encaja» (hovered, never pressed).
+    id: "ia",
+    kind: "screen",
+    route: "/",
+    headlines: ["Lo que la IA descarta, *a la vista*", "¿Se equivoca? *Sí encaja*"],
+    voice: [{ text: "Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver." }],
   },
   {
     id: "empresas",

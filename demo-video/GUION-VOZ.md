@@ -25,27 +25,29 @@ pronunciación dicen cómo leer siglas, cifras y años; el texto se graba tal cu
 | `11-ganasteis` | Y lee las ediciones anteriores: Reforesta la ganó en 2025, 2024 y 2022. | Años en palabras: «dos mil veinticinco, dos mil veinticuatro y dos mil veintidós». |
 | `12-ganasteis` | Suele abrir entre abril y septiembre, y en los dos últimos años todas las ayudas fueron a entidades sin ánimo de lucro. | — |
 | `13-motivos` | La nota también avisa. Esta, de Madrid y forestal, parece buena, pero ninguna de las ayudas anteriores fue a una entidad sin ánimo de lucro. | — |
-| `14-motivos` | Y se queda en un 45. La nota sale de reglas a la vista. Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver. | «45» se lee «cuarenta y cinco». |
-| `15-empresas` | Los programas de empresas y fundaciones no salen en ningún boletín: están comprobados a mano. | — |
-| `16-empresas` | Cada uno dice su plazo y qué lo limita: este de Fundación Unicaja solo vale en Andalucía o en Ciudad Real. | — |
-| `17-empresas` | Como no se actualizan solos, conviene revisarlos. | — |
-| `18-analizar` | ¿Os llegan las bases de una convocatoria en PDF? Subidlas en Analizar PDF. | PDF se lee «pe, de, efe». |
-| `19-analizar` | Si la convocatoria ya está en el radar, el PDF lleva la misma nota que en la lista, con los mismos motivos y avisos. | PDF se lee «pe, de, efe». |
-| `20-equipo` | Cuando una os interesa, se decide en equipo. Primero, la marcáis en estudio. | — |
-| `21-equipo` | Cada persona vota si os sirve. Los votos muestran dónde la nota y el equipo no están de acuerdo. | — |
-| `22-equipo` | Después, elegís quién se encarga y dejáis una nota, que verá todo el equipo. | — |
-| `23-seguimiento` | Todo acaba en un tablero compartido: en estudio, a presentar, presentada y descartada. | — |
-| `24-seguimiento` | Para cambiar una de columna, basta con arrastrarla. | — |
-| `25-invitar` | Al radar se entra por invitación: escribís el correo, y el radar crea un enlace que enviáis vosotros. | — |
-| `26-invitar` | El enlace sirve una sola vez y caduca en siete días. | — |
-| `27-invitar` | Hay dos roles: administración, que gestiona el equipo, y equipo, que usa y edita el tablero. | — |
-| `28-fuentes` | En Fuentes veis de dónde sale cada dato: la Base de Datos Nacional de Subvenciones, el BOE, los fondos europeos y cuatro fuentes más. | BOE se lee como palabra: «boe». |
-| `29-fuentes` | De cada una, cuántos resultados dio y si la última carga fue bien. | — |
-| `30-fuentes` | Y si no queréis esperar a mañana, alguien de administración puede pedir una actualización en el momento. | — |
-| `31-asistente` | Y si usáis un agente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquiera. | MCP se lee letra a letra: «eme, ce, pe». |
-| `32-asistente` | Es de solo lectura: puede buscar y leer, pero no cambia nada. | — |
-| `33-asistente` | Le preguntáis con vuestras palabras; él busca en el radar y os responde con los mismos datos que veis en la aplicación. | — |
-| `34-outro` | Reforesta Radar. Menos horas buscando, y más horas en el monte. | — |
+| `14-motivos` | Y se queda en un 45. La nota sale de reglas a la vista, que podéis ajustar en el Perfil. | «45» se lee «cuarenta y cinco». |
+| `15-perfil` | Ahí dais más o menos peso a cada línea de trabajo, elegís las palabras que os interesan o que descartáis, y priorizáis territorios. | — |
+| `16-ia` | Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver. | — |
+| `17-empresas` | Los programas de empresas y fundaciones no salen en ningún boletín: están comprobados a mano. | — |
+| `18-empresas` | Cada uno dice su plazo y qué lo limita: este de Fundación Unicaja solo vale en Andalucía o en Ciudad Real. | — |
+| `19-empresas` | Como no se actualizan solos, conviene revisarlos. | — |
+| `20-analizar` | ¿Os llegan las bases de una convocatoria en PDF? Subidlas en Analizar PDF. | PDF se lee «pe, de, efe». |
+| `21-analizar` | Si la convocatoria ya está en el radar, el PDF lleva la misma nota que en la lista, con los mismos motivos y avisos. | PDF se lee «pe, de, efe». |
+| `22-equipo` | Cuando una os interesa, se decide en equipo. Primero, la marcáis en estudio. | — |
+| `23-equipo` | Cada persona vota si os sirve. Los votos muestran dónde la nota y el equipo no están de acuerdo. | — |
+| `24-equipo` | Después, elegís quién se encarga y dejáis una nota, que verá todo el equipo. | — |
+| `25-seguimiento` | Todo acaba en un tablero compartido: en estudio, a presentar, presentada y descartada. | — |
+| `26-seguimiento` | Para cambiar una de columna, basta con arrastrarla. | — |
+| `27-invitar` | Al radar se entra por invitación: escribís el correo, y el radar crea un enlace que enviáis vosotros. | — |
+| `28-invitar` | El enlace sirve una sola vez y caduca en siete días. | — |
+| `29-invitar` | Hay dos roles: administración, que gestiona el equipo, y equipo, que usa y edita el tablero. | — |
+| `30-fuentes` | En Fuentes veis de dónde sale cada dato: la Base de Datos Nacional de Subvenciones, el BOE, los fondos europeos y cuatro fuentes más. | BOE se lee como palabra: «boe». |
+| `31-fuentes` | De cada una, cuántos resultados dio y si la última carga fue bien. | — |
+| `32-fuentes` | Y si no queréis esperar a mañana, alguien de administración puede pedir una actualización en el momento. | — |
+| `33-asistente` | Y si usáis un agente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquiera. | MCP se lee letra a letra: «eme, ce, pe». |
+| `34-asistente` | Es de solo lectura: puede buscar y leer, pero no cambia nada. | — |
+| `35-asistente` | Le preguntáis con vuestras palabras; él busca en el radar y os responde con los mismos datos que veis en la aplicación. | — |
+| `36-outro` | Reforesta Radar. Menos horas buscando, y más horas en el monte. | — |
 
 ## Texto seguido (para pegar en una herramienta de voz)
 
@@ -75,44 +77,48 @@ pronunciación dicen cómo leer siglas, cifras y años; el texto se graba tal cu
 
 13-motivos: La nota también avisa. Esta, de Madrid y forestal, parece buena, pero ninguna de las ayudas anteriores fue a una entidad sin ánimo de lucro.
 
-14-motivos: Y se queda en un 45. La nota sale de reglas a la vista. Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver.
+14-motivos: Y se queda en un 45. La nota sale de reglas a la vista, que podéis ajustar en el Perfil.
 
-15-empresas: Los programas de empresas y fundaciones no salen en ningún boletín: están comprobados a mano.
+15-perfil: Ahí dais más o menos peso a cada línea de trabajo, elegís las palabras que os interesan o que descartáis, y priorizáis territorios.
 
-16-empresas: Cada uno dice su plazo y qué lo limita: este de Fundación Unicaja solo vale en Andalucía o en Ciudad Real.
+16-ia: Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver.
 
-17-empresas: Como no se actualizan solos, conviene revisarlos.
+17-empresas: Los programas de empresas y fundaciones no salen en ningún boletín: están comprobados a mano.
 
-18-analizar: ¿Os llegan las bases de una convocatoria en PDF? Subidlas en Analizar PDF.
+18-empresas: Cada uno dice su plazo y qué lo limita: este de Fundación Unicaja solo vale en Andalucía o en Ciudad Real.
 
-19-analizar: Si la convocatoria ya está en el radar, el PDF lleva la misma nota que en la lista, con los mismos motivos y avisos.
+19-empresas: Como no se actualizan solos, conviene revisarlos.
 
-20-equipo: Cuando una os interesa, se decide en equipo. Primero, la marcáis en estudio.
+20-analizar: ¿Os llegan las bases de una convocatoria en PDF? Subidlas en Analizar PDF.
 
-21-equipo: Cada persona vota si os sirve. Los votos muestran dónde la nota y el equipo no están de acuerdo.
+21-analizar: Si la convocatoria ya está en el radar, el PDF lleva la misma nota que en la lista, con los mismos motivos y avisos.
 
-22-equipo: Después, elegís quién se encarga y dejáis una nota, que verá todo el equipo.
+22-equipo: Cuando una os interesa, se decide en equipo. Primero, la marcáis en estudio.
 
-23-seguimiento: Todo acaba en un tablero compartido: en estudio, a presentar, presentada y descartada.
+23-equipo: Cada persona vota si os sirve. Los votos muestran dónde la nota y el equipo no están de acuerdo.
 
-24-seguimiento: Para cambiar una de columna, basta con arrastrarla.
+24-equipo: Después, elegís quién se encarga y dejáis una nota, que verá todo el equipo.
 
-25-invitar: Al radar se entra por invitación: escribís el correo, y el radar crea un enlace que enviáis vosotros.
+25-seguimiento: Todo acaba en un tablero compartido: en estudio, a presentar, presentada y descartada.
 
-26-invitar: El enlace sirve una sola vez y caduca en siete días.
+26-seguimiento: Para cambiar una de columna, basta con arrastrarla.
 
-27-invitar: Hay dos roles: administración, que gestiona el equipo, y equipo, que usa y edita el tablero.
+27-invitar: Al radar se entra por invitación: escribís el correo, y el radar crea un enlace que enviáis vosotros.
 
-28-fuentes: En Fuentes veis de dónde sale cada dato: la Base de Datos Nacional de Subvenciones, el BOE, los fondos europeos y cuatro fuentes más.
+28-invitar: El enlace sirve una sola vez y caduca en siete días.
 
-29-fuentes: De cada una, cuántos resultados dio y si la última carga fue bien.
+29-invitar: Hay dos roles: administración, que gestiona el equipo, y equipo, que usa y edita el tablero.
 
-30-fuentes: Y si no queréis esperar a mañana, alguien de administración puede pedir una actualización en el momento.
+30-fuentes: En Fuentes veis de dónde sale cada dato: la Base de Datos Nacional de Subvenciones, el BOE, los fondos europeos y cuatro fuentes más.
 
-31-asistente: Y si usáis un agente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquiera.
+31-fuentes: De cada una, cuántos resultados dio y si la última carga fue bien.
 
-32-asistente: Es de solo lectura: puede buscar y leer, pero no cambia nada.
+32-fuentes: Y si no queréis esperar a mañana, alguien de administración puede pedir una actualización en el momento.
 
-33-asistente: Le preguntáis con vuestras palabras; él busca en el radar y os responde con los mismos datos que veis en la aplicación.
+33-asistente: Y si usáis un agente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquiera.
 
-34-outro: Reforesta Radar. Menos horas buscando, y más horas en el monte.
+34-asistente: Es de solo lectura: puede buscar y leer, pero no cambia nada.
+
+35-asistente: Le preguntáis con vuestras palabras; él busca en el radar y os responde con los mismos datos que veis en la aplicación.
+
+36-outro: Reforesta Radar. Menos horas buscando, y más horas en el monte.
