@@ -11,3 +11,5 @@ renders/
 composition/renders/
 .hyperframes/
 composition/.hyperframes/
+# demo team credentials (demo-data.mjs)
+.demo-accounts.json
