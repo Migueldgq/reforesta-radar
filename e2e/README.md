@@ -44,7 +44,7 @@ cuentas y solo cambia sus propios datos, así que se ejecutan en paralelo.
 
 | Fichero | Qué prueba |
 |---|---|
-| `auth.spec.ts` | Sin sesión → `/login` y vuelta; contraseña mala con el error en castellano; entrar y salir; sesión caducada a mitad de uso. |
+| `auth.spec.ts` | Sin sesión, `/` → portada (`/landing`) y su botón a `/login`; cookie caducada en `/` → `/login`; otra página sin sesión → `/login` y vuelta; contraseña mala con el error en castellano; entrar y salir; sesión caducada a mitad de uso. |
 | `inicio.spec.ts` | La lista carga; un filtro y el buscador la acotan; el panel de detalle con nota, motivos y avisos; «Ya la ganasteis» con sus ediciones; enlace `?c=<id>`. |
 | `seguimiento.spec.ts` | Estado, responsable, nota y voto desde el panel, y otra persona lo ve igual; una tarjeta cuya convocatoria ya no está en las fuentes se abre sin romper la app (el fallo de `Drawer.tsx`). |
 | `equipo.spec.ts` | Invitar → enlace de un solo uso en otro navegador → contraseña → entrar; un miembro no puede abrir Equipo. |
