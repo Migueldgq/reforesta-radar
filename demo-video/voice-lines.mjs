@@ -25,13 +25,13 @@ export const DRAFT = { engine: "kokoro", voice: "ef_dora", speed: 1.0 };
 // least `gap` after it ends, and the beat ends at least `tail` after its last line.
 export const TIMING = { lead: 0.12, first: 0.5, gap: 0.38, tail: 0.65 };
 
-/** Every voice line in film order: { n, name, beat, k, text, say, notes, phase }. */
+/** Every voice line in film order: { n, name, beat, k, text, say, notes, phase, seed }. */
 export function lines() {
   const out = [];
   for (const s of SCENES)
     (s.voice ?? []).forEach((v, k) => {
       const n = out.length + 1;
-      out.push({ n, name: `${String(n).padStart(2, "0")}-${s.id}`, beat: s.id, k, text: v.text, say: v.say ?? v.text, notes: v.notes ?? "", phase: v.phase ?? 0 });
+      out.push({ n, name: `${String(n).padStart(2, "0")}-${s.id}`, beat: s.id, k, text: v.text, say: v.say ?? v.text, notes: v.notes ?? "", phase: v.phase ?? 0, seed: v.seed });
     });
   return out;
 }
@@ -109,7 +109,7 @@ ${L.map((l) => `${l.name}: ${l.text}`).join("\n\n")}
 `;
   writeFileSync(path.join(HERE, "GUION-VOZ.md"), md);
   mkdirSync(VOICE_DIR, { recursive: true });
-  writeFileSync(path.join(VOICE_DIR, "lines.in.json"), JSON.stringify({ ...DRAFT, lines: L.map((l) => ({ id: l.name, text: l.text, say: l.say })) }, null, 1));
+  writeFileSync(path.join(VOICE_DIR, "lines.in.json"), JSON.stringify({ ...DRAFT, lines: L.map((l) => ({ id: l.name, text: l.text, say: l.say, ...(l.seed != null ? { seed: l.seed } : {}) })) }, null, 1));
   console.log(`GUION-VOZ.md + voice/lines.in.json: ${L.length} lines, ${L.reduce((a, l) => a + l.text.split(/\s+/).length, 0)} words`);
 }
 

@@ -8,6 +8,24 @@
         "value": "geist",
         "createdAt": "2026-11-14T18:14:38.494Z",
         "reason": "orchestrator: Geist is the app's existing typeface (next/font in layout.tsx); user asked landing and demo to match the app's style"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "playwright-report/trace/defaultSettingsView.C8BeHuxd.css"
+        ],
+        "createdAt": "2026-11-15T19:02:48.643Z",
+        "reason": "agent: third-party generated file (Playwright's own HTML report/trace viewer), not project UI"
+      },
+      {
+        "rule": "low-contrast",
+        "value": "*",
+        "files": [
+          "demo-video/composition/index.html"
+        ],
+        "createdAt": "2026-11-15T19:02:48.656Z",
+        "reason": "agent: measured in rendered frames, every text pair is 4.9:1 or higher; the linter reads the white captions of the green section against the page's white base"
       }
     ]
   }

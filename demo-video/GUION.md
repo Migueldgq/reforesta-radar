@@ -1,6 +1,6 @@
 # Guion del vídeo de demo — Reforesta Radar (narrado)
 
-Duración: **3:39,5** (219.5 s). 1920×1080, 30 fps, H.264 + AAC, `faststart`. Misma estética que la v5 (lienzo blanco, un titular escrito por momento con palabras clave en verde, una pieza recortada de la app real con cámara que entra y se desplaza; sección del agente de IA en lienzo verde), ahora **con locución** en castellano de España que lo explica para quien no es técnico. Los titulares pasan a ser rótulos cortos que acompañan a la voz. Subtítulos aparte, sin quemar: `out/demo-final.es.srt`. La versión anterior, sin voz, se conserva en `out/demo-v5.mp4`.
+Duración: **3:38,2** (218.2 s). 1920×1080, 30 fps, H.264 + AAC, `faststart`. Misma estética que la v5 (lienzo blanco, un titular escrito por momento con palabras clave en verde, una pieza recortada de la app real con cámara que entra y se desplaza; sección del agente de IA en lienzo verde), ahora **con locución** en castellano de España que lo explica para quien no es técnico. Los titulares pasan a ser rótulos cortos que acompañan a la voz. Subtítulos aparte, sin quemar: `out/demo-final.es.srt`. La versión anterior, sin voz, se conserva en `out/demo-v5.mp4`.
 
 **La voz marca el ritmo**: cada momento dura lo que su locución más un respiro (ver «Voice» en `README.md`). Voz: «Emilio – Warm, Solid and Convincing» de ElevenLabs (`eleven_v4`), una frase por archivo (`GUION-VOZ.md`). Los tiempos de abajo son los del montaje final y cambian si cambian los archivos de voz o se vuelve a grabar.
 
@@ -20,8 +20,8 @@ Las cifras que se ven (7 fuentes, 323 convocatorias, 100, 86, 45…) son las de 
 | 2:20,4 | `seguimiento` | `/seguimiento`: el puntero recorre las cuatro columnas; se arrastra la tarjeta recién marcada de «En estudio» a «A presentar». | «Todo el equipo, *un solo tablero*» |
 | 2:30,9 | `invitar` | `/equipo`: Personas (Diego Martín, Lucía Serrano, Marta Ibáñez). **Invitar** → nuria@example.org, «Nuria Campos», **Crear invitación** → «Invitación lista» («Sirve una vez y caduca en 7 días»). **Hecho**: roles y «Enlaces pendientes · Nuria Campos». | «Invitad al equipo *con un enlace*» → «Cada persona, *con su rol*» |
 | 2:49,1 | `fuentes` | `/fuentes`: la tabla (fuente, estado, resultados, nota) baja despacio por las siete fuentes; vuelve arriba; cabecera con «Una ingesta programada consulta todas las fuentes cada mañana a las 9:00» y el puntero sobre **Actualizar ahora** (no se pulsa). | «De dónde sale todo, *a la vista*» → «¿No queréis esperar? *Actualizad ahora*» |
-| 3:09,5 | `asistente` | Lienzo verde. Tarjeta de conector (sin marca de ningún agente): «Conector MCP», «Reforesta Radar», «reforesta-radar.miguelddev.com/mcp · Solo lectura», «✓ Conectado», «Estándar abierto: vale cualquier agente de IA compatible con MCP». Después el chat: «¿Qué convocatoria de Madrid ya hemos ganado y cuándo suele abrir?», «MCP · Reforesta Radar», «Buscó en el radar», «Abrió la ficha» y la respuesta con la salida real de `/mcp`. | «Conectadlo por MCP *a cualquier agente de IA*» → «Pregúntaselo a *vuestro agente de IA*» |
-| 3:32,7 | `outro` | Barrido de vuelta al blanco: marca + «Reforesta Radar», lema, «Ver el código» y github.com/Migueldgq/reforesta-radar. | «Menos horas buscando, *más horas en el monte.*» |
+| 3:09,5 | `asistente` | Lienzo verde. Tarjeta de conector (sin marca de ningún agente): «Conector MCP», «Reforesta Radar», «reforesta-radar.miguelddev.com/mcp» y debajo «Solo lectura», «✓ Conectado», «Estándar abierto: vale cualquier agente de IA compatible con MCP». Después el chat: «¿Qué convocatoria de Madrid ya hemos ganado y cuándo suele abrir?», «MCP · Reforesta Radar», «Buscó en el radar», «Abrió la ficha» y la respuesta con la salida real de `/mcp`. | «Conectadlo por MCP *a cualquier agente de IA*» → «Pregúntaselo a *vuestro agente de IA*» |
+| 3:31,4 | `outro` | Barrido de vuelta al blanco: marca + «Reforesta Radar», lema, «Ver el código» y github.com/Migueldgq/reforesta-radar. | «Menos horas buscando, *más horas en el monte.*» |
 
 ## Locución, tal como está montada
 
@@ -57,10 +57,10 @@ Las cifras que se ven (7 fuentes, 323 convocatorias, 100, 86, 45…) son las de 
 | 2:49,6 – 2:58,6 | `28-fuentes` | En Fuentes veis de dónde sale cada dato: la Base de Datos Nacional de Subvenciones, el BOE, los fondos europeos y cuatro fuentes más. |
 | 2:59,1 – 3:03,3 | `29-fuentes` | De cada una, cuántos resultados dio y si la última carga fue bien. |
 | 3:03,8 – 3:09,0 | `30-fuentes` | Y si no queréis esperar a mañana, alguien de administración puede pedir una actualización en el momento. |
-| 3:10,5 – 3:19,4 | `31-asistente` | Y si usáis un asistente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquier agente de IA. |
-| 3:19,8 – 3:24,0 | `32-asistente` | Es de solo lectura: puede buscar y leer, pero no cambia nada. |
-| 3:25,3 – 3:32,3 | `33-asistente` | Le preguntáis con vuestras palabras; él busca en el radar y os responde con los mismos datos que veis en la aplicación. |
-| 3:33,7 – 3:38,2 | `34-outro` | Reforesta Radar. Menos horas buscando, y más horas en el monte. |
+| 3:10,5 – 3:18,1 | `31-asistente` | Y si usáis un agente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquiera. |
+| 3:18,5 – 3:22,7 | `32-asistente` | Es de solo lectura: puede buscar y leer, pero no cambia nada. |
+| 3:24,0 – 3:31,1 | `33-asistente` | Le preguntáis con vuestras palabras; él busca en el radar y os responde con los mismos datos que veis en la aplicación. |
+| 3:32,4 – 3:36,9 | `34-outro` | Reforesta Radar. Menos horas buscando, y más horas en el monte. |
 
 ## Notas
 
