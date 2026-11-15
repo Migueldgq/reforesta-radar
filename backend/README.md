@@ -18,7 +18,8 @@ docker compose up -d postgres api                 # backend only; migrations run
 curl localhost:8010/health                        # {"status":"ok","database":"ok"}
 docker compose run --rm ingest                    # ingest every ported source
 docker compose run --rm ingest --source boe,rsc   # a subset;  --dry-run fetches and diffs without writing
-curl localhost:8010/api/oportunidades             # OpportunitiesResponse, same shape as the TS route
+curl localhost:8010/api/public/oportunidades      # OpportunitiesResponse (the landing's copy; /api/oportunidades needs a session)
+docker compose run --rm api python -m app.users create-admin ana@example.org   # first admin (accounts: ../docs/api-auth.md)
 ```
 
 - API: http://localhost:8010 · OpenAPI docs: http://localhost:8010/docs · Postgres: `localhost:5440` (user,
@@ -26,7 +27,8 @@ curl localhost:8010/api/oportunidades             # OpportunitiesResponse, same 
 - Host ports, password and daily ingest time are overridable in a root `.env` (see `../.env.example`).
   `backend/.env.example` is only for running the API or the ingest on the host with `uv run --env-file .env`.
 - Schedule: `ingest-scheduler` (part of the default `docker compose up`) runs `python -m app.ingest.scheduler`: one
-  ingest a day at `RADAR_INGEST_AT` (default `09:00`, `RADAR_TZ`). It checks every 5 min and runs when no ingest
+  ingest a day at `RADAR_INGEST_AT` (default `09:00`, `RADAR_TZ`). It checks every 30 s (also for an admin's "update
+  now" request in `ingest_requests`, run with `--trigger request`) and runs when no ingest
   (any trigger) has succeeded since the latest 09:00, so a laptop asleep at 09:00 catches up on waking; it runs
   right away when the database was never ingested; a failed run is retried an hour later.
 - Migrations by hand: `docker compose run --rm --entrypoint alembic ingest upgrade head`.
@@ -37,7 +39,7 @@ curl localhost:8010/api/oportunidades             # OpportunitiesResponse, same 
 cd backend
 uv sync                                    # Python 3.13 + dev tools
 uv run ruff check && uv run ruff format --check
-uv run pytest                              # the store test uses the compose Postgres on :5440 (skipped if down)
+uv run pytest                              # store/auth/board tests use the compose Postgres on :5440 (skipped if down)
 uv run --env-file .env python -m app.ingest --dry-run --source boe
 uv run --env-file .env uvicorn app.main:app --reload --port 8011
 ```
@@ -47,7 +49,17 @@ uv run --env-file .env uvicorn app.main:app --reload --port 8011
 ```
 backend/
   app/
-    main.py            FastAPI app: /health, /api/oportunidades, /api/fuentes (CORS for localhost:3000)
+    main.py            FastAPI app: /health, /api/oportunidades, /api/public/oportunidades, /api/fuentes; wires
+                       the routers, the session requirement and the CSRF middleware (CORS for localhost:3000)
+    users.py           CLI: python -m app.users create-admin <email>
+    auth/              accounts (contract: ../docs/api-auth.md)
+      passwords.py       Argon2id hashing, dummy verify for unknown accounts, length rule
+      tokens.py          random tokens; only their sha256 is stored
+      deps.py            sessions, cookie, `current_user` / `require_admin` dependencies, per-request transaction
+      csrf.py            X-Radar-CSRF + Sec-Fetch-Site check on unsafe /api/ requests
+      throttle.py        in-process login throttling (per account, per IP)
+      accounts.py        users, invitations, reset links, bootstrap admin
+      mail.py            optional SMTP for links (off without SMTP_HOST)
     config.py          settings from environment variables
     models.py          Pydantic contract (camelCase JSON, mirrors src/lib/opportunity.ts + types.ts)
     http.py            shared async HTTP client: timeout, bounded concurrency, retry, generic User-Agent
@@ -76,8 +88,13 @@ backend/
       store.py           one-transaction write: upsert, change log, gone, run records, fetch_cache
       hashing.py         content_hash / dedupe_key (byte-identical to store-pg.ts)
     api/state.py       read path: live items, source health, last ingest
+    api/auth.py        /api/auth/*: login, logout, session, invitation and reset links
+    api/team.py        /api/team/* (admin), /api/users, /api/me
+    api/board.py       /api/board, /api/settings, /api/votes, /api/import
+    api/ingest_requests.py  /api/ingest: "update now" requests for ingest-scheduler
     db/                tables (SQLAlchemy Core) and async engine
-  alembic/             migrations (0001 = supabase/migrations/0001_init.sql, 0002 = bdns_editions)
+  alembic/             migrations (0001 = supabase/migrations/0001_init.sql, 0002-0003 = bdns_editions,
+                       0004 = accounts and team state)
   tests/               parity, connectors on recorded fixtures, store semantics
 ```
 
