@@ -286,8 +286,9 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
               s.on && "border-primary ring-1 ring-primary",
             )}
           >
-            <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground sm:text-sm">
-              <span>{s.label}</span>
+            <span className="flex items-start justify-between gap-2 text-xs text-muted-foreground sm:text-sm">
+              {/* Two lines kept for every tile where some label wraps, so the numbers line up. */}
+              <span className="min-h-[2lh] xl:min-h-0">{s.label}</span>
               {s.on ? <Check className="size-4 shrink-0 text-primary" aria-hidden /> : <s.icon className="size-4 shrink-0 max-sm:hidden" aria-hidden />}
             </span>
             <span className="text-3xl font-semibold tracking-tight tabular-nums">{s.value}</span>
