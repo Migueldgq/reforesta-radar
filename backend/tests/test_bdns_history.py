@@ -416,8 +416,16 @@ async def test_history_rows_round_trip_and_reach_the_api_item(engine: AsyncEngin
     assert fit.reasons[0] == "Reforesta ya la ganó en 2025 (29.378 €), 2024 y 2022."
     assert fit.score == min(100, adjusted_fit(o).score + 8 + 3 + 6)
 
+    # a stored call that is a previous edition of a live one is shown only inside its history
+    old = o.model_copy(update={"id": "bdns:825309", "url": "https://x/825309"})
+    run = SourceRun(health, [o, old], NOW, NOW, None)
+    await write_ingest(engine, started_at=NOW, trigger="test", scoring_version=13, runs=[run], memo=[], dry_run=False)
+    async with engine.connect() as conn:
+        assert [i.id for i in (await read_state(conn)).items] == ["bdns:904719"]
+
     # a later run that finds no previous edition clears the rows; past editions are never opportunities
     await write_history(engine, {"904719": []}, [])
     async with engine.connect() as conn:
         state = await read_state(conn)
-    assert [i.id for i in state.items] == ["bdns:904719"] and state.items[0].history is None
+    assert sorted(i.id for i in state.items) == ["bdns:825309", "bdns:904719"]
+    assert all(i.history is None for i in state.items)

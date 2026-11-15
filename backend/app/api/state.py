@@ -91,7 +91,13 @@ async def read_state(conn: AsyncConnection) -> State:
         for r in await conn.execute(ITEMS_SQL)
     ]
     histories = await read_histories(conn, [o.id for o in items])
-    items = [o.model_copy(update={"history": histories[o.id]}) if o.id in histories else o for o in items]
+    # a call that is a previous edition of another live call is shown only inside that call's history
+    superseded = {f"bdns:{e.numero}" for h in histories.values() for e in h.editions}
+    items = [
+        o.model_copy(update={"history": histories[o.id]}) if o.id in histories else o
+        for o in items
+        if o.id not in superseded
+    ]
     sources = await read_sources(conn)
     last, stale = await last_ingest(conn)
     return State(items=items, sources=sources, last_ingest_at=last, ingest_stale=stale)
