@@ -127,8 +127,12 @@ Organisms = Annotated[list[Annotated[CleanStr, Field(max_length=300)]], Field(ma
 class TeamSettings(Contract):
     profile: dict[str, Any] | None  # null: never saved (the web uses its default profile)
     organisms: list[str] | None  # null: never saved
-    updated_by: PersonRef | None
+    updated_by: PersonRef | None  # last change to either of the two
     updated_at: str | None
+    profile_updated_by: PersonRef | None  # last change to `profile` (Perfil shows "Guardado por…")
+    profile_updated_at: str | None
+    organisms_updated_by: PersonRef | None  # last change to `organisms`
+    organisms_updated_at: str | None
 
 
 class SettingsPatch(Contract):
@@ -362,8 +366,25 @@ async def _settings_row(conn: AsyncConnection, lock: bool = False):  # noqa: ANN
 async def _settings_out(conn: AsyncConnection) -> TeamSettings:
     r = await _settings_row(conn)
     people = await _people(conn)
-    return TeamSettings(profile=r.profile, organisms=r.organisms, updated_by=_ref(people, r.updated_by),
-                        updated_at=_iso(r.updated_at))  # fmt: skip
+    return TeamSettings(
+        profile=r.profile,
+        organisms=r.organisms,
+        updated_by=_ref(people, r.updated_by),
+        updated_at=_iso(r.updated_at),
+        profile_updated_by=_ref(people, r.profile_updated_by),
+        profile_updated_at=_iso(r.profile_updated_at),
+        organisms_updated_by=_ref(people, r.organisms_updated_by),
+        organisms_updated_at=_iso(r.organisms_updated_at),
+    )
+
+
+def _stamped(values: dict[str, Any], user_id: int) -> dict[str, Any]:
+    """`values` plus who/when for each field in it and for the row as a whole."""
+    at = now()
+    out = {**values, "updated_by": user_id, "updated_at": at}
+    for field in values:
+        out |= {f"{field}_updated_by": user_id, f"{field}_updated_at": at}
+    return out
 
 
 @router.get("/api/settings", response_model=TeamSettings)
@@ -381,9 +402,7 @@ async def put_settings(body: SettingsPatch, user: User, conn: Db) -> TeamSetting
         values["organisms"] = body.organisms or None
     if values:
         await _settings_row(conn, lock=True)
-        await conn.execute(
-            update(org_settings).where(org_settings.c.id == 1).values(**values, updated_by=user.id, updated_at=now())
-        )
+        await conn.execute(update(org_settings).where(org_settings.c.id == 1).values(**_stamped(values, user.id)))
     return await _settings_out(conn)
 
 
@@ -512,9 +531,7 @@ async def import_local(body: ImportIn, user: User, conn: Db) -> ImportOut:
         if current.organisms is None:
             values["organisms"] = body.organisms
     if values:
-        await conn.execute(
-            update(org_settings).where(org_settings.c.id == 1).values(**values, updated_by=user.id, updated_at=now())
-        )
+        await conn.execute(update(org_settings).where(org_settings.c.id == 1).values(**_stamped(values, user.id)))
     log.info("import by user %d: %d tracking rows imported, %d kept, %d skipped; profile %s; organisms %s",
              user.id, imported, kept, skipped, profile_result, organisms_result)  # fmt: skip
     return ImportOut(tracking_imported=imported, tracking_kept=kept, tracking_skipped=skipped,

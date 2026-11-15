@@ -248,8 +248,12 @@ org_settings = Table(
     Column("id", Integer, primary_key=True),
     Column("profile", JSONB),  # UserProfile of the web Perfil (src/components/radar/profile.ts)
     Column("organisms", JSONB),  # enabled organism filter: list of organismo names
-    Column("updated_by", BigInteger, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("updated_by", BigInteger, ForeignKey("users.id", ondelete="SET NULL")),  # latest of the two below
     Column("updated_at", TSTZ),
+    Column("profile_updated_by", BigInteger, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("profile_updated_at", TSTZ),
+    Column("organisms_updated_by", BigInteger, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("organisms_updated_at", TSTZ),
     CheckConstraint("id = 1", name="org_settings_single_row"),
 )
 

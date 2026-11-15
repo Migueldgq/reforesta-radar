@@ -156,7 +156,7 @@ type BoardItem = {
 
 | Method + path | Body | 2xx |
 |---|---|---|
-| `GET /api/settings` | – | `200 {profile: UserProfile \| null, organisms: string[] \| null, updatedBy: PersonRef \| null, updatedAt: string \| null}` |
+| `GET /api/settings` | – | `200 TeamSettings` (below) |
 | `PUT /api/settings` | `{profile?: UserProfile \| null, organisms?: string[] \| null}` (partial: omitted fields are kept) | `200` same shape |
 
 - `profile` is exactly `UserProfile` of `src/components/radar/profile.ts` (`extraKeywords`, `excludedTerms`,
@@ -165,7 +165,20 @@ type BoardItem = {
   `DEFAULT_USER_PROFILE`. `minBudget` comes back as a float (`5000.0`).
 - `organisms` replaces `reforesta-radar:organismos:v1`; `null` or `[]` = no organism filter. The URL still wins
   over it on load, as today.
-- One profile for the whole team; last write wins. Show "Editado por {updatedBy.name}, {fecha}".
+- One profile for the whole team; last write wins.
+
+```ts
+type TeamSettings = {
+  profile: UserProfile | null; organisms: string[] | null;
+  profileUpdatedBy: PersonRef | null; profileUpdatedAt: string | null;     // last save of `profile`
+  organismsUpdatedBy: PersonRef | null; organismsUpdatedAt: string | null; // last save of `organisms`
+  updatedBy: PersonRef | null; updatedAt: string | null;                   // last save of either (kept for compatibility)
+};
+```
+
+- Perfil shows "Guardado por {profileUpdatedBy.name}, {fecha}" from the `profile*` pair, so a change to the organism
+  filter does not change it; the organism filter uses the `organisms*` pair. Values saved before the split carry the
+  old shared pair.
 
 ## Votes
 
