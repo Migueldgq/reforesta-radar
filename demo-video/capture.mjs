@@ -32,6 +32,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 /* ------------------------------------------------------------------ */
 const [VW, VH] = (process.env.VIEWPORT ?? "1440x810").split("x").map(Number);
 const CONFIG = {
+  publicUrl: "https://reforesta-radar.miguelddev.com", // the live radar: links on screen show this host (PRIVACY_SCRIPT)
   baseUrl: BASE_URL, // demo-data.mjs: BASE_URL, default http://localhost:3010 (the Docker web: production build, no dev badge)
   viewport: { width: VW, height: VH },
   deviceScaleFactor: Number(process.env.DSF ?? 2),
@@ -425,7 +426,10 @@ const CURSOR_SCRIPT = (hideCss) => {
 // before the app sees it, so only the demo team (@example.org, ids in `allowed`) can ever be rendered: people,
 // invitations and resets of anyone else are dropped, notes and votes by anyone else are dropped, and an assignee or
 // "…By" field pointing at anyone else becomes empty. The app and the database are not touched.
-const PRIVACY_SCRIPT = (allowed, names) => {
+// Links: the local stack builds links (the invitation link) on its own address; in the film they show the public
+// address of the radar (CONFIG.publicUrl) instead: only the scheme+host+port of a local link is rewritten, the path
+// is the app's own.
+const PRIVACY_SCRIPT = (allowed, names, publicUrl) => {
   const ok = new Set(allowed);
   const okName = new Set(names);
   const other = (v) => v && typeof v === "object" && typeof v.id === "number" && !ok.has(v.id);
@@ -435,7 +439,9 @@ const PRIVACY_SCRIPT = (allowed, names) => {
       (typeof v.id === "number" && typeof v.name === "string" && "active" in v && !ok.has(v.id)) ||
       (typeof v.userId === "number" && !ok.has(v.userId)) ||
       other(v.user) || other(v.author));
+  const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(?=\/|$)/;
   const clean = (v) => {
+    if (typeof v === "string") return v.replace(local, publicUrl);
     if (Array.isArray(v)) return v.filter((x) => !drop(x)).map(clean);
     if (!v || typeof v !== "object") return v;
     for (const k of Object.keys(v)) {
@@ -986,7 +992,7 @@ async function main() {
       const pg = await browser.newPage();
       await pg.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }, { name: "prefers-reduced-motion", value: "no-preference" }]);
       await pg.evaluateOnNewDocument(CURSOR_SCRIPT, CONFIG.hideCss);
-      await pg.evaluateOnNewDocument(PRIVACY_SCRIPT, people.map((p) => p.id), people.map((p) => p.name));
+      await pg.evaluateOnNewDocument(PRIVACY_SCRIPT, people.map((p) => p.id), people.map((p) => p.name), CONFIG.publicUrl);
       await pg.evaluateOnNewDocument((keys) => keys.forEach((k) => { try { localStorage.removeItem(k); } catch {} }), CONFIG.clearStorageKeys);
       await pg.setCookie(...CONFIG.cookies.map((c) => ({ ...c, url: CONFIG.baseUrl })));
       return pg;

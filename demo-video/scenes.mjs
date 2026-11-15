@@ -184,12 +184,12 @@ export const SCENES = [
       { text: "Es de solo lectura: puede buscar y leer, pero no cambia nada." },
       { phase: 1, text: "Le preguntáis con vuestras palabras; él busca en el radar y os responde con los mismos datos que veis en la aplicación." },
     ],
-    // The radar's own MCP server (/mcp), connected to an unbranded AI agent. `host` is a neutral stand-in, not a domain.
+    // The radar's own MCP server (/mcp), connected to an unbranded AI agent. `host` is the live radar's public address.
     // `standard`: MCP is an open standard, so the honest claim is "any agent that supports MCP".
     connector: {
       label: "Conector MCP",
       name: "Reforesta Radar",
-      host: "vuestro-radar",
+      host: "reforesta-radar.miguelddev.com",
       path: "/mcp",
       note: "Solo lectura",
       state: "Conectado",
