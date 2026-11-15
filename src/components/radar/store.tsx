@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { api, errorText } from "@/lib/api";
 import type { OpportunitiesResponse, Opportunity } from "@/lib/opportunity";
 import { DEFAULT_FILTERS, filtersFromUrl, noOpenHighFit, urlPinsAhora, withPlazoView, type Filters, type Triage } from "./model";
 import { applyProfileAll, DEFAULT_USER_PROFILE, isNeutral, loadProfile, saveProfile, subscribeProfile, type UserProfile } from "./profile";
@@ -113,11 +114,9 @@ function writeOrgs(orgs: string[]) {
 
 async function request(): Promise<{ data?: Payload; error?: string }> {
   try {
-    const res = await fetch("/api/oportunidades", { cache: "no-store" });
-    if (!res.ok) throw new Error(`El servidor respondió ${res.status}`);
-    return { data: (await res.json()) as Payload };
+    return { data: await api<Payload>("/api/oportunidades") };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Error desconocido" };
+    return { error: errorText(e) };
   }
 }
 

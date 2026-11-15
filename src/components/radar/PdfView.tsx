@@ -3,6 +3,7 @@
 import { CircleAlert, CircleCheck, CircleDashed, CircleDot, FileText, RotateCw, TriangleAlert, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import type { PdfAnalysisResult } from "@/lib/types";
+import { api } from "@/lib/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,18 +16,10 @@ import { TIER_LABELS, tidy, workLineLabel } from "./model";
 export type PdfRequest = { docId: number; fileName: string } | { pdfUrl: string; fileName: string } | { sample: "madrid" | "miteco" } | File;
 
 export async function analyzePdf(req: PdfRequest): Promise<PdfAnalysisResult> {
-  const init: RequestInit =
-    req instanceof File
-      ? (() => {
-          const fd = new FormData();
-          fd.append("file", req);
-          return { method: "POST", body: fd };
-        })()
-      : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) };
-  const res = await fetch("/api/analyze-pdf", init);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error || `No se pudo analizar el PDF (${res.status})`);
-  return data as PdfAnalysisResult;
+  if (!(req instanceof File)) return api<PdfAnalysisResult>("/api/analyze-pdf", { json: req });
+  const fd = new FormData();
+  fd.append("file", req);
+  return api<PdfAnalysisResult>("/api/analyze-pdf", { body: fd });
 }
 
 const MAX_MB = 15;

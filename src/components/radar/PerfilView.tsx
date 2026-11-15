@@ -11,6 +11,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { isClosed, KIND_LABELS, TIER_LABELS } from "./model";
 import { ALL_KINDS, DEFAULT_USER_PROFILE, HIDE_PENALTY, isNeutral, parseProfile, WORK_LINES, type UserProfile } from "./profile";
@@ -31,8 +32,7 @@ function useRules(): Rules | null {
   const [rules, setRules] = useState<Rules | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch("/api/perfil")
-      .then((r) => (r.ok ? (r.json() as Promise<Rules>) : null))
+    api<Rules>("/api/perfil")
       .then((r) => alive && setRules(r))
       .catch(() => {});
     return () => {
