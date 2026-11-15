@@ -39,7 +39,7 @@ class RadarQuery(NamedTuple):
     q: str | None = None
     ngo_only: bool = False
     organ: int | None = None  # BDNS organ id (`organos=` filter)
-    priority: bool = False  # results get enrichment priority and looser topic filtering
+    priority: bool = False  # results get enrichment priority (pre-score bonus)
 
 
 _Q = RadarQuery
@@ -340,11 +340,6 @@ class BdnsSource(Source):
     id = "bdns"
     name = "BDNS"
 
-    def __init__(self) -> None:
-        # ids of enriched items that came from a priority query: keep() lets them in without a work line when
-        # the call is open to NGOs (TS keep(o, isPriority)). Set by fetch(), read by keep() right after.
-        self._priority_ids: set[str] = set()
-
     async def fetch(self, ctx: SourceContext) -> FetchResult:
         now = local_now()
         since = datetime.fromtimestamp(now.timestamp() - SEARCH_WINDOW_DAYS * DAY_S, settings.tz)
@@ -388,15 +383,11 @@ class BdnsSource(Source):
 
         items: list[RawOpportunity] = []
         failed = 0
-        self._priority_ids = set()
         for raw, d in zip(to_enrich, details, strict=True):
             items.append(detail_to_raw(raw, d, now) if d is not None else raw_to_raw(raw))
             if d is None:
                 failed += 1
-            if raw["numeroConvocatoria"] in priority:
-                self._priority_ids.add(f"bdns:{raw['numeroConvocatoria']}")
-        # lite items: TS keeps them only with work lines and keep(o, false), which is what keep() does for them
-        # (none is in _priority_ids). The health note counts the kept ones: score them here, never stored.
+        # The health note counts the kept lite items: score them here, never stored.
         lite_items = [raw_to_raw(raw) for raw in not_enriched]
         items.extend(lite_items)
         lite = sum(1 for r in lite_items if self.keep(score_raw(r)))
@@ -426,9 +417,9 @@ class BdnsSource(Source):
         )
 
     def keep(self, o: Opportunity) -> bool:
+        # A topic match (a work line) is required for every call. The TS also let in calls from priority searches
+        # (IRPF, tercer sector, interés general) open to NGOs without one: that admitted ~260 social calls (elderly,
+        # women, disability, the "0,7 % IRPF" lines) and no environmental one. Priority searches still get their
+        # details read first (pre-score bonus).
         f = o.fit
-        return (
-            f.is_competitive
-            and f.score >= 25
-            and (len(f.work_lines) > 0 or (o.id in self._priority_ids and f.is_ong_eligible is True))
-        )
+        return f.is_competitive and f.score >= 25 and len(f.work_lines) > 0

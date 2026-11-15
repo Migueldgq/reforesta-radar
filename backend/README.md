@@ -111,8 +111,10 @@ Details that matter when porting more code:
     is now only a safety bound. Cold run ≈ 2 min (BDNS answers about half the first attempts with 429; retries
     absorb all but a handful), warm run ≈ 10 s. "Lite" items (search row only: no deadline, type or beneficiaries;
     −5 and the "Ficha BDNS no cargada" warning) now appear only when a detail fails or past the bound. With details,
-    `keep()` sees the real call type and beneficiaries: non-competitive calls are dropped, and generic calls from
-    priority searches (IRPF, tercer sector, MITECO organs) open to NGOs are kept without a work line, as in the TS.
+    `keep()` sees the real call type and beneficiaries: non-competitive calls are dropped.
+  - BDNS `keep()` requires a work line (a topic match) for every call. The TS also kept calls from priority
+    searches (IRPF, tercer sector, interés general) open to NGOs without one; that let in ~260 social calls and no
+    environmental one, so the exception is gone (priority searches still get their details read first).
   - BDNS retries 429/5xx/network errors up to 3 times (the TS retried once) and reads details 4 at a time
     (`DETAIL_CONCURRENCY`), half the TS fan-out, to be gentle with the public API.
   - `tests/test_parity_golden.py` still rebuilds the golden's 286 lite items as lite (the golden is the TS output),

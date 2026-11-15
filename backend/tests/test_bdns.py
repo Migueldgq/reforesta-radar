@@ -79,13 +79,14 @@ async def test_bdns_fetch_maps_and_scores_like_ts(monkeypatch: pytest.MonkeyPatc
         for field in FIELDS:
             assert got[field] == want[field], (n, field)
         assert adjusted_fit(o).to_json() == want["fit"], n
-        assert source.keep(o), n
+        assert source.keep(o) == (n != "923042"), n  # the TS kept 923042 too; see below
     assert any(w.startswith("BDNS la marca abierta") for w in GOLDEN["bdns:907977"]["fit"]["warnings"])  # conflict
 
-    # 923042 has no work line: kept only because a priority query found it and it is open to NGOs
+    # 923042 (a social "Tándem" programme) has no work line. A priority query found it and it is open to NGOs, which
+    # was enough for the TS; now every call needs a topic match, so it is dropped like any off-topic call.
     o = score_raw(by_id["bdns:923042"], NOW.date())
-    assert not o.fit.work_lines and o.fit.is_ong_eligible is True
-    assert not bdns.BdnsSource().keep(o)
+    assert not o.fit.work_lines and o.fit.is_ong_eligible is True and o.fit.score >= 25 and o.fit.is_competitive
+    assert not source.keep(o)
 
     # details are memoised with the TS keys (fetch_cache shared by both backends): 24 h with an end date, else 3 h
     persisted = {m.key: m for m in memo.persisted_since(0)}
