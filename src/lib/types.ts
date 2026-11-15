@@ -71,6 +71,7 @@ export interface FitAnalysis {
   warnings: string[];
   daysRemaining: number | null;
   deadlineState: "abierta" | "proxima" | "cerrada" | "sin_fecha";
+  scoreCap?: number; // kind cap the server applied; absent when the kind has none
 }
 
 export interface ConvocatoriaItem {
