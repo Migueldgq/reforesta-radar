@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from app.models import Opportunity, SourceHealth
 from app.sources import SOURCE_ORDER
 
-INGEST_STALE = timedelta(hours=12)
+INGEST_STALE = timedelta(hours=36)  # one daily ingest missed, with margin
 
 # Latest run of every source; a failed run takes category/url from the last run that worked.
 HEALTH_SQL = text("""

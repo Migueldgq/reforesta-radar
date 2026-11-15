@@ -33,5 +33,5 @@ export interface OpportunitiesResponse {
   refreshing?: boolean; // a background refresh is running right now
   storage?: "postgres" | "cache"; // where this response came from
   lastIngestAt?: string | null;   // Postgres: finish time of the last successful ingest run
-  ingestStale?: boolean;          // Postgres: last successful ingest older than 12 h (or none yet)
+  ingestStale?: boolean;          // Postgres: last successful ingest older than 36 h (or none yet)
 }

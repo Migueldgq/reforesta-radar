@@ -23,8 +23,8 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
   Las filas de fuentes que ya no están registradas se marcan `gone_at` en la siguiente ingesta.
 - La API nunca consulta las fuentes al responder: no hay `?refresh=1`. La web no tiene botón de recarga; el pie de
   la barra lateral dice de cuándo son los datos («Datos de hoy, 9:02»).
-- `ingestStale` (más de 12 h sin una ingesta correcta) hace que Inicio muestre «Los datos no se actualizan desde
-  hace N h».
+- `ingestStale` (más de 36 h sin una ingesta correcta, es decir, una carga diaria perdida) hace que Inicio muestre
+  «Los datos son de hace N h: la carga diaria no ha terminado bien desde entonces».
 - Si Postgres no responde, la API devuelve 503; si la API no responde, la web muestra un estado de error (o la
   última copia guardada en el navegador, con un aviso). La portada se pinta sin cifras.
 - Esquema: migraciones de Alembic en `backend/alembic/` (la API las aplica al arrancar).

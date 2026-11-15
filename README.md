@@ -140,7 +140,7 @@ fuentes ──► ingesta (diaria, 9:00) ──► Postgres ◄── API (FastA
 - **LIFE.** Ahora mismo no hay ninguna convocatoria LIFE de naturaleza abierta. La única LIFE abierta (European City Facility) es de transición energética y va dirigida a municipios. La mayoría de los fondos europeos que aparecen son de Horizon Europe, para consorcios de investigación.
 - **Las reglas se pueden equivocar.** La puntuación busca palabras, no entiende el texto: puede dar nota alta a algo que no encaja o pasar por alto una convocatoria redactada de forma poco habitual. Por eso siempre muestra sus motivos.
 - **Fuentes frágiles.** Los boletines leídos en HTML (DOG, Fundación Biodiversidad) dejan de funcionar si cambian su web. Si una fuente falla, la vista Fuentes lo indica y se siguen mostrando sus últimos datos buenos.
-- **Datos de la mañana.** La API solo enseña lo que guardó la última ingesta, la de las 9:00; una convocatoria publicada más tarde aparece al día siguiente. Si la ingesta lleva más de 12 h sin terminar bien, Inicio muestra un aviso.
+- **Datos de la mañana.** La API solo enseña lo que guardó la última ingesta, la de las 9:00; una convocatoria publicada más tarde aparece al día siguiente. Si la ingesta lleva más de 36 h sin terminar bien (se ha perdido una carga diaria), Inicio muestra un aviso.
 - **Cobertura autonómica parcial.** Hoy se leen 2 boletines autonómicos (Madrid y Galicia), los que propone el reto. Los demás territorios llegan solo a través de la BDNS. Los boletines provinciales y municipales no se leen directamente.
 
 ---
