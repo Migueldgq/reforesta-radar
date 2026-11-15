@@ -58,7 +58,7 @@ function GoneBody({ o, item }: { o: Opportunity; item: BoardItem }) {
       <SheetHeader className="gap-1.5 border-b px-6 py-5 pr-12">
         <SheetDescription className="text-xs">Guardada en el tablero del equipo</SheetDescription>
         <SheetTitle className="text-base leading-snug">{tidy(item.titulo)}</SheetTitle>
-        <p className="text-sm text-muted-foreground">{tidy(item.organismo)}</p>
+        <p className="text-sm text-muted-foreground">{item.organismo}</p>
       </SheetHeader>
       <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
         <div className="space-y-2">
@@ -213,7 +213,7 @@ function DrawerBody({ o }: { o: Opportunity }) {
           {sourceLabelOf(o)} · {KIND_LABELS[o.kind]} · {territoryOf(o)}
         </SheetDescription>
         <SheetTitle className="text-base leading-snug">{tidy(o.titulo)}</SheetTitle>
-        <p className="text-sm text-muted-foreground">{tidy(o.organismo)}</p>
+        <p className="text-sm text-muted-foreground">{o.organismo}</p>
       </SheetHeader>
 
       <div className="flex-1 overflow-y-auto px-6 py-6">

@@ -145,7 +145,7 @@ export function TopTable({ data }: { data: LandingData | null }) {
             </td>
             <td className="px-4 py-3 align-top">
               <p className="line-clamp-2 font-medium text-foreground">{tidy(o.titulo)}</p>
-              <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{tidy(o.organismo)}</p>
+              <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{o.organismo}</p>
               <div className="mt-2 sm:hidden">
                 <DeadlineBadge o={o} today={data.today} />
               </div>
@@ -239,7 +239,7 @@ export function FitCard({ data }: { data: LandingData | null }) {
         <span className="text-xs text-muted-foreground">{sourceLabelOf(o)}</span>
       </div>
       <p className="mt-3 line-clamp-2 font-medium">{tidy(o.titulo)}</p>
-      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{tidy(o.organismo)}</p>
+      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{o.organismo}</p>
       <div className="mt-5 grid gap-5 border-t pt-5">
         <div>
           <p className="text-xs font-medium text-muted-foreground">Por qué encaja</p>

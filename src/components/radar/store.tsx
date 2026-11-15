@@ -193,6 +193,9 @@ export function RadarProvider({ children }: { children: ReactNode }) {
   const path = usePathname();
   const offline = useSyncExternalStore(serverStatus.subscribe, serverStatus.isDown, () => false);
   const [rawData, setData] = useState<Payload | null>(null);
+  // Organisms in the server's latest answer (not the saved copy, which may predate a rename).
+  const [knownOrgs, setKnownOrgs] = useState<Set<string> | null>(null);
+  const knownOrgsRef = useRef<Set<string> | null>(null);
   const [settings, setSettings] = useState<TeamSettings | null>(null);
   // A Perfil change not yet confirmed by the API; it wins over `settings` so the list never jumps back.
   const [draft, setDraft] = useState<UserProfile | null>(null);
@@ -241,6 +244,19 @@ export function RadarProvider({ children }: { children: ReactNode }) {
   }, []);
 
 
+  // Organism filter: the last value known to be the team's (or the URL's, which wins on load). Changes away from it are saved.
+  const orgBaseline = useRef<string | null>(null);
+  /** Drops organisms no longer in the sources (renamed or gone) quietly, so an old link or filter never empties the list. */
+  const pruneOrgs = useCallback((f: Filters): Filters => {
+    const known = knownOrgsRef.current;
+    const orgs = f.dims.organismo;
+    if (!known || orgs.every((o) => known.has(o))) return f;
+    const kept = orgs.filter((o) => known.has(o));
+    // Dropping names that no longer exist is not a change of the team's filter (nothing is saved).
+    if (orgKey(orgs) === orgBaseline.current) orgBaseline.current = orgKey(kept);
+    return { ...f, dims: { ...f.dims, organismo: kept } };
+  }, []);
+
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -260,6 +276,10 @@ export function RadarProvider({ children }: { children: ReactNode }) {
     return request().then((r) => {
       if (r.data) {
         setData(r.data);
+        const known = new Set(r.data.items.map((o) => o.organismo));
+        knownOrgsRef.current = known;
+        setKnownOrgs(known);
+        setFiltersRaw(pruneOrgs);
         writePayload(r.data);
         latestItems.current = r.data.items;
         maybeDecide();
@@ -272,14 +292,13 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       // Also while an ingest runs (first run: the list fills in as soon as it finishes).
       if (again || r.data?.ingest?.running) pollRef.current = setTimeout(() => void fetchRef.current?.(), again ? 6000 : 10_000);
     });
-  }, [maybeDecide]);
+  }, [maybeDecide, pruneOrgs]);
 
   useEffect(() => {
     fetchRef.current = fetchData;
   }, [fetchData]);
 
-  // Organism filter: the last value known to be the team's (or the URL's, which wins on load). Changes away from it are saved.
-  const orgBaseline = useRef<string | null>(null);
+
   const settingsRef = useRef<TeamSettings | null>(null);
   // URL writes wait until the URL has been read once (else the first render would wipe a shared link).
   const [urlLoaded, setUrlLoaded] = useState(false);
@@ -301,10 +320,10 @@ export function RadarProvider({ children }: { children: ReactNode }) {
         orgBaseline.current = orgKey(init.dims.organismo);
         if (!pinned && toNextEditions.current) Object.assign(init, withPlazoView(init, "ediciones"));
       }
-      setFiltersRaw(init);
+      setFiltersRaw(pruneOrgs(init));
       setPage(pageFromUrl());
     },
-    [],
+    [pruneOrgs],
   );
 
   useEffect(() => {
@@ -335,11 +354,11 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       if (orgBaseline.current == null) {
         const orgs = st.organisms ?? [];
         orgBaseline.current = orgKey(orgs);
-        setFiltersRaw((f) => ({ ...f, dims: { ...f.dims, organismo: orgs } }));
+        setFiltersRaw((f) => pruneOrgs({ ...f, dims: { ...f.dims, organismo: orgs } }));
       }
       maybeDecide();
     },
-    [maybeDecide],
+    [maybeDecide, pruneOrgs],
   );
 
   const orgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -670,7 +689,10 @@ export function RadarProvider({ children }: { children: ReactNode }) {
 
   /* ----- URL: filters and page on Inicio, `?c=<id>` for the open call everywhere ----- */
 
-  const teamOrgs = useMemo(() => settings?.organisms ?? [], [settings]);
+  const teamOrgs = useMemo(() => {
+    const orgs = settings?.organisms ?? [];
+    return knownOrgs ? orgs.filter((o) => knownOrgs.has(o)) : orgs;
+  }, [settings, knownOrgs]);
   // Same rule as the opening tab: while it is "Próximas ediciones", choosing "Para pedir ahora" is marked in the URL.
   const quiet = useMemo(() => (data ? noOpenHighFit(data.items) : false), [data]);
   const pushNext = useRef<{ radarDrawer?: boolean } | null>(null);

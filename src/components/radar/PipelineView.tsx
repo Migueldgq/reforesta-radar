@@ -89,7 +89,7 @@ function NextUp({ row }: { row: Row }) {
           </button>
         </h2>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
-          <span className="truncate">{tidy(o.organismo)}</span>
+          <span className="truncate">{o.organismo}</span>
           {o.deadlineEstimated ? (
             <Badge variant="outline" title={ESTIMATE_TIP}>
               <CalendarDays aria-hidden /> Hacia el {fmtDate(o.deadline)} · fecha estimada
@@ -296,7 +296,7 @@ function TrackCard({
             <span className="line-clamp-2">{tidy(o.titulo)}</span>
           </button>
         </h3>
-        <p className="truncate text-xs text-muted-foreground">{tidy(o.organismo)}</p>
+        <p className="truncate text-xs text-muted-foreground">{o.organismo}</p>
       </div>
       <div className="flex flex-wrap items-start gap-1.5">
         {row.o ? <Deadline o={row.o} /> : <GoneNote />}

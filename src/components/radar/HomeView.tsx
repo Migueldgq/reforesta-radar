@@ -85,8 +85,6 @@ function dimLabel(dim: Dim, key: string): string {
       return TRIAGE_LABELS[key as Triage] ?? key;
     case "plazo":
       return PLAZO_LABELS[key] ?? key;
-    case "organismo":
-      return tidy(key);
     default:
       return key;
   }

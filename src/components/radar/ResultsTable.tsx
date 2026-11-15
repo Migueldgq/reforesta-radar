@@ -227,7 +227,7 @@ function Row({ o, onOpen }: { o: Opportunity; onOpen: (opener: HTMLElement | nul
             <span className="@min-[60.5rem]:hidden">{sourceLabelOf(o)} · </span>
             <span className="@min-[48rem]:hidden">{territory} · </span>
             {amount && <span className="@min-[54rem]:hidden">{amount} · </span>}
-            {tidy(o.organismo)}
+            {o.organismo}
           </span>
         </button>
       </TableCell>
@@ -267,7 +267,7 @@ function MobileCard({ o, onOpen }: { o: Opportunity; onOpen: (opener: HTMLElemen
         <button type="button" data-opener={o.id} onClick={(e) => onOpen(e.currentTarget)} className="block text-left after:absolute after:inset-0 after:content-['']">
           <span className="line-clamp-3 leading-snug font-medium">{tidy(o.titulo)}</span>
         </button>
-        <p className="truncate text-xs text-muted-foreground">{tidy(o.organismo)}</p>
+        <p className="truncate text-xs text-muted-foreground">{o.organismo}</p>
         <WonMarker o={o} className="flex w-fit" />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-0.5">
           <Deadline o={o} />
