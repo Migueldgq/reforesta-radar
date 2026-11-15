@@ -25,7 +25,7 @@ pronunciación dicen cómo leer siglas, cifras y años; el texto se graba tal cu
 | `11-ganasteis` | Y lee las ediciones anteriores: Reforesta la ganó en 2025, 2024 y 2022. | Años en palabras: «dos mil veinticinco, dos mil veinticuatro y dos mil veintidós». |
 | `12-ganasteis` | Suele abrir entre abril y septiembre, y en los dos últimos años todas las ayudas fueron a entidades sin ánimo de lucro. | — |
 | `13-motivos` | La nota también avisa. Esta, de Madrid y forestal, parece buena, pero ninguna de las ayudas anteriores fue a una entidad sin ánimo de lucro. | — |
-| `14-motivos` | Y se queda en un 45. No hay inteligencia artificial detrás: son reglas a la vista, que podéis ajustar en el Perfil del equipo. | «45» se lee «cuarenta y cinco». |
+| `14-motivos` | Y se queda en un 45. La nota sale de reglas a la vista. Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver. | «45» se lee «cuarenta y cinco». |
 | `15-empresas` | Los programas de empresas y fundaciones no salen en ningún boletín: están comprobados a mano. | — |
 | `16-empresas` | Cada uno dice su plazo y qué lo limita: este de Fundación Unicaja solo vale en Andalucía o en Ciudad Real. | — |
 | `17-empresas` | Como no se actualizan solos, conviene revisarlos. | — |
@@ -75,7 +75,7 @@ pronunciación dicen cómo leer siglas, cifras y años; el texto se graba tal cu
 
 13-motivos: La nota también avisa. Esta, de Madrid y forestal, parece buena, pero ninguna de las ayudas anteriores fue a una entidad sin ánimo de lucro.
 
-14-motivos: Y se queda en un 45. No hay inteligencia artificial detrás: son reglas a la vista, que podéis ajustar en el Perfil del equipo.
+14-motivos: Y se queda en un 45. La nota sale de reglas a la vista. Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver.
 
 15-empresas: Los programas de empresas y fundaciones no salen en ningún boletín: están comprobados a mano.
 
