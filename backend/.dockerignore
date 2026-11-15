@@ -4,3 +4,10 @@
 .ruff_cache
 **/__pycache__
 tests
+# database dumps and other local artefacts that must never end up in an image
+backups
+*.dump
+*.sql
+*.sql.gz
+*.log
+.DS_Store

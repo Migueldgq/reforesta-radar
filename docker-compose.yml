@@ -9,17 +9,23 @@ name: reforesta-radar
 
 x-backend: &backend
   build: ./backend
-  image: reforesta-radar-backend:dev
+  # Project-scoped: a second compose project (`docker compose -p other …`) builds its own image instead of retagging
+  # the one this stack runs.
+  image: ${COMPOSE_PROJECT_NAME}-backend:dev
   environment: &backend-env
     DATABASE_URL: postgresql+asyncpg://radar:${RADAR_DB_PASSWORD:-radar}@postgres:5432/radar
     CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3010} # only for direct browser calls; /api via Next needs none
     RADAR_TZ: ${RADAR_TZ:-Europe/Madrid}
     INGEST_SOURCE_TIMEOUT_S: ${INGEST_SOURCE_TIMEOUT_S:-480}
+    HISTORY_TIMEOUT_S: ${HISTORY_TIMEOUT_S:-1800} # BDNS history step after the ingest is stored
+    HTTP_CONCURRENCY: ${HTTP_CONCURRENCY:-8} # requests in flight per host during the ingest
+    HTTP_USER_AGENT: ${HTTP_USER_AGENT:-Mozilla/5.0 (compatible; ReforestaRadar/1.0)}
     RADAR_INGEST_AT: ${RADAR_INGEST_AT:-09:00} # daily scheduled ingest, local time in RADAR_TZ
     # Accounts (docs/api-auth.md). Invitation/reset links point at RADAR_PUBLIC_URL; set RADAR_COOKIE_SECURE=true
     # behind https. Bootstrap admin: only used while the users table is empty (prefer `python -m app.users`).
     RADAR_PUBLIC_URL: ${RADAR_PUBLIC_URL:-http://localhost:3010}
     RADAR_COOKIE_SECURE: ${RADAR_COOKIE_SECURE:-false}
+    RADAR_SESSION_DAYS: ${RADAR_SESSION_DAYS:-30} # a session expires after this many days without use
     RADAR_BOOTSTRAP_ADMIN_EMAIL: ${RADAR_BOOTSTRAP_ADMIN_EMAIL:-}
     RADAR_BOOTSTRAP_ADMIN_PASSWORD: ${RADAR_BOOTSTRAP_ADMIN_PASSWORD:-}
     # Optional e-mail of links + self-service "forgot password" (off while SMTP_HOST is empty).
@@ -28,6 +34,7 @@ x-backend: &backend
     SMTP_USER: ${SMTP_USER:-}
     SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     SMTP_FROM: ${SMTP_FROM:-}
+    SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
     # Addresses whose X-Forwarded-For uvicorn believes (client IP for login throttling and logs). Default: none
     # reachable from outside, because Next.js passes on whatever X-Forwarded-For the browser sends. Only when a
     # reverse proxy in front of `web` overwrites that header, set this to the compose network (e.g. 172.16.0.0/12).
@@ -39,13 +46,14 @@ x-backend: &backend
     RADAR_MCP_URL: ${RADAR_MCP_URL:-}
     RADAR_MCP_ALLOWED_HOSTS: ${RADAR_MCP_ALLOWED_HOSTS:-}
     RADAR_MCP_ALLOWED_ORIGINS: ${RADAR_MCP_ALLOWED_ORIGINS:-}
+    RADAR_MCP_USER: ${RADAR_MCP_USER:-} # stdio mode only (`docker compose run --rm -T api python -m app.mcp`)
   depends_on:
     postgres:
       condition: service_healthy
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.16-alpine # pinned; how to bump: docs/mantenimiento.md
     environment:
       POSTGRES_USER: radar
       POSTGRES_DB: radar
@@ -97,7 +105,7 @@ services:
       context: .
       args:
         API_URL: http://api:8000 # baked into the /api/* rewrites at build time
-    image: reforesta-radar-web:dev
+    image: ${COMPOSE_PROJECT_NAME}-web:dev
     environment:
       API_URL: http://api:8000 # server-side fetches (landing figures)
     ports:

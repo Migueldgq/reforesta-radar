@@ -1,5 +1,6 @@
 # Reforesta Radar backend: API (default command) and ingest (python -m app.ingest), one image.
-FROM python:3.13-slim
+# Pinned (the version the stack was last tested with); how to bump: docs/mantenimiento.md
+FROM python:3.13.18-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.8 /uv /bin/uv
 

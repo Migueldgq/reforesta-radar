@@ -13,3 +13,11 @@ docs
 *.tsbuildinfo
 .DS_Store
 .impeccable
+# database dumps and other local artefacts that must never end up in an image
+backups
+radar-backups
+*.dump
+*.sql
+*.sql.gz
+*.log
+coverage

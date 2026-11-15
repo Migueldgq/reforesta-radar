@@ -24,9 +24,10 @@ Los comandos de este documento se ejecutan en la carpeta del repositorio, con el
 2. **Fuentes leídas en HTML** (meses). DOG y Fundación Biodiversidad se leen de la web; si cambian su diseño, la
    fuente sale como «Error» o «Parcial» en Fuentes y sus convocatorias se quedan congeladas en la última carga buena.
    BOE, BOCM, BDNS y la UE usan APIs o XML oficiales, más estables, pero también pueden cambiar.
-3. **Dependencias** (meses o años). Sin actualizar, se acumulan fallos de seguridad conocidos. Las imágenes base usan
-   etiquetas móviles (`node:22-alpine`, `python:3.13-slim`, `postgres:16-alpine`): reconstruir más adelante trae
-   versiones nuevas sin que nadie lo decida. Node 22 deja de tener soporte en abril de 2027.
+3. **Dependencias** (meses o años). Sin actualizar, se acumulan fallos de seguridad conocidos. Las imágenes base
+   están fijadas a una versión concreta (`python:3.13.18-slim`, `node:22.23.5-alpine`, `postgres:16.16-alpine`):
+   reconstruir no trae versiones nuevas, pero tampoco sus parches de seguridad hasta que alguien las suba (ver
+   [Actualizar dependencias](#actualizar-dependencias)). Node 22 deja de tener soporte en abril de 2027.
 4. **La nota** se queda con las palabras de hoy. Si cambia cómo se redactan las convocatorias o el equipo cambia de
    prioridades, la lista se ordena peor poco a poco. La vista Perfil lo amortigua sin tocar código.
 5. **Sin copias de seguridad**, un disco roto o un `docker compose down -v` por error borran cuentas, tablero, notas y
@@ -165,11 +166,21 @@ npm outdated
 npm update                             # dentro de los rangos de package.json; los saltos de versión mayor, uno a uno
 npm run lint && npm run build
 
-# Imágenes y prueba completa
-docker compose pull postgres
+# Imágenes y prueba completa (tras subir las versiones fijadas, ver abajo)
 docker compose up -d --build
 docker compose run --rm ingest         # comprobar que todas las fuentes siguen en «ok»
 ```
+
+- **Imágenes base fijadas.** Están en tres sitios: `FROM python:…` en `backend/Dockerfile`, `FROM node:…` en
+  `Dockerfile` e `image: postgres:…` en `docker-compose.yml`. Para subirlas, mira la última versión de la misma
+  rama (por ejemplo `docker pull python:3.13-slim && docker run --rm python:3.13-slim python -V`, igual con
+  `node:22-alpine` y `node -v`, y `postgres:16-alpine` con `postgres -V`), escribe ese número en los tres sitios,
+  reconstruye y pasa la prueba completa de arriba. Dentro de la misma versión mayor de Postgres (16.x) basta con
+  cambiar la etiqueta: los datos del volumen sirven tal cual.
+- **Nombre de las imágenes.** Las imágenes propias se llaman `<proyecto>-backend:dev` y `<proyecto>-web:dev`
+  (`reforesta-radar` por defecto). Una segunda copia del radar arrancada con otro nombre de proyecto
+  (`docker compose -p prueba up -d --build`, por ejemplo para probar una instalación limpia) construye las suyas y no
+  pisa las del radar en marcha. Usa también otros puertos (`RADAR_WEB_PORT`, `RADAR_API_PORT`, `RADAR_DB_PORT`).
 
 - `next` está fijado a una versión exacta (`16.4.6`), igual que `react` y `mcp` (Python); súbelos a mano leyendo sus
   notas de versión. El aviso de `AGENTS.md` sobre Next.js 16 sigue valiendo.
