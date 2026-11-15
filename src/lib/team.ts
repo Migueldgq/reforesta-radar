@@ -52,6 +52,11 @@ export type IngestRequest = {
 };
 export type IngestStatus = { latest: IngestRequest | null; lastIngestAt: string | null };
 
+/** A personal access token for the MCP server (its value is shown only once, on creation). */
+export type PersonalToken = { id: number; name: string; createdAt: string; expiresAt: string; lastUsedAt: string | null };
+export type TokensInfo = { tokens: PersonalToken[]; mcpUrl: string; publicTools: boolean };
+export type TokenCreated = { token: PersonalToken; secret: string };
+
 export const PASSWORD_MIN = 10;
 export const PASSWORD_MAX = 256;
 

@@ -24,7 +24,11 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
-    return [{ source: "/api/:path*", destination: `${API_URL}/api/:path*` }];
+    return [
+      { source: "/api/:path*", destination: `${API_URL}/api/:path*` },
+      // The read-only MCP server (docs/mcp.md), so assistants can use the web origin's URL.
+      { source: "/mcp", destination: `${API_URL}/mcp` },
+    ];
   },
   turbopack: {
     rules: {
