@@ -1,0 +1,166 @@
+# Reforesta Radar · Python backend
+
+FastAPI + Postgres + Alembic, managed with [uv](https://docs.astral.sh/uv/), everything in Docker. It is a port of
+the TypeScript backend in `src/lib/` (connectors, explainable scoring, ingest, API) and returns the **same JSON
+contract** (`src/lib/opportunity.ts`), so the Next.js frontend can switch by changing the API base URL.
+
+The TypeScript backend stays untouched until this one reaches parity. Ported so far: scoring (100% parity, see
+below), the store, the ingest, the API, and the `boe` and `rsc` connectors.
+
+```
+sources ──► ingest (python -m app.ingest) ──► Postgres ◄── API (FastAPI) ──► Next.js
+             scores BASE fit, one transaction          read-time geo + kind fit, ranking
+```
+
+## Run it
+
+```bash
+docker compose up -d postgres api                 # from the repo root; migrations run when the API starts
+curl localhost:8010/health                        # {"status":"ok","database":"ok"}
+docker compose run --rm ingest                    # ingest every ported source
+docker compose run --rm ingest --source boe,rsc   # a subset;  --dry-run fetches and diffs without writing
+curl localhost:8010/api/oportunidades             # OpportunitiesResponse, same shape as the TS route
+```
+
+- API: http://localhost:8010 · OpenAPI docs: http://localhost:8010/docs · Postgres: `localhost:5440` (user,
+  password and database `radar`; local development only).
+- Host ports and password are overridable: `cp backend/.env.example backend/.env`, edit, then
+  `docker compose --env-file backend/.env up -d`. (The project keeps these settings out of a root `.env` because
+  Next.js reads that file too.)
+- Optional schedule: `docker compose --profile scheduler up -d ingest-scheduler` runs the ingest every
+  `RADAR_INGEST_EVERY_S` seconds (default 8 h). For anything sturdier use the host's cron with
+  `docker compose run --rm ingest --trigger schedule`.
+- Migrations by hand: `docker compose run --rm --entrypoint alembic ingest upgrade head`.
+
+### Without Docker (development)
+
+```bash
+cd backend
+uv sync                                    # Python 3.13 + dev tools
+uv run ruff check && uv run ruff format --check
+uv run pytest                              # the store test uses the compose Postgres on :5440 (skipped if down)
+uv run --env-file .env python -m app.ingest --dry-run --source boe
+uv run --env-file .env uvicorn app.main:app --reload --port 8011
+```
+
+## Layout
+
+```
+backend/
+  app/
+    main.py            FastAPI app: /health, /api/oportunidades, /api/fuentes (CORS for localhost:3000)
+    config.py          settings from environment variables
+    models.py          Pydantic contract (camelCase JSON, mirrors src/lib/opportunity.ts + types.ts)
+    http.py            shared async HTTP client: timeout, bounded concurrency, retry, generic User-Agent
+    scoring/           port of scoring.ts, reforesta-profile.ts, regions.ts
+      text.py            normalize_text, has_term, has_word, js_round
+      profile.py         keyword / dealbreaker / NGO / geo / kind tables (value-for-value with the TS)
+      score.py           ScoreInput, score_convocatoria, score_rsc, tier_for, FitAdjust
+      rank.py            geographic_fit, kind_fit, rank, clean_items (read time)
+      regions.py         infer_comunidad_autonoma
+    sources/           connectors
+      base.py            Source, RawOpportunity, FetchResult, SourceContext, score_raw
+      __init__.py        registry (SOURCES) and SOURCE_ORDER
+      memo.py            fetch_cache-backed TTL memo (same keys/values as the TS)
+      notices.py         decode_html, is_call_notice, is_open_tender, extract_notice_details,
+                         parse_deadline, deadline_from_days, es_date_to_iso (BOE, BOCM, DOG, BDNS)
+      boe.py, rsc.py     ported connectors
+    ingest/
+      __main__.py        CLI (python -m app.ingest), per-source run, summary table
+      store.py           one-transaction write: upsert, change log, gone, run records, fetch_cache
+      hashing.py         content_hash / dedupe_key (byte-identical to store-pg.ts)
+    api/state.py       read path: live items, source health, last ingest
+    db/                tables (SQLAlchemy Core) and async engine
+  alembic/             migrations (0001 = supabase/migrations/0001_init.sql)
+  tests/               parity, connectors on recorded fixtures, store semantics
+  tools/               golden-data capture scripts (TS dump, BDNS/EU raw inputs)
+```
+
+## Scoring parity with the TypeScript
+
+Correctness over elegance: same numbers, same Spanish strings, same order of reasons and warnings.
+
+- `tests/test_parity_functions.py`: identical inputs → identical outputs, against data dumped from the TS
+  functions themselves (`tools/dump_ts_golden.ts`, frozen clock): 2 168 `scoreConvocatoria` cases, 3 630
+  `geographicFit`+`kindFit` cases, `scoreRsc`, `inferComunidadAutonoma`, `normalizeText`, `contentHash`,
+  `dedupeKey`, and every profile table value by value.
+- `tests/test_parity_golden.py`: the live TS `GET /api/oportunidades` (542 items) rebuilt from raw fields and
+  scored end to end (base + connector adjustment + geo + kind): score, tier, reasons and the whole `fit` must match.
+  The API output lacks some scoring inputs (BDNS `descripcionLeng`/`objetivos`/`abierto`, the EU description past
+  400 chars); `tools/capture_bdns_inputs.py` and `tools/capture_eu_inputs.py` capture them into `tests/golden/`.
+
+Regenerate after changing the TS scoring (from the repo root, with the Next.js dev server running):
+
+```bash
+curl -s localhost:3000/api/oportunidades > backend/tests/golden/oportunidades.json
+TZ=Europe/Madrid npx tsx backend/tools/dump_ts_golden.ts
+cd backend && uv run python -m tools.capture_bdns_inputs && uv run python -m tools.capture_eu_inputs
+```
+
+Details that matter when porting more code:
+
+- JS `Math.round` rounds halves up; Python `round` does not. Use `js_round`.
+- "Today" is local midnight in `RADAR_TZ` (Europe/Madrid), like the TS on a Madrid machine. Every scoring function
+  takes an optional `today` so tests are reproducible.
+- JS regex `\d`, `\b` are ASCII-only: write `[0-9]` or use `re.ASCII` where it matters.
+- Known TS quirks kept for parity (fix them in both backends together, then bump `SCORING_VERSION`):
+  `deadline_from_days(..., "1 mes")` returns one day early in Madrid (the TS prints local midnight with
+  `toISOString()`).
+- The golden still holds items from sources dropped from the product (`ted`, `bocyl`); they are kept as extra
+  scoring-parity cases only (`tests/golden_reconstruct.py` rebuilds their inputs), not as sources to port.
+
+## How to add a source (step by step)
+
+1. **Read the TS connector** (list below) end to end: what it fetches, how it maps each field, every
+   `scoreConvocatoria({...})` argument, every post-scoring tweak (`fit.score = ...`, `fit.warnings.push`, ...),
+   every filter on `fit`, and the exact `health` it returns.
+2. **Create `app/sources/<id>.py`** with a `Source` subclass (`id`, `name`, `async fetch(ctx) -> FetchResult`).
+   Use `ctx.http.text/json(url, timeout=...)` (never a raw client) and `map_limit` for fan-out; use `ctx.memo.get`
+   with the **same key and value shape as the TS** `memo()` call (camelCase), so `fetch_cache` stays shared.
+3. **Map each item to `RawOpportunity`**: the contract fields exactly as the TS sets them, plus
+   `score_input=ScoreInput(...)` with exactly the TS arguments (omit the ones the TS omits: a missing `kind` is not
+   the same as `kind="subvencion"`). Do not compute the stored fit in the connector. Post-scoring tweaks become a
+   `FitAdjust` (`delta`, `cap`, `deadline_state`, `prepend_reasons`, `append_warnings`; applied in that order).
+   Pre-scoring to choose what to fetch is fine (BOE, BDNS do it); that pre-score is never stored.
+4. **Filters on the scored item** go in `keep(self, o)` (e.g. BOE keeps `fit.score >= 30`). If the health note
+   includes the number of kept items, write `{count}` in the note: the ingest fills it in.
+5. **Health**: return the TS `SourceHealth` (id, name, category, url, status rules, Spanish note). Errors: return
+   status `"error"` with the note, or raise; the ingest turns exceptions and timeouts into an error run and never
+   touches that source's rows.
+6. **Register** the instance in `app/sources/__init__.py` (`SOURCES`). `SOURCE_ORDER` already lists the 7 product
+   sources (bdns, boe, eu, bocm, dog, fb, rsc).
+7. **Shared helpers**: put text helpers used by more than one connector in `sources/notices.py` (or a new module
+   next to it); port them from the TS literally.
+8. **Test with a recorded fixture**: save the real responses under `tests/fixtures/<id>/` (trim to what the test
+   needs), serve them with `httpx.MockTransport`, freeze the clock (`monkeypatch.setattr(module, "local_now", ...)`),
+   and assert the items equal the TS output in `tests/golden/oportunidades.json` (fields and `adjusted_fit`). See
+   `test_boe_fetch_maps_and_scores_like_ts` in `tests/test_sources.py`.
+9. **Golden reconstruction**: `tests/golden_reconstruct.py` already rebuilds every TS source's input; when you
+   port a source, import its constants from your module instead of the copies there (EU: `EN_TOPIC`).
+10. **Verify**: `uv run ruff check && uv run pytest`, then `docker compose build api` and
+    `docker compose run --rm ingest --source <id>`; compare `curl localhost:8010/api/oportunidades` items of that
+    source with the TS route's.
+
+### Remaining connectors
+
+| id | TS | notes |
+|---|---|---|
+| `bdns` | `src/lib/bdns.ts` (`getBdnsOpportunities`, `detailToOpportunity`, `rawToOpportunity`, `preScore`, `searchPaged`, `RADAR_QUERIES`, `PRE_DROP_TERMS`) | 68 paged searches + up to `MAX_ENRICH` details; memo `bdns:detail:N` (TTL 24 h with end date, 3 h without); needs `infer_comunidad_autonoma`, `parse_deadline`, `deadline_from_days`; adjustments: conflict (`sin_fecha`, −12, cap 60), estimated-deadline warning, lite (−5 + warning); `keep()` uses isCompetitive / score ≥ 25 / workLines / priority. The TS `fetchJsonShared` dedupes identical concurrent GETs: add that to `Http` if needed. |
+| `eu` | `src/lib/sources/multi-source.ts` (`scrapeEu`, `sediaSearch`, `EN_TOPIC`, `EU_OFFTOPIC`, `nextFutureDeadline`) | SEDIA search is a multipart POST (see `tools/capture_eu_inputs.py`); scoring titulo/extraText are Spanish terms; Horizon (−12, cap 58, warning), LIFE (prepend reason), municipalities warning. |
+| `bocm` | `multi-source.ts` (`scrapeBocm`, `bocmXmlUrl`, `parseBocmXml`) | XML summaries; notice details via `extract_notice_details`; tipo depends on body text. |
+| `dog` | `multi-source.ts` (`scrapeDog`) | Pre-score then details like BOE. |
+| `fb` | `multi-source.ts` (`scrapeFundacionBiodiversidad`, `parseAmount`) | HTML list + detail; closed-status adjustment (`deadline_state="cerrada"`, cap 50); drops becas. |
+
+Final source set: bdns, boe, eu, bocm, dog, fb, rsc. `ted`, `bocyl`, `boja` and `montemadrid` were removed from
+the product and are not to be ported.
+
+Other TS backend pieces not ported yet:
+
+- **PDF analyzer**: `src/lib/pdf-analyzer.ts`, `src/lib/pdf-cache.ts`, route `src/app/api/analyze-pdf/route.ts`
+  (POST: upload or URL, 15 MB cap, sample files, LRU cache; text extraction with `unpdf`, then
+  `scoreConvocatoria`). Needs a PDF text library (e.g. `pypdf`) and an upload endpoint.
+- **`/api/perfil`** (`src/app/api/perfil/route.ts`): read-only dump of the profile tables; trivial from
+  `app/scoring/profile.py`.
+- Legacy routes `/api/boe` and `/api/convocatorias` and the legacy shape of the TS `/api/fuentes`
+  (`getAllExternalSources`); the frontend does not call them. The Python `/api/fuentes` returns
+  `{sources, lastIngestAt}` instead.
