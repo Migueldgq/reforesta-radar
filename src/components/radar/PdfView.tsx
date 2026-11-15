@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, CircleCheck, CircleDashed, CircleDot, FileText, RotateCw, TriangleAlert, Upload } from "lucide-react";
+import { ArrowUpRight, CircleAlert, CircleCheck, CircleDashed, CircleDot, FileText, Info, RotateCw, TriangleAlert, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import type { PdfAnalysisResult } from "@/lib/types";
 import { api, ApiError } from "@/lib/api";
@@ -12,6 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { TIER_LABELS, tidy, workLineLabel } from "./model";
+import { applyProfile } from "./profile";
+import { useRadar } from "./store";
 
 export type PdfRequest = { docId: number; fileName: string } | { pdfUrl: string; fileName: string } | { sample: "madrid" | "miteco" } | File;
 
@@ -58,11 +60,19 @@ function displayTitle(r: PdfAnalysisResult): string {
 
 /** 30-second decision sheet for an analysed PDF. Used standalone (in a Card) and inside the detail sheet (`compact`). */
 export function PdfResult({ result, compact = false }: { result: PdfAnalysisResult; compact?: boolean }) {
-  const { fit } = result;
+  const { rawData, profile, openDetail } = useRadar();
+  const scored = result.scoreSource !== "none";
+  // The PDF of a call in the radar carries that call's score: the team's Perfil applies to it as in the list.
+  const call = result.scoreSource === "radar" && result.callId ? rawData?.items.find((o) => o.id === result.callId) : undefined;
+  const fit = call ? applyProfile({ ...call, fit: result.fit }, profile).fit : result.fit;
   const TierIcon = TIER_ICON[fit.tier];
   const sections: { title: string; items: string[]; empty: string; icon?: "ok" | "warn" }[] = [
-    { title: "Motivos", items: fit.reasons, empty: "No hemos encontrado motivos claros de encaje.", icon: "ok" },
-    { title: "Avisos", items: fit.warnings, empty: "No vemos exclusiones evidentes en el texto.", icon: "warn" },
+    ...(scored
+      ? [
+          { title: "Motivos", items: fit.reasons, empty: "No hemos encontrado motivos claros de encaje.", icon: "ok" as const },
+          { title: "Avisos", items: fit.warnings, empty: "No vemos exclusiones evidentes en el texto.", icon: "warn" as const },
+        ]
+      : []),
     { title: "Plazos", items: result.deadlineHighlights, empty: "Revisa el extracto publicado en el boletín." },
     { title: "Importes", items: result.budgetHighlights, empty: "Revisa el anexo económico del PDF." },
     { title: "Quién puede pedirla", items: result.beneficiaries, empty: "No aparece una cláusula clara de beneficiarios." },
@@ -73,7 +83,7 @@ export function PdfResult({ result, compact = false }: { result: PdfAnalysisResu
     <div className="flex flex-col gap-5">
       <div className="space-y-1.5">
         {!compact && <h2 className="text-lg leading-snug font-semibold text-balance break-words text-foreground">{displayTitle(result)}</h2>}
-        {!compact && result.organism && tidy(result.organism) !== displayTitle(result) && <p className="text-sm text-muted-foreground">{tidy(result.organism)}</p>}
+        {!compact && result.organism && result.organism !== displayTitle(result) && <p className="text-sm text-muted-foreground">{result.organism}</p>}
         <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <FileText className="size-3.5 shrink-0" aria-hidden />
           <span className="min-w-0 break-all">{result.fileName}</span>
@@ -85,16 +95,43 @@ export function PdfResult({ result, compact = false }: { result: PdfAnalysisResu
       <Separator />
 
       <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <Badge variant={TIER_BADGE[fit.tier]} className="gap-1.5 px-2.5 py-1 text-sm" title={`${fit.score} de 100`}>
-            <TierIcon aria-hidden className="size-3.5!" />
-            <span className="font-semibold tabular-nums">{fit.score}</span>
-            <span className="opacity-60">/100</span>
-          </Badge>
-          <span className="text-sm font-medium text-foreground">{TIER_LABELS[fit.tier]}</span>
-        </div>
-        <p className="text-sm text-foreground">{VERDICT[fit.tier]}</p>
-        {fit.workLines.length > 0 && <p className="text-xs text-muted-foreground">Líneas: {fit.workLines.map(workLineLabel).join(" · ")}</p>}
+        {!scored ? (
+          <p className="flex gap-2 text-sm text-foreground">
+            <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+            {result.notice || "No hemos podido leer lo suficiente de este PDF para puntuarlo."}
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Badge variant={TIER_BADGE[fit.tier]} className="gap-1.5 px-2.5 py-1 text-sm" title={`${fit.score} de 100`}>
+                <TierIcon aria-hidden className="size-3.5!" />
+                <span className="font-semibold tabular-nums">{fit.score}</span>
+                <span className="opacity-60">/100</span>
+              </Badge>
+              <span className="text-sm font-medium text-foreground">{TIER_LABELS[fit.tier]}</span>
+            </div>
+            <p className="text-sm text-foreground">{VERDICT[fit.tier]}</p>
+            {fit.workLines.length > 0 && <p className="text-xs text-muted-foreground">Líneas: {fit.workLines.map(workLineLabel).join(" · ")}</p>}
+            {result.scoreSource === "radar" && result.callId && (
+              <p className="text-xs text-muted-foreground">
+                Es la nota del radar para esta convocatoria, la misma que en la lista.{" "}
+                {!compact && (
+                  <a
+                    href={`/?c=${encodeURIComponent(result.callId)}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openDetail(result.callId!, e.currentTarget);
+                    }}
+                    className="inline-flex items-center gap-0.5 font-medium text-foreground underline-offset-4 hover:underline"
+                  >
+                    Ver la convocatoria
+                    <ArrowUpRight className="size-3.5" aria-hidden />
+                  </a>
+                )}
+              </p>
+            )}
+          </>
+        )}
         {result.summary && <p className="line-clamp-3 pt-1 text-sm leading-relaxed text-muted-foreground" title={result.summary}>
             {result.summary}
           </p>}

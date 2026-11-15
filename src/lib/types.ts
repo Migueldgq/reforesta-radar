@@ -116,6 +116,10 @@ export interface PdfAnalysisResult {
   requirements: string[];
   fit: FitAnalysis;
   excerpt: string;
+  /** radar: `fit` is the call `callId`'s, as in the list (before Perfil); pdf: scored on the text; none: too little text. */
+  scoreSource?: "radar" | "pdf" | "none";
+  callId?: string | null;
+  notice?: string | null;
 }
 
 export interface BoeItem {

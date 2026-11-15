@@ -390,7 +390,7 @@ export default function LandingPage() {
             <SmallFeature
               icon={<FileSearch />}
               title="Analizar PDF."
-              body="Sube unas bases y recibe una ficha con la misma puntuación que el resto del radar."
+              body="Sube unas bases y recibe una ficha. Las de una convocatoria del radar llevan su misma nota; las demás se puntúan por su texto, si se lee lo suficiente."
             >
               <PdfPreview />
             </SmallFeature>
