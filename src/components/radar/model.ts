@@ -52,6 +52,16 @@ export function budgetBucket(o: Opportunity): string {
   return BUDGET_BUCKETS.find((b) => o.budget! >= b.min && o.budget! < b.max)?.key ?? "b0";
 }
 
+/** Source as shown: private programmes always read as such (their source label has been wrong before). */
+export function sourceLabelOf(o: Pick<Opportunity, "kind" | "sourceLabel">): string {
+  return o.kind === "empresa" ? "Programa privado" : o.sourceLabel;
+}
+
+/** Where it applies, as shown: a private programme's own limit (e.g. "Andalucía o provincia de Ciudad Real") wins. */
+export function territoryOf(o: Pick<Opportunity, "region" | "rsc">): string {
+  return o.rsc?.territory || o.region;
+}
+
 /* ---------- Dates ---------- */
 
 const DAY = 86_400_000;
@@ -67,6 +77,9 @@ export function parseDay(s: string | null): number | null {
   if (!m) return null;
   return Date.UTC(+m[1], +m[2] - 1, +m[3]);
 }
+
+/** Tooltip for deadlines the API worked out from a relative term ("20 días hábiles desde…"). */
+export const ESTIMATE_TIP = "Calculada a partir del plazo publicado; confirmad la fecha en el extracto oficial";
 
 export function daysLeft(o: Opportunity): number | null {
   const d = parseDay(o.deadline);
@@ -99,8 +112,9 @@ export function mondayOf(t: number): number {
   return t - dow * DAY;
 }
 
+/** Seven-day windows starting today (not on Monday: days already gone would count calls that have closed). */
 export function weekStarts(n: number): number[] {
-  const start = mondayOf(todayUTC());
+  const start = todayUTC();
   return Array.from({ length: n }, (_, i) => start + i * 7 * DAY);
 }
 
@@ -201,7 +215,7 @@ export const DEFAULT_FILTERS: Filters = { q: "", hideClosed: true, week: null, d
 export function dimValues(o: Opportunity, dim: Dim, triage: Triage): string[] {
   switch (dim) {
     case "source":
-      return [o.sourceLabel];
+      return [sourceLabelOf(o)];
     case "organismo":
       return [o.organismo.trim().replace(/\s+/g, " ")];
     case "region":
@@ -276,7 +290,7 @@ export function matches(
 }
 
 export function haystackOf(o: Opportunity): string {
-  return normalize([o.titulo, o.organismo, o.summary ?? "", o.sourceLabel, o.region, o.tipo ?? ""].join(" "));
+  return normalize([o.titulo, o.organismo, o.summary ?? "", sourceLabelOf(o), o.region, o.rsc?.territory ?? "", o.tipo ?? ""].join(" "));
 }
 
 export type SortKey = "fit" | "deadline" | "budget" | "recent";
@@ -342,6 +356,22 @@ function isDatedOpen(o: Opportunity): boolean {
   return !isClosed(o) && daysLeft(o) != null;
 }
 
+/* ---------- Sidebar quick views ---------- */
+
+export type QuickKey = "abierta" | "30d" | "alto";
+
+/** What a quick view shows: only its own filter, plus the organisms (a standing team choice, cleared only by hand). */
+export function quickFilters(f: Filters, k: QuickKey): Filters {
+  const dims = { ...EMPTY_DIMS, organismo: f.dims.organismo };
+  // High fit looks at every deadline state: the strongest matches may be closed calls that come back every year.
+  if (k === "alto") return { ...DEFAULT_FILTERS, hideClosed: false, dims: { ...dims, tier: ["alto"] } };
+  return { ...DEFAULT_FILTERS, dims: { ...dims, plazo: [k] } };
+}
+
+export function quickOn(f: Filters, k: QuickKey): boolean {
+  return k === "alto" ? f.dims.tier.includes("alto") : f.dims.plazo.includes(k);
+}
+
 /** No dated open call fits well, but some next editions do. Judged on every call, never on the current filters. */
 export function noOpenHighFit(items: Opportunity[]): boolean {
   const alto = items.filter((o) => o.fit.tier === "alto");
@@ -357,15 +387,34 @@ export function urlPinsAhora(): boolean {
   return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("vista") === "ahora";
 }
 
-export function filtersToQuery(f: Filters, pinAhora = false): string {
+/** Same organisms, in any order. */
+export function sameOrgs(a: string[], b: string[]): boolean {
+  return a.length === b.length && [...a].sort().join("\u0000") === [...b].sort().join("\u0000");
+}
+
+/**
+ * `teamOrgs`: the team's saved organism filter. It is left out of the URL, so a shared link never carries it
+ * (whoever opens the link gets the team's filter anyway, with the notice that says so).
+ */
+export function filtersToQuery(f: Filters, pinAhora = false, teamOrgs: string[] = []): string {
   const p = new URLSearchParams();
   if (pinAhora) p.set("vista", "ahora");
   if (f.q.trim()) p.set("q", f.q.trim());
-  for (const d of URL_DIMS) if (f.dims[d].length) p.set(d, f.dims[d].join("|"));
+  for (const d of URL_DIMS) {
+    if (d === "organismo" && sameOrgs(f.dims.organismo, teamOrgs)) continue;
+    if (f.dims[d].length) p.set(d, f.dims[d].join("|"));
+  }
   if (!f.hideClosed) p.set("cerradas", "1");
   if (f.week != null) p.set("semana", new Date(f.week).toISOString().slice(0, 10));
   const s = p.toString();
   return s ? `?${s}` : "";
+}
+
+/** `?pagina=3` → 2 (0-based); anything else → 0. */
+export function pageFromUrl(): number {
+  if (typeof window === "undefined" || window.location.pathname !== "/") return 0;
+  const n = Number(new URLSearchParams(window.location.search).get("pagina"));
+  return Number.isInteger(n) && n > 1 ? n - 1 : 0;
 }
 
 export function filtersFromUrl(): Filters | null {

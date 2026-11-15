@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { daysLeft, fmtDate, tidy, TRIAGE_LABELS, type Triage } from "./model";
+import { daysLeft, ESTIMATE_TIP, fmtDate, tidy, TRIAGE_LABELS, type Triage } from "./model";
 import type { BoardItem } from "@/lib/team";
 import { stub, useRadar } from "./store";
 import { Deadline, GoneNote, PersonAvatar, ScoreChip, TriageSelect } from "./ui";
@@ -81,7 +81,8 @@ function NextUp({ row }: { row: Row }) {
         <h2 className="font-medium leading-snug">
           <button
             type="button"
-            onClick={() => openDetail(o.id)}
+            data-opener={o.id}
+            onClick={(e) => openDetail(o.id, e.currentTarget)}
             className="cursor-pointer text-left outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50"
           >
             <span className="line-clamp-2">{tidy(o.titulo)}</span>
@@ -89,14 +90,26 @@ function NextUp({ row }: { row: Row }) {
         </h2>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
           <span className="truncate">{tidy(o.organismo)}</span>
-          <Badge variant="outline">
-            <CalendarDays aria-hidden /> {fmtDate(o.deadline)}
-          </Badge>
+          {o.deadlineEstimated ? (
+            <Badge variant="outline" title={ESTIMATE_TIP}>
+              <CalendarDays aria-hidden /> Hacia el {fmtDate(o.deadline)} · fecha estimada
+            </Badge>
+          ) : (
+            <Badge variant="outline">
+              <CalendarDays aria-hidden /> {fmtDate(o.deadline)}
+            </Badge>
+          )}
         </div>
       </div>
-      <div className="shrink-0 text-right">
-        <p className="text-3xl font-semibold tabular-nums leading-none">{d}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{d === 1 ? "día" : "días"}</p>
+      <div className="shrink-0 text-right" title={o.deadlineEstimated ? ESTIMATE_TIP : undefined}>
+        <p className="text-3xl font-semibold tabular-nums leading-none">
+          {o.deadlineEstimated && <span className="text-muted-foreground">≈ </span>}
+          {d}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {d === 1 ? "día" : "días"}
+          {o.deadlineEstimated && " (estimado)"}
+        </p>
       </div>
     </Card>
   );
@@ -263,7 +276,8 @@ function TrackCard({
       className={cn(
         "group relative gap-3 p-3.5 shadow-none transition-[background-color,opacity] select-none md:cursor-grab",
         !floating && "hover:bg-muted/40",
-        muted && "opacity-70",
+        // Discarded: a quieter card (no shadow of colour, dashed edge), but the text keeps its contrast.
+        muted && "border-dashed bg-transparent",
         ghost && "opacity-30",
         floating && "cursor-grabbing",
       )}
@@ -272,8 +286,12 @@ function TrackCard({
         <h3 className="leading-snug font-medium">
           <button
             type="button"
-            onClick={() => openDetail(o.id)}
-            className="cursor-pointer text-left outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50"
+            data-opener={floating ? undefined : o.id}
+            onClick={(e) => openDetail(o.id, e.currentTarget)}
+            className={cn(
+              "cursor-pointer text-left outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50",
+              muted && "font-normal text-muted-foreground",
+            )}
           >
             <span className="line-clamp-2">{tidy(o.titulo)}</span>
           </button>

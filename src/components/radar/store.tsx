@@ -8,14 +8,27 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { api, errorText } from "@/lib/api";
+import { usePathname } from "next/navigation";
+import { api, errorText, serverStatus } from "@/lib/api";
 import type { OpportunitiesResponse, Opportunity } from "@/lib/opportunity";
 import type { BoardItem, Note, PersonRef, TeamPerson, Vote, VoteValue } from "@/lib/team";
 import { useSession } from "@/components/auth/session";
 import { importLocalState } from "./import-local";
-import { DEFAULT_FILTERS, filtersFromUrl, noOpenHighFit, urlPinsAhora, withPlazoView, type Filters, type Triage } from "./model";
+import {
+  DEFAULT_FILTERS,
+  filtersFromUrl,
+  filtersToQuery,
+  noOpenHighFit,
+  pageFromUrl,
+  plazoViewOf,
+  urlPinsAhora,
+  withPlazoView,
+  type Filters,
+  type Triage,
+} from "./model";
 import { applyProfileAll, DEFAULT_USER_PROFILE, isNeutral, parseProfile, type UserProfile } from "./profile";
 
 /* ---------- Last payload cached for instant paint ---------- */
@@ -73,8 +86,33 @@ export function stub(e: BoardItem): Opportunity {
   } as Opportunity;
 }
 
-/** The team's settings (`/api/settings`): one Perfil and one organism filter for everyone. */
-export type TeamSettings = { profile: UserProfile | null; organisms: string[] | null; updatedBy: PersonRef | null; updatedAt: string | null };
+/**
+ * The team's settings (`/api/settings`): one Perfil and one organism filter for everyone. `updatedBy/At` is the
+ * last change to either; the per-part fields are newer and may be missing on an older API.
+ */
+export type TeamSettings = {
+  profile: UserProfile | null;
+  organisms: string[] | null;
+  updatedBy: PersonRef | null;
+  updatedAt: string | null;
+  profileUpdatedBy?: PersonRef | null;
+  profileUpdatedAt?: string | null;
+  organismsUpdatedBy?: PersonRef | null;
+  organismsUpdatedAt?: string | null;
+};
+
+/**
+ * Who saved that part last. An older API only sends the shared fields: the Perfil falls back to them; the organism
+ * filter does not (they may describe a Perfil change).
+ */
+export function savedBy(st: TeamSettings | null, part: "profile" | "organisms"): { by: PersonRef | null; at: string } | null {
+  if (!st) return null;
+  const by = part === "profile" ? st.profileUpdatedBy : st.organismsUpdatedBy;
+  const at = part === "profile" ? st.profileUpdatedAt : st.organismsUpdatedAt;
+  if (at) return { by: by ?? null, at };
+  if (part === "profile" && at === undefined && st.updatedAt) return { by: st.updatedBy, at: st.updatedAt };
+  return null;
+}
 const SAVE_DELAY_MS = 600;
 const orgKey = (xs: string[]) => [...xs].sort().join("\u0000");
 
@@ -121,11 +159,25 @@ interface RadarState {
   dismiss: (id: number) => void;
 
   filters: Filters;
+  /** A user's filter change: also goes back to the first page of results. */
   setFilters: (f: Filters | ((prev: Filters) => Filters)) => void;
+  /** The next URL change adds a history entry (a tab or a tile), instead of replacing the current one. */
+  markPush: () => void;
+  /** Page of results on Inicio (0-based; `?pagina=` is 1-based). */
+  page: number;
+  setPage: (n: number) => void;
+  /** The team's organism filter, as saved (empty when there is none). */
+  teamOrgs: string[];
+
+  /** The server cannot be reached: the views show the saved copy and changes are refused. */
+  offline: boolean;
 
   selectedId: string | null;
-  openDetail: (id: string) => void;
+  /** Opens the drawer (`?c=<id>` in the URL, Back closes it). `opener` gets the focus back on close. */
+  openDetail: (id: string, opener?: HTMLElement | null) => void;
   closeDetail: () => void;
+  /** The element that opened the drawer, if it is still on the page. */
+  detailOpener: () => HTMLElement | null;
 }
 
 const Ctx = createContext<RadarState | null>(null);
@@ -138,6 +190,8 @@ export function useRadar(): RadarState {
 
 export function RadarProvider({ children }: { children: ReactNode }) {
   const { me } = useSession();
+  const path = usePathname();
+  const offline = useSyncExternalStore(serverStatus.subscribe, serverStatus.isDown, () => false);
   const [rawData, setData] = useState<Payload | null>(null);
   const [settings, setSettings] = useState<TeamSettings | null>(null);
   // A Perfil change not yet confirmed by the API; it wins over `settings` so the list never jumps back.
@@ -151,7 +205,13 @@ export function RadarProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  // Internal updates (URL, team settings, Back) use the raw setters; the context's `setFilters` is the user's.
+  const [filters, setFiltersRaw] = useState<Filters>(DEFAULT_FILTERS);
+  const [page, setPage] = useState(0);
+  const setFilters = useCallback<RadarState["setFilters"]>((f) => {
+    setFiltersRaw(f);
+    setPage(0);
+  }, []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   /* ----- Notices (small toasts) ----- */
@@ -173,6 +233,14 @@ export function RadarProvider({ children }: { children: ReactNode }) {
     notifyRef.current = notify;
   }, [notify]);
 
+  /** True (and says so) when the server is unreachable: changes are refused instead of failing one by one. */
+  const blocked = useCallback(() => {
+    if (!serverStatus.isDown()) return false;
+    notifyRef.current("Sin conexión con el servidor: el cambio no se ha guardado. Prueba otra vez cuando vuelva la conexión.", "error");
+    return true;
+  }, []);
+
+
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -184,7 +252,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
   const maybeDecide = useCallback(() => {
     if (toNextEditions.current != null || !latestItems.current || !teamProfile.current) return;
     toNextEditions.current = noOpenHighFit(applyProfileAll(latestItems.current, teamProfile.current));
-    if (toNextEditions.current) setFilters((f) => withPlazoView(f, "ediciones"));
+    if (toNextEditions.current) setFiltersRaw((f) => withPlazoView(f, "ediciones"));
   }, []);
 
   // Fetch, store the payload for instant paint next time, and re-poll while the server says it is refreshing.
@@ -201,7 +269,8 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       const again = r.data?.refreshing === true;
       setRefreshing(again);
       if (pollRef.current) clearTimeout(pollRef.current);
-      if (again) pollRef.current = setTimeout(() => void fetchRef.current?.(), 6000);
+      // Also while an ingest runs (first run: the list fills in as soon as it finishes).
+      if (again || r.data?.ingest?.running) pollRef.current = setTimeout(() => void fetchRef.current?.(), again ? 6000 : 10_000);
     });
   }, [maybeDecide]);
 
@@ -211,6 +280,32 @@ export function RadarProvider({ children }: { children: ReactNode }) {
 
   // Organism filter: the last value known to be the team's (or the URL's, which wins on load). Changes away from it are saved.
   const orgBaseline = useRef<string | null>(null);
+  const settingsRef = useRef<TeamSettings | null>(null);
+  // URL writes wait until the URL has been read once (else the first render would wipe a shared link).
+  const [urlLoaded, setUrlLoaded] = useState(false);
+
+  /** Filters, page and open call from the current URL: on load and on Back/Forward. */
+  const readUrl = useCallback(
+    (first: boolean) => {
+      setSelectedId(new URLSearchParams(window.location.search).get("c"));
+      if (window.location.pathname !== "/") return;
+      const fromUrl = filtersFromUrl();
+      const init: Filters = fromUrl ?? { ...DEFAULT_FILTERS };
+      const pinned = !init.hideClosed || init.dims.plazo.length > 0 || urlPinsAhora();
+      if (first) {
+        if (init.dims.organismo.length) orgBaseline.current = orgKey(init.dims.organismo);
+        if (pinned) toNextEditions.current = false;
+      } else {
+        // The team's organisms are left out of the URL: a link without `organismo` means "the team's filter".
+        if (!init.dims.organismo.length) init.dims = { ...init.dims, organismo: settingsRef.current?.organisms ?? [] };
+        orgBaseline.current = orgKey(init.dims.organismo);
+        if (!pinned && toNextEditions.current) Object.assign(init, withPlazoView(init, "ediciones"));
+      }
+      setFiltersRaw(init);
+      setPage(pageFromUrl());
+    },
+    [],
+  );
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -221,27 +316,26 @@ export function RadarProvider({ children }: { children: ReactNode }) {
         setRefreshing(true);
         latestItems.current = cached.items;
       }
-      const init = filtersFromUrl() ?? DEFAULT_FILTERS;
-      if (init.dims.organismo.length) orgBaseline.current = orgKey(init.dims.organismo);
-      if (!init.hideClosed || init.dims.plazo.length || urlPinsAhora()) toNextEditions.current = false;
-      setFilters(init);
+      readUrl(true);
+      setUrlLoaded(true);
       maybeDecide();
     });
     void fetchData();
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
-  }, [fetchData, maybeDecide]);
+  }, [fetchData, maybeDecide, readUrl]);
 
   /** Applies a settings answer from the API; on the first one, also the team's organisms (unless the URL chose some). */
   const applySettings = useCallback(
     (st: TeamSettings) => {
       setSettings(st);
+      settingsRef.current = st;
       teamProfile.current = st.profile ? parseProfile(st.profile) : DEFAULT_USER_PROFILE;
       if (orgBaseline.current == null) {
         const orgs = st.organisms ?? [];
         orgBaseline.current = orgKey(orgs);
-        setFilters((f) => ({ ...f, dims: { ...f.dims, organismo: orgs } }));
+        setFiltersRaw((f) => ({ ...f, dims: { ...f.dims, organismo: orgs } }));
       }
       maybeDecide();
     },
@@ -255,11 +349,15 @@ export function RadarProvider({ children }: { children: ReactNode }) {
     orgBaseline.current = orgKey(orgs);
     if (orgTimer.current) clearTimeout(orgTimer.current);
     orgTimer.current = setTimeout(() => {
+      if (blocked()) return;
       api<TeamSettings>("/api/settings", { method: "PUT", json: { organisms: orgs.length ? orgs : null } })
-        .then(setSettings)
+        .then((st) => {
+          setSettings(st);
+          settingsRef.current = st;
+        })
         .catch((e) => notifyRef.current(`No se ha guardado el filtro de organismos para el equipo. ${errorText(e)}`, "error"));
     }, SAVE_DELAY_MS);
-  }, [filters.dims.organismo]);
+  }, [blocked, filters.dims.organismo]);
 
   const reload = useCallback(() => {
     if (data) setRefreshing(true);
@@ -275,6 +373,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const setProfile = useCallback(
     (p: UserProfile) => {
+      if (blocked()) return;
       setDraft(p);
       setProfileSave("saving");
       if (profileTimer.current) clearTimeout(profileTimer.current);
@@ -282,6 +381,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
         api<TeamSettings>("/api/settings", { method: "PUT", json: { profile: isNeutral(p) ? null : parseProfile(p) } })
           .then((st) => {
             setSettings(st);
+            settingsRef.current = st;
             teamProfile.current = st.profile ? parseProfile(st.profile) : DEFAULT_USER_PROFILE;
             setDraft((d) => (d === p ? null : d));
             setProfileSave((s) => (s === "saving" ? "saved" : s));
@@ -295,7 +395,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
           });
       }, SAVE_DELAY_MS);
     },
-    [notify],
+    [blocked, notify],
   );
 
   const refreshSettings = useCallback(async () => {
@@ -364,6 +464,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
 
   const setVote = useCallback<RadarState["setVote"]>(
     (id, vote, reason) => {
+      if (blocked()) return;
       let prev: Vote[] = [];
       const optimistic: Vote = { opportunityId: id, user: { id: me.id, name: me.name }, vote, reason, updatedAt: new Date().toISOString() };
       setVotes((vs) => {
@@ -379,11 +480,12 @@ export function RadarProvider({ children }: { children: ReactNode }) {
         })
         .finally(() => votesPending.current--);
     },
-    [me, mine, notify],
+    [blocked, me, mine, notify],
   );
 
   const clearVote = useCallback<RadarState["clearVote"]>(
     (id) => {
+      if (blocked()) return;
       let prev: Vote[] = [];
       setVotes((vs) => {
         prev = vs;
@@ -397,13 +499,44 @@ export function RadarProvider({ children }: { children: ReactNode }) {
         })
         .finally(() => votesPending.current--);
     },
-    [mine, notify],
+    [blocked, mine, notify],
   );
 
   const refreshTeam = useCallback(
     () => Promise.all([refreshBoard(), refreshPeople(), refreshSettings(), refreshVotes()]).then(() => undefined),
     [refreshBoard, refreshPeople, refreshSettings, refreshVotes],
   );
+
+  // Server unreachable: retry on our own, a little later each time (2 s, 4 s… up to 30 s). Once it answers, reload
+  // the list and the team's state, and the offline notice goes away.
+  const refreshTeamRef = useRef(refreshTeam);
+  useEffect(() => {
+    refreshTeamRef.current = refreshTeam;
+  }, [refreshTeam]);
+  const wasOffline = useRef(false);
+  useEffect(() => {
+    if (!offline) {
+      if (wasOffline.current) {
+        wasOffline.current = false;
+        void fetchRef.current?.();
+        void refreshTeamRef.current();
+      }
+      return;
+    }
+    wasOffline.current = true;
+    let n = 0;
+    let t: ReturnType<typeof setTimeout>;
+    const next = () => {
+      t = setTimeout(() => {
+        void fetchRef.current?.().then(() => {
+          n++;
+          if (serverStatus.isDown()) next();
+        });
+      }, Math.min(30_000, 2000 * 2 ** n));
+    };
+    next();
+    return () => clearTimeout(t);
+  }, [offline]);
 
   // Load once (after the first-login import), then every minute and whenever the tab comes back, so colleagues' changes show up.
   useEffect(() => {
@@ -458,6 +591,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
   /** Optimistic PATCH: draw the change now, confirm with the API's row, roll back and say so if it fails. */
   const patchItem = useCallback(
     (o: Snapshot, patch: Partial<BoardItem>, body: Record<string, unknown>, failMsg: string) => {
+      if (blocked()) return;
       const id = o.id;
       const prev = boardRef.current[id];
       const p = pending.current.get(id) ?? { patch: {}, count: 0 };
@@ -487,7 +621,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
           void refreshBoard();
         });
     },
-    [me, notify, placeholder, refreshBoard],
+    [blocked, me, notify, placeholder, refreshBoard],
   );
 
   const setTriage = useCallback<RadarState["setTriage"]>(
@@ -502,6 +636,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
 
   const addNote = useCallback<RadarState["addNote"]>(
     async (o, body) => {
+      if (blocked()) return false;
       try {
         const note = await api<Note>(boardPath(o.id, "/notes"), { json: { body } });
         setBoard((b) => {
@@ -515,23 +650,86 @@ export function RadarProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [notify, placeholder, refreshBoard],
+    [blocked, notify, placeholder, refreshBoard],
   );
 
   const deleteNote = useCallback<RadarState["deleteNote"]>(
     (id, noteId) => {
       const prev = boardRef.current[id];
-      if (!prev) return;
+      if (!prev || blocked()) return;
       setBoard((b) => ({ ...b, [id]: { ...prev, notes: prev.notes.filter((n) => n.id !== noteId) } }));
       api(boardPath(id, `/notes/${noteId}`), { method: "DELETE" }).catch((e) => {
         setBoard((b) => ({ ...b, [id]: { ...(b[id] ?? prev), notes: prev.notes } }));
         notify(`No se ha borrado la nota. ${errorText(e)}`, "error");
       });
     },
-    [notify],
+    [blocked, notify],
   );
 
   const byId = useMemo(() => new Map((data?.items ?? []).map((o) => [o.id, o])), [data]);
+
+  /* ----- URL: filters and page on Inicio, `?c=<id>` for the open call everywhere ----- */
+
+  const teamOrgs = useMemo(() => settings?.organisms ?? [], [settings]);
+  // Same rule as the opening tab: while it is "Próximas ediciones", choosing "Para pedir ahora" is marked in the URL.
+  const quiet = useMemo(() => (data ? noOpenHighFit(data.items) : false), [data]);
+  const pushNext = useRef<{ radarDrawer?: boolean } | null>(null);
+  const markPush = useCallback(() => {
+    pushNext.current = {};
+  }, []);
+
+  useEffect(() => {
+    if (!urlLoaded) return;
+    const sp = new URLSearchParams(path === "/" ? filtersToQuery(filters, quiet && plazoViewOf(filters) === "ahora", teamOrgs) : window.location.search);
+    if (path === "/" && page > 0) sp.set("pagina", String(page + 1));
+    if (selectedId) sp.set("c", selectedId);
+    else sp.delete("c");
+    const q = sp.toString();
+    const url = `${window.location.pathname}${q ? `?${q}` : ""}`;
+    const push = pushNext.current;
+    pushNext.current = null;
+    if (url === window.location.pathname + window.location.search) return;
+    // A fresh object (not Next's own state): the patched history methods then copy the router's state into it.
+    if (push) window.history.pushState({ ...push }, "", url);
+    else window.history.replaceState({ radarDrawer: window.history.state?.radarDrawer }, "", url);
+  }, [urlLoaded, path, filters, page, selectedId, quiet, teamOrgs]);
+
+  useEffect(() => {
+    const onPop = () => readUrl(false);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [readUrl]);
+
+  const opener = useRef<HTMLElement | null>(null);
+  const selectedRef = useRef(selectedId);
+  useEffect(() => {
+    selectedRef.current = selectedId;
+  }, [selectedId]);
+  const openDetail = useCallback((id: string, el?: HTMLElement | null) => {
+    const active = document.activeElement;
+    opener.current = el ?? (active instanceof HTMLElement && active !== document.body ? active : null);
+    if (selectedRef.current === id) return;
+    if (!selectedRef.current) pushNext.current = { radarDrawer: true };
+    setSelectedId(id);
+  }, []);
+  const closeDetail = useCallback(() => {
+    // Opened here: going back removes the entry we added (and `c` with it). Opened from a link: just drop `c`.
+    if (window.history.state?.radarDrawer) window.history.back();
+    else setSelectedId(null);
+  }, []);
+  const detailOpener = useCallback(() => {
+    const el = opener.current;
+    if (el?.isConnected) return el;
+    const id = selectedRef.current;
+    return id ? document.querySelector<HTMLElement>(`[data-opener="${CSS.escape(id)}"]`) : null;
+  }, []);
+
+  // A link to a call that is neither in the sources nor on the board: say so instead of opening nothing.
+  useEffect(() => {
+    if (!selectedId || !rawData || loading || refreshing || !boardLoaded || byId.has(selectedId) || board[selectedId]) return;
+    notifyRef.current("No encontramos esa convocatoria en el radar: puede que ya no esté en las fuentes.");
+    void Promise.resolve().then(() => setSelectedId(null));
+  }, [selectedId, rawData, loading, refreshing, boardLoaded, byId, board]);
 
   const value = useMemo<RadarState>(
     () => ({
@@ -562,11 +760,17 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       dismiss,
       filters,
       setFilters,
+      markPush,
+      page,
+      setPage,
+      teamOrgs,
+      offline,
       selectedId,
-      openDetail: setSelectedId,
-      closeDetail: () => setSelectedId(null),
+      openDetail,
+      closeDetail,
+      detailOpener,
     }),
-    [data, rawData, profile, setProfile, settings, profileSave, loading, refreshing, error, reload, byId, board, boardLoaded, people, triageOf, setTriage, setAssignee, addNote, deleteNote, votes, setVote, clearVote, notices, notify, dismiss, filters, selectedId],
+    [data, rawData, profile, setProfile, settings, profileSave, loading, refreshing, error, reload, byId, board, boardLoaded, people, triageOf, setTriage, setAssignee, addNote, deleteNote, votes, setVote, clearVote, notices, notify, dismiss, filters, setFilters, markPush, page, teamOrgs, offline, selectedId, openDetail, closeDetail, detailOpener],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

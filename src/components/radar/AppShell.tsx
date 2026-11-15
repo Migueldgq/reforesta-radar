@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { AlarmClock, Building2, ChevronRight, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, SlidersHorizontal, Sprout, Target, UsersRound } from "lucide-react";
-import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { AlarmClock, Building2, ChevronRight, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, SlidersHorizontal, Sprout, Target, UsersRound, WifiOff } from "lucide-react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -28,10 +28,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { SessionGate, useSession } from "@/components/auth/session";
 import { isPublicPath } from "@/lib/api";
-import { DEFAULT_FILTERS, EMPTY_DIMS, fmtFreshness, isClosed, plazoValues, type Filters } from "./model";
+import { DEFAULT_FILTERS, EMPTY_DIMS, fmtFreshness, matches, PLAZO_LABELS, quickFilters, quickOn, type QuickKey } from "./model";
 import { RadarProvider, useRadar } from "./store";
 import { DetailDrawer } from "./Drawer";
 import { Notices } from "./Notices";
+import { focusSearch } from "./filters";
 
 const RADAR = [
   { href: "/", label: "Inicio", icon: House },
@@ -46,17 +47,11 @@ const TOOLS = [
 /** Only for admins (the page itself also refuses members). */
 const ADMIN_TOOLS = [{ href: "/equipo", label: "Equipo", icon: UsersRound }];
 
-type QuickKey = "abierta" | "30d" | "alto";
 const QUICK: { key: QuickKey; label: string; icon: typeof House }[] = [
-  { key: "abierta", label: "Abiertas ahora", icon: DoorOpen },
-  { key: "30d", label: "Cierran en 30 días", icon: AlarmClock },
+  { key: "abierta", label: PLAZO_LABELS.abierta, icon: DoorOpen },
+  { key: "30d", label: PLAZO_LABELS["30d"], icon: AlarmClock },
   { key: "alto", label: "Encaje alto", icon: Target },
 ];
-
-function quickOn(f: Filters, k: QuickKey) {
-  if (k === "alto") return f.dims.tier.includes("alto");
-  return f.dims.plazo.includes(k);
-}
 
 const noop = () => () => {};
 
@@ -75,15 +70,62 @@ export function AppShell({ children }: { children: ReactNode }) {
             <AppSidebar />
             <SidebarInset className="min-w-0">
               <MobileBar />
-              <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">{children}</main>
+              <OfflineNotice />
+              {/* SidebarInset is the page's <main>; this only sets the width. */}
+              <div className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">{children}</div>
             </SidebarInset>
             <DetailDrawer />
             <Notices />
+            <SearchShortcut />
           </SidebarProvider>
         </TooltipProvider>
       </RadarProvider>
     </SessionGate>
   );
+}
+
+/** The server cannot be reached: the views keep the saved copy, changes are refused, and the store keeps retrying. */
+function OfflineNotice() {
+  const { offline, data } = useRadar();
+  if (!offline) return null;
+  const when = data ? fmtFreshness(data.lastIngestAt ?? data.fetchedAt).replace(/^Datos /, "") : null;
+  return (
+    <div role="status" className="border-b bg-amber-50 px-4 py-2.5 text-sm text-amber-950 sm:px-6 lg:px-10">
+      <p className="mx-auto flex max-w-[1280px] items-start gap-2">
+        <WifiOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <span>
+          {when
+            ? `No podemos conectar con el servidor. Estás viendo los datos guardados ${when}; los cambios no se guardarán.`
+            : "No podemos conectar con el servidor."}{" "}
+          <span className="text-amber-900/80">Lo volvemos a intentar solos cada pocos segundos.</span>
+        </span>
+      </p>
+    </div>
+  );
+}
+
+/** "/" (outside text fields) and ⌘K / Ctrl+K focus Inicio's search, going to Inicio first if needed. */
+function SearchShortcut() {
+  const path = usePathname();
+  const router = useRouter();
+  const { isMobile, setOpenMobile } = useSidebar();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const typing = !!t?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']");
+      const cmdK = (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k";
+      const slash = e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !typing;
+      if (!cmdK && !slash) return;
+      // Not while a dialog or the detail drawer is open: focus is trapped there on purpose.
+      if (document.querySelector("[role=dialog], [role=alertdialog]") && !(isMobile && document.querySelector("[data-mobile=true]"))) return;
+      e.preventDefault();
+      if (isMobile) setOpenMobile(false);
+      if (!focusSearch() && path !== "/") router.push("/");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [path, router, isMobile, setOpenMobile]);
+  return null;
 }
 
 /** Mobile only: the sidebar is an off-canvas sheet there, so its trigger has to live outside it. */
@@ -112,36 +154,28 @@ function MobileBar() {
 function AppSidebar() {
   const path = usePathname();
   const router = useRouter();
-  const { board, data, filters, setFilters, loading } = useRadar();
+  const { board, data, filters, setFilters, markPush, loading } = useRadar();
   const { isAdmin } = useSession();
   const { isMobile, setOpenMobile } = useSidebar();
   const tracking = Object.values(board).filter((t) => t.status === "estudio" || t.status === "presentar").length;
 
+  // Each count is the number of rows the view shows: the same filter, applied to the same calls.
   const counts = useMemo(() => {
     const c: Record<QuickKey, number> = { abierta: 0, "30d": 0, alto: 0 };
-    for (const o of data?.items ?? []) {
-      // High fit counts every deadline state (closed recurring grants are next-edition leads), like Inicio's card.
-      if (o.fit.tier === "alto") c.alto++;
-      if (isClosed(o)) continue; // match Inicio, which hides closed calls by default
-      const p = plazoValues(o);
-      if (p.includes("abierta")) c.abierta++;
-      if (p.includes("30d")) c["30d"]++;
+    for (const k of QUICK) {
+      const f = quickFilters(filters, k.key);
+      c[k.key] = (data?.items ?? []).filter((o) => matches(o, f, "nueva", "")).length;
     }
     return c;
-  }, [data]);
+  }, [data, filters]);
 
   const close = () => isMobile && setOpenMobile(false);
 
   const applyQuick = (k: QuickKey) => {
     const on = path === "/" && quickOn(filters, k);
-    setFilters((f) => {
-      // Quick views keep the chosen organisms: that choice is a standing preference, cleared only by "Limpiar".
-      const dims = { ...EMPTY_DIMS, organismo: f.dims.organismo };
-      const base: Filters = { ...DEFAULT_FILTERS, hideClosed: f.hideClosed, dims };
-      if (on) return k === "alto" ? { ...base, hideClosed: true } : base;
-      if (k === "alto") return { ...base, hideClosed: false, dims: { ...dims, tier: ["alto"] } };
-      return { ...base, dims: { ...dims, plazo: [k] } };
-    });
+    // Quick views keep the chosen organisms: that choice is a standing team preference, cleared only by hand.
+    if (path === "/") markPush();
+    setFilters((f) => (on ? { ...DEFAULT_FILTERS, dims: { ...EMPTY_DIMS, organismo: f.dims.organismo } } : quickFilters(f, k)));
     if (path !== "/") router.push("/");
     close();
   };
@@ -171,14 +205,13 @@ function AppSidebar() {
                 <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
                   <Sprout className="size-4" aria-hidden />
                 </span>
-                <span className="grid leading-tight">
-                  <span className="font-semibold">Reforesta Radar</span>
-                  <span className="text-xs text-muted-foreground">Convocatorias</span>
-                </span>
+                <span className="font-semibold">Reforesta Radar</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarTrigger className="size-8 shrink-0 text-muted-foreground" />
+          <li className="list-none">
+            <SidebarTrigger className="size-8 shrink-0 text-muted-foreground" />
+          </li>
         </SidebarMenu>
       </SidebarHeader>
 

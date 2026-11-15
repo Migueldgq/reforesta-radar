@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, PlusCircle, Search, X } from "lucide-react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { DEFAULT_FILTERS, EMPTY_DIMS, fmtDayShort, normalize, type Dim } from "./model";
+import { DEFAULT_FILTERS, EMPTY_DIMS, fmtDayShort, normalize, WEEK_MS, type Dim } from "./model";
 import { useRadar } from "./store";
 
 export interface Option {
@@ -26,6 +27,7 @@ function FacetedFilter({
   onToggle,
   onClear,
   wide,
+  note,
 }: {
   label: string;
   options: Option[];
@@ -33,6 +35,7 @@ function FacetedFilter({
   onToggle: (key: string) => void;
   onClear: () => void;
   wide?: boolean;
+  note?: ReactNode;
 }) {
   const n = selected.length;
   return (
@@ -52,6 +55,7 @@ function FacetedFilter({
         </Button>
       </PopoverTrigger>
       <PopoverContent className={cn("p-0", wide ? "w-[min(24rem,calc(100vw-2rem))]" : "w-64")} align="start">
+        {note && <p className="space-y-0.5 border-b px-3 py-2.5 text-xs text-muted-foreground">{note}</p>}
         {/* Plain accent-insensitive substring match: cmdk's fuzzy default matches unrelated long names. */}
         <Command filter={(value, search) => (normalize(value).includes(normalize(search.trim())) ? 1 : 0)}>
           {options.length > 7 && <CommandInput placeholder={label} />}
@@ -96,6 +100,23 @@ function FacetedFilter({
   );
 }
 
+/* ---------- Search shortcut: "/" or ⌘K / Ctrl+K, from any page ---------- */
+
+export const SEARCH_ID = "buscar-convocatorias";
+let focusWhenMounted = false;
+
+/** Focuses Inicio's search now, or as soon as it appears (when the shortcut first has to go to Inicio). */
+export function focusSearch(): boolean {
+  const el = document.getElementById(SEARCH_ID);
+  if (el instanceof HTMLInputElement) {
+    el.focus();
+    el.select();
+    return true;
+  }
+  focusWhenMounted = true;
+  return false;
+}
+
 /* ---------- Toolbar (one row of controls + a row of active filters) ---------- */
 
 export interface BarDim {
@@ -103,6 +124,8 @@ export interface BarDim {
   label: string;
   options: Option[];
   wide?: boolean;
+  /** A line at the top of the popover (e.g. that the choice is saved for the whole team). */
+  note?: ReactNode;
 }
 
 export function FilterBar({
@@ -115,6 +138,12 @@ export function FilterBar({
   total: number;
 }) {
   const { filters, setFilters } = useRadar();
+  const search = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!focusWhenMounted) return;
+    focusWhenMounted = false;
+    search.current?.focus();
+  }, []);
 
   const toggle = (dim: Dim, key: string) =>
     setFilters((f) => {
@@ -126,16 +155,26 @@ export function FilterBar({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:w-52">
+        <div className="relative w-full sm:w-64">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input
+            ref={search}
+            id={SEARCH_ID}
             type="search"
             aria-label="Buscar"
+            aria-keyshortcuts="/ Meta+K Control+K"
             value={filters.q}
             onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
             placeholder="Buscar: charcas, ailanto…"
-            className="h-9 pl-8"
+            className="peer h-9 pl-8 lg:pr-9"
           />
+          <kbd
+            aria-hidden
+            title="Pulsa / para buscar desde cualquier pantalla"
+            className="pointer-events-none absolute top-1/2 right-2 hidden h-5 -translate-y-1/2 items-center rounded border bg-muted px-1.5 font-sans text-[11px] text-muted-foreground peer-focus:hidden peer-[:not(:placeholder-shown)]:hidden lg:inline-flex"
+          >
+            /
+          </kbd>
         </div>
         {dims.map((d) => (
           <FacetedFilter
@@ -146,6 +185,7 @@ export function FilterBar({
             onToggle={(k) => toggle(d.dim, k)}
             onClear={() => setFilters((f) => ({ ...f, dims: { ...f.dims, [d.dim]: [] } }))}
             wide={d.wide}
+            note={d.note}
           />
         ))}
         {chips.length > 0 && (
@@ -187,5 +227,5 @@ function FilterBadge({ label, onRemove }: { label: string; onRemove: () => void 
 }
 
 export function weekChipLabel(w: number) {
-  return `Cierran la semana del ${fmtDayShort(w)}`;
+  return `Cierran del ${fmtDayShort(w)} al ${fmtDayShort(w + WEEK_MS - 86_400_000)}`;
 }

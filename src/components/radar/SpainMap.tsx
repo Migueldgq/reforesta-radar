@@ -125,7 +125,7 @@ function SpainMap({
   return (
     <div ref={ref} className="relative flex min-w-0 flex-col gap-3 p-5" onPointerLeave={leave}>
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">Territorio</h3>
+        <h2 className="text-sm font-medium">Territorio</h2>
         <div className="flex items-center gap-1">
           {hasSel && (
             <button

@@ -71,7 +71,7 @@ export function BarList({
 
   return (
     <div ref={ref} className="relative flex min-w-0 flex-col gap-3 p-5" onPointerLeave={hide}>
-      <h3 className="text-sm font-medium">{title}</h3>
+      <h2 className="text-sm font-medium">{title}</h2>
       {sorted.length === 0 ? (
         <p className="py-4 text-sm text-muted-foreground">Nada con los filtros actuales.</p>
       ) : (
@@ -157,9 +157,9 @@ export function WeekBars({
   return (
     <div ref={ref} className="relative flex min-w-0 flex-col gap-4 p-5" onPointerLeave={hide}>
       <div className="space-y-0.5">
-        <h3 className="text-sm font-medium">Cuándo cierran</h3>
+        <h2 className="text-sm font-medium">Cuándo cierran</h2>
         <p className="text-xs text-muted-foreground">
-          {total} en las próximas 12 semanas{later > 0 ? ` · ${later} más adelante` : ""}. Pulsa una semana para filtrar.
+          {total} cierran en las próximas 12 semanas, desde hoy{later > 0 ? ` · ${later} más adelante` : ""}. Pulsa una barra para filtrar.
         </p>
       </div>
       {/* Grows to the card's height; labels thin out to every other week when columns get narrow. */}
@@ -172,7 +172,7 @@ export function WeekBars({
               <button
                 type="button"
                 aria-pressed={on}
-                aria-label={`Semana del ${b.range}: ${b.count} convocatorias cierran`}
+                aria-label={`Del ${b.range}: ${b.count} convocatorias cierran`}
                 onClick={() => onSelect(on ? null : b.start)}
                 onPointerEnter={(e) =>
                   show(
@@ -181,7 +181,7 @@ export function WeekBars({
                       <span className="block font-medium tabular-nums">
                         {b.count} {b.count === 1 ? "cierra" : "cierran"}
                       </span>
-                      <span className="opacity-70">Semana del {b.range}</span>
+                      <span className="opacity-70">Del {b.range}</span>
                       {b.top.length > 0 && (
                         <ul className="mt-1.5 space-y-0.5 border-t border-background/20 pt-1.5 opacity-70">
                           {b.top.map((t, j) => (
@@ -194,7 +194,7 @@ export function WeekBars({
                     </>,
                   )
                 }
-                onFocus={(e) => show(e.currentTarget, `Semana del ${b.range}: ${b.count}`)}
+                onFocus={(e) => show(e.currentTarget, `Del ${b.range}: ${b.count}`)}
                 onBlur={hide}
                 className="group flex h-full w-full cursor-pointer flex-col items-center justify-end gap-1 rounded-md transition-colors outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
@@ -213,7 +213,7 @@ export function WeekBars({
                 </span>
                 <span className="h-px w-full bg-border" aria-hidden />
                 <span className={cn("pb-1 text-[11px] leading-tight whitespace-nowrap", on ? "font-medium" : "text-muted-foreground", i % 2 === 1 && "@max-[30rem]:invisible")}>
-                  {i === 0 ? "Esta" : b.label}
+                  {i === 0 ? "Hoy" : b.label}
                 </span>
               </button>
             </li>
