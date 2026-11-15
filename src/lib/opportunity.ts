@@ -34,5 +34,4 @@ export interface OpportunitiesResponse {
   storage?: "postgres" | "cache"; // where this response came from
   lastIngestAt?: string | null;   // Postgres: finish time of the last successful ingest run
   ingestStale?: boolean;          // Postgres: last successful ingest older than 12 h (or none yet)
-  storageError?: string;          // Postgres configured but unreachable: served from the cache path instead
 }

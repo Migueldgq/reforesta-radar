@@ -156,7 +156,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry: () 
         <TriangleAlert className="size-6 text-amber-700" aria-hidden />
         <div className="space-y-1">
           <p className="font-medium">No hemos podido cargar las convocatorias</p>
-          <p className="text-sm text-muted-foreground">Puede que alguna fuente oficial esté tardando en responder. Vuelve a intentarlo en unos segundos.</p>
+          <p className="text-sm text-muted-foreground">El servidor del radar no responde ahora mismo. Vuelve a intentarlo en unos segundos.</p>
           <p className="text-xs text-muted-foreground">Detalle técnico: {message}</p>
         </div>
         <Button onClick={onRetry}>

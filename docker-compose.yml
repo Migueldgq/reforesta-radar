@@ -1,9 +1,9 @@
-# Reforesta Radar: Postgres + Python API + on-demand ingest (local development).
-#   docker compose up -d postgres api                          # API on http://localhost:8010 (docs at /docs)
-#   docker compose run --rm ingest                             # one ingest run (all sources)
-#   docker compose run --rm ingest --source boe,rsc            # a subset
-#   docker compose --profile scheduler up -d ingest-scheduler  # optional: ingest every RADAR_INGEST_EVERY_S
-# Ports and password: defaults below, or `docker compose --env-file backend/.env ...` (see backend/.env.example).
+# Reforesta Radar: Postgres + Python API + scheduled ingest + Next.js frontend.
+#   docker compose up -d --build                    # everything: web on http://localhost:3010, API on :8010
+#   docker compose up -d postgres api               # backend only (for `npm run dev` on :3000)
+#   docker compose run --rm ingest                  # one ingest run now (all sources)
+#   docker compose run --rm ingest --source boe,rsc # a subset
+# Ports, password and ingest interval: defaults below, overridable in a root .env (see .env.example).
 name: reforesta-radar
 
 x-backend: &backend
@@ -11,7 +11,7 @@ x-backend: &backend
   image: reforesta-radar-backend:dev
   environment: &backend-env
     DATABASE_URL: postgresql+asyncpg://radar:${RADAR_DB_PASSWORD:-radar}@postgres:5432/radar
-    CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3010} # only for direct browser calls; /api via Next needs none
     RADAR_TZ: ${RADAR_TZ:-Europe/Madrid}
     INGEST_SOURCE_TIMEOUT_S: ${INGEST_SOURCE_TIMEOUT_S:-480}
     RADAR_INGEST_EVERY_S: ${RADAR_INGEST_EVERY_S:-28800}
@@ -42,6 +42,12 @@ services:
       - "127.0.0.1:${RADAR_API_PORT:-8010}:8000"
     volumes:
       - ./data/samples:/data/samples:ro # sample PDFs for POST /api/analyze-pdf {"sample": ...}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped
 
   ingest:
@@ -50,13 +56,32 @@ services:
     entrypoint: ["sh", "-c", 'alembic upgrade head && exec python -m app.ingest "$$@"', "ingest"]
     command: []
 
+  # Part of the default `up`: ingests once on start, then every RADAR_INGEST_EVERY_S (8 h). A failed source
+  # keeps its previous rows; a failed run is recorded and retried at the next tick.
   ingest-scheduler:
     <<: *backend
-    profiles: ["scheduler"]
     entrypoint:
       - sh
       - -c
       - 'alembic upgrade head && while true; do python -m app.ingest --trigger schedule; sleep "$$RADAR_INGEST_EVERY_S"; done'
+    depends_on:
+      api: # the API applies the migrations before it reports healthy
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      args:
+        API_URL: http://api:8000 # baked into the /api/* rewrites at build time
+    image: reforesta-radar-web:dev
+    environment:
+      API_URL: http://api:8000 # server-side fetches (landing figures)
+    ports:
+      - "127.0.0.1:${RADAR_WEB_PORT:-3010}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

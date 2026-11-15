@@ -61,29 +61,32 @@ export function FuentesView() {
     <div className="flex w-full max-w-4xl flex-col gap-8">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Fuentes</h1>
-        <p className="text-sm text-muted-foreground">De dónde salen los datos y cuándo se consultaron por última vez.</p>
+        <p className="text-sm text-muted-foreground">
+          De dónde salen los datos. Una ingesta programada consulta todas las fuentes cada 8 horas; esta página muestra
+          su último resultado.
+        </p>
       </header>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {data ? (
           <p className="text-sm text-muted-foreground">
             <span className="font-medium text-foreground tabular-nums">{sources.length}</span> fuentes ·{" "}
-            <span className="font-medium text-foreground tabular-nums">{data.items.length}</span> convocatorias · última consulta{" "}
-            {fmtAgo(data.fetchedAt)}
+            <span className="font-medium text-foreground tabular-nums">{data.items.length}</span> convocatorias · última ingesta{" "}
+            {fmtAgo(data.lastIngestAt ?? data.fetchedAt)}
           </p>
         ) : (
           <Skeleton className="h-5 w-72 max-w-full" />
         )}
-        <Button variant="outline" onClick={() => reload(true)} disabled={busy} className="self-start sm:self-auto">
+        <Button variant="outline" onClick={() => reload()} disabled={busy} className="self-start sm:self-auto">
           {busy ? <Loader2 className="animate-spin" aria-hidden /> : <RotateCw aria-hidden />}
-          {busy ? "Consultando…" : "Volver a consultar"}
+          {busy ? "Cargando…" : "Volver a cargar"}
         </Button>
       </div>
 
       {error && (
         <Alert variant="destructive">
           <CircleAlert aria-hidden />
-          <AlertTitle className="line-clamp-none">No hemos podido consultar las fuentes</AlertTitle>
+          <AlertTitle className="line-clamp-none">No hemos podido cargar los datos</AlertTitle>
           <AlertDescription className="gap-3 text-muted-foreground!">
             <p>{error}</p>
             {!data && (
@@ -168,8 +171,8 @@ export function FuentesView() {
       )}
 
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Guardamos una copia de los datos durante unos minutos para que la aplicación vaya rápida y la renovamos en segundo plano. Si una fuente falla, se
-        mantienen sus últimos datos buenos. «Volver a consultar» pregunta otra vez a todas las fuentes y puede tardar hasta medio minuto.
+        Cada ingesta guarda los resultados en la base de datos del radar. Si una fuente falla, se mantienen sus últimos datos buenos hasta la
+        siguiente. «Volver a cargar» vuelve a leer esos datos guardados; no consulta las fuentes en ese momento.
       </p>
     </div>
   );

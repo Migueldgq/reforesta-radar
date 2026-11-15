@@ -18,26 +18,26 @@ from app.sources.eu import EN_TOPIC
 from app.sources.rsc import RSC_PROGRAMMES, to_raw
 
 GOLDEN = Path(__file__).parent / "golden"
-# Raw BDNS fields captured by tools/capture_bdns_inputs.py (descripcionLeng, objetivos, bases, abierto...).
+# Raw BDNS fields captured once from the TS memo + BDNS API (frozen) (descripcionLeng, objetivos, bases, abierto...).
 _BDNS_PATH = GOLDEN / "bdns_inputs.json.gz"
 BDNS_INPUTS: dict[str, dict[str, Any]] = (
     json.loads(gzip.decompress(_BDNS_PATH.read_bytes())) if _BDNS_PATH.exists() else {}
 )
 
-_EU_PATH = GOLDEN / "eu_inputs.json.gz"  # tools/capture_eu_inputs.py: description[:2000] per call
+_EU_PATH = GOLDEN / "eu_inputs.json.gz"  # captured once from SEDIA (frozen): description[:2000] per call
 EU_INPUTS: dict[str, dict[str, str]] = json.loads(gzip.decompress(_EU_PATH.read_bytes())) if _EU_PATH.exists() else {}
 
 GAPS = {
     "bdns": "extraText = bases + objetivos + descripcionLeng; the API has only `summary` "
     '("Bases: …  Finalidad: ….", cut at 600 chars): bases are recovered from it, objetivos and descripcionLeng '
     "are missing. `abierto` is not in the API: inferred from deadlineState/warnings.",
-    "bdns-captured": "raw BDNS fields captured by tools/capture_bdns_inputs.py (exact input unless BDNS changed "
+    "bdns-captured": "raw BDNS fields captured once, frozen (exact input unless BDNS changed "
     "the call since the golden was taken).",
     "bdns-lite-captured": "descripcionLeng captured from the BDNS detail API (the TS read it from the search row).",
     "bdns-lite": "extraText = descripcionLeng (search row), not in the API: assumed empty.",
     "eu": "scoring titulo/extraText are Spanish topic terms derived from the English title + description[:2000]; "
     "the API keeps only description[:400] (`summary`).",
-    "eu-captured": "description[:2000] captured by tools/capture_eu_inputs.py.",
+    "eu-captured": "description[:2000] captured once from SEDIA (frozen).",
     "fb": "extraText = the search-page excerpt (= summary) and `abierto` from the page status (= deadlineText).",
     "bocm": 'tipoConvocatoria for non-tenders depends on the notice body ("Concurrencia competitiva" or '
     '"Convocatoria (BOCM)"), not in the API (tipo says "Convocatoria / extracto").',

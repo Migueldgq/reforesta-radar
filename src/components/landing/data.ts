@@ -1,6 +1,5 @@
 import { cacheLife } from "next/cache";
-import { getOpportunities } from "@/lib/aggregate";
-import type { Opportunity } from "@/lib/opportunity";
+import type { OpportunitiesResponse, Opportunity } from "@/lib/opportunity";
 import type { SourceHealth } from "@/lib/types";
 import { daysLeft, isClosed, isOpenNow, mondayOf, todayUTC, WEEK_MS } from "@/components/radar/model";
 
@@ -27,6 +26,8 @@ export interface LandingData {
 }
 
 const TIMEOUT_MS = 4000;
+/** The Python API, reached server-to-server (inside compose: http://api:8000). */
+const API_URL = (process.env.API_URL ?? "http://localhost:8010").replace(/\/+$/, "");
 
 function summarize(items: Opportunity[], sources: SourceHealth[], fetchedAt: string): LandingData {
   const byScore = [...items].sort((a, b) => b.fit.score - a.fit.score);
@@ -72,19 +73,17 @@ function summarize(items: Opportunity[], sources: SourceHealth[], fetchedAt: str
 }
 
 /**
- * Live figures for the landing, read from the same aggregator the `/api/oportunidades`
- * endpoint uses. Cached for a few minutes with `use cache`, so the figures are part of the
- * server HTML (no client fetch, works without JS). Returns `null` when the sources are cold
- * or fail, so every section can fall back to copy without numbers; that miss is cached briefly.
+ * Live figures for the landing, read from the API's `/api/oportunidades`. Cached for a few
+ * minutes with `use cache`, so the figures are part of the server HTML (no client fetch, works
+ * without JS). Returns `null` when the API is down or empty (e.g. during `next build` without a
+ * running backend), so every section falls back to copy without numbers; that miss is cached briefly.
  */
 export async function getLandingData(): Promise<LandingData | null> {
   "use cache";
   let result: LandingData | null = null;
   try {
-    const data = await Promise.race([
-      getOpportunities(),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), TIMEOUT_MS)),
-    ]);
+    const res = await fetch(`${API_URL}/api/oportunidades`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const data = res.ok ? ((await res.json()) as OpportunitiesResponse) : null;
     if (data && data.items.length > 0) result = summarize(data.items, data.sources, data.fetchedAt);
   } catch {
     result = null;
