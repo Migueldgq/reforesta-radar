@@ -1,6 +1,6 @@
 "use client";
 
-import { AlarmClock, Check, ChevronDown, DoorOpen, Loader2, Repeat, Target, TriangleAlert } from "lucide-react";
+import { AlarmClock, ArrowRight, Check, ChevronDown, DoorOpen, Loader2, Repeat, Target, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { isNeutral } from "./profile";
@@ -15,11 +15,13 @@ import {
   fmtDayShort,
   haystackOf,
   isClosed,
+  isDatedOpen,
   isNextEdition,
   isOpenNow,
   KIND_LABELS,
   matches,
   NO_LINE,
+  noOpenHighFit,
   parseDay,
   PLAZO_KEYS,
   PLAZO_LABELS,
@@ -210,6 +212,8 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
     todas: anyPlazo.length,
   };
   const setView = (v: PlazoView) => setFilters((f) => withPlazoView(f, v));
+  // Same rule the store uses to open on "Próximas ediciones": the whole radar, not the filtered list.
+  const quiet = useMemo(() => noOpenHighFit(items), [items]);
   // High fit across every deadline state: today the strongest matches may all be closed recurring grants.
   const allPlazo = withPlazoView(filters, "todas");
   const altoAll = items.filter((o) => o.fit.tier === "alto" && matches(o, allPlazo, triageOf(o.id), hay.get(o.id)!, "tier"));
@@ -305,7 +309,9 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
               ))}
             </TabsList>
           </Tabs>
-          {view === "ahora" && altoOpen === 0 && altoNext > 0 && (
+          {quiet && view !== "todas" ? (
+            <QuietNotice view={view} open={anyPlazo.filter(isDatedOpen).length} onSwitch={() => setView(view === "ahora" ? "ediciones" : "ahora")} />
+          ) : view === "ahora" && altoOpen === 0 && altoNext > 0 && (
             <p className="text-sm text-muted-foreground">
               Hoy no hay convocatorias abiertas de encaje alto.{" "}
               <button
@@ -325,6 +331,46 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
         </div>
       </section>
     </div>
+  );
+}
+
+/** Shown while no open call fits well: explains why the home opens on the next editions and links both tabs. */
+function QuietNotice({ view, open, onSwitch }: { view: "ahora" | "ediciones"; open: number; onSwitch: () => void }) {
+  const link = "inline-flex cursor-pointer items-center gap-1 font-medium text-primary underline-offset-4 hover:underline";
+  if (view === "ediciones")
+    return (
+      <Alert role="status">
+        <Repeat aria-hidden />
+        <AlertDescription>
+          <p>
+            Ahora mismo no hay convocatorias abiertas con encaje alto. Te enseñamos las que mejor encajan y suelen repetirse
+            cada año, para prepararlas con tiempo.
+          </p>
+          {open > 0 && (
+            <button type="button" onClick={onSwitch} className={link}>
+              {open === 1 ? "Ver la abierta" : `Ver las ${open} abiertas`}
+            </button>
+          )}
+        </AlertDescription>
+      </Alert>
+    );
+  return (
+    <Alert role="status">
+      <Target aria-hidden />
+      <AlertDescription>
+        <p>
+          {open > 1
+            ? `Ninguna de las ${open} abiertas con fecha de cierre tiene encaje alto.`
+            : open === 1
+              ? "La única abierta con fecha de cierre no tiene encaje alto."
+              : "Ahora mismo no hay convocatorias abiertas con encaje alto."}
+        </p>
+        <button type="button" onClick={onSwitch} className={link}>
+          Las mejores están en Próximas ediciones
+          <ArrowRight className="size-3.5" aria-hidden />
+        </button>
+      </AlertDescription>
+    </Alert>
   );
 }
 
