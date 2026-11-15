@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpRight, Award, CircleAlert, CircleCheck, FileText, Loader2, ScanSearch, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
-import { Fragment, useState, type FormEvent } from "react";
+import { Fragment, useMemo, useState, type FormEvent } from "react";
 import type { AwardsSummary, History, Opportunity, OpportunityDocument } from "@/lib/opportunity";
 import type { PdfAnalysisResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -17,22 +17,25 @@ import { stub, useRadar } from "./store";
 import { analyzePdf, PdfResult } from "./PdfView";
 import { ConfirmDialog, DeadlineChip, GoneNote, PersonAvatar, ScoreChip, textareaClass } from "./ui";
 
-type Shown = { o: Opportunity; gone: BoardItem | null };
+/** What the drawer draws: the live call, or (when it is gone from the sources) the board row. Compared by reference. */
+type Shown = { live: Opportunity | undefined; item: BoardItem | undefined };
 
 export function DetailDrawer() {
   const { selectedId, byId, board, closeDetail } = useRadar();
   // Calls gone from the sources only live on the board: draw them from its snapshot.
   const live = selectedId ? byId.get(selectedId) : undefined;
-  const item = selectedId ? board[selectedId] : undefined;
-  const cur: Shown | undefined = live ? { o: live, gone: null } : item ? { o: stub(item), gone: item } : undefined;
-  // Keep the last opportunity rendered while the sheet animates out.
-  const [shown, setShown] = useState(cur);
-  if (cur && (cur.o !== shown?.o || cur.gone !== shown?.gone)) setShown(cur);
+  const item = selectedId && !live ? board[selectedId] : undefined;
+  const open = !!(live || item);
+  // Keep the last opportunity rendered while the sheet animates out. Only stable references are stored here
+  // (never a stub built during render), so this settles after one extra render.
+  const [shown, setShown] = useState<Shown>({ live, item });
+  if (open && (live !== shown.live || item !== shown.item)) setShown({ live, item });
+  const goneStub = useMemo(() => (shown.item ? stub(shown.item) : null), [shown.item]);
 
   return (
-    <Sheet open={!!cur} onOpenChange={(v) => !v && closeDetail()}>
+    <Sheet open={open} onOpenChange={(v) => !v && closeDetail()}>
       <SheetContent className="w-full gap-0 p-0 sm:max-w-[520px]">
-        {shown && (shown.gone ? <GoneBody key={shown.o.id} o={shown.o} item={shown.gone} /> : <DrawerBody key={shown.o.id} o={shown.o} />)}
+        {shown.live ? <DrawerBody key={shown.live.id} o={shown.live} /> : shown.item && goneStub ? <GoneBody key={shown.item.opportunityId} o={goneStub} item={shown.item} /> : null}
       </SheetContent>
     </Sheet>
   );
