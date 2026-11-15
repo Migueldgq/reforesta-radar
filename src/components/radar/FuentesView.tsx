@@ -1,6 +1,10 @@
 "use client";
 
-import { CircleAlert, CircleCheck, CircleMinus, CircleX, ExternalLink, RotateCw } from "lucide-react";
+import { CircleAlert, CircleCheck, CircleMinus, CircleX, Clock, ExternalLink, Loader2, RefreshCw, RotateCw } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, ApiError, errorText } from "@/lib/api";
+import { fmtWhenShort, type IngestStatus } from "@/lib/team";
+import { useSession } from "@/components/auth/session";
 import type { SourceHealth } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +56,114 @@ function SourceLink({ s }: { s: SourceHealth }) {
   );
 }
 
+const OPEN = new Set(["requested", "running"]);
+const POLL_MS = 5000;
+
+/** "Actualizar ahora": admins ask for an ingest; everyone sees its state while it runs. */
+function IngestPanel() {
+  const { isAdmin } = useSession();
+  const { reload, notify } = useRadar();
+  const [st, setSt] = useState<IngestStatus | null>(null);
+  const [asking, setAsking] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasOpen = useRef(false);
+  const pollRef = useRef<() => void>(() => {});
+  const later = (ms = POLL_MS) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => pollRef.current(), ms);
+  };
+
+  const poll = useCallback(async () => {
+    if (timer.current) clearTimeout(timer.current);
+    try {
+      const s = await api<IngestStatus>("/api/ingest");
+      setSt(s);
+      const open = !!s.latest && OPEN.has(s.latest.status);
+      // Finished while we watched: show the new data.
+      if (wasOpen.current && !open && s.latest?.status === "done") reload();
+      wasOpen.current = open;
+      if (open) later();
+    } catch {
+      later(POLL_MS * 3);
+    }
+  }, [reload]);
+
+  useEffect(() => {
+    pollRef.current = () => void poll();
+  }, [poll]);
+
+  useEffect(() => {
+    void Promise.resolve().then(poll);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [poll]);
+
+  async function ask() {
+    setAsking(true);
+    try {
+      setSt(await api<IngestStatus>("/api/ingest", { method: "POST" }));
+      wasOpen.current = true;
+      later();
+    } catch (e) {
+      // 409: one is already open; its body carries the current state.
+      if (e instanceof ApiError && e.status === 409 && e.body && typeof e.body === "object" && "latest" in e.body) {
+        setSt(e.body as IngestStatus);
+        wasOpen.current = true;
+        later();
+      }
+      notify(errorText(e), e instanceof ApiError && e.status === 409 ? "info" : "error");
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  const l = st?.latest;
+  const open = !!l && OPEN.has(l.status);
+  const who = l?.requestedBy ? ` por ${l.requestedBy}` : "";
+  let line: React.ReactNode = null;
+  if (l?.status === "requested")
+    line = (
+      <>
+        <Clock className="size-4 shrink-0 text-muted-foreground" aria-hidden /> Actualización pedida{who} ({fmtWhenShort(l.requestedAt)}). Empezará en menos de un minuto.
+      </>
+    );
+  else if (l?.status === "running")
+    line = (
+      <>
+        <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden /> Consultando las fuentes (pedida{who}). Suele tardar un par de minutos; puedes seguir usando el radar.
+      </>
+    );
+  else if (l?.status === "done")
+    line = (
+      <>
+        <CircleCheck className="size-4 shrink-0 text-primary" aria-hidden /> Última actualización pedida{who}: terminada el {fmtWhenShort(l.finishedAt ?? l.requestedAt)}.
+      </>
+    );
+  else if (l?.status === "failed")
+    line = (
+      <>
+        <CircleX className="size-4 shrink-0 text-destructive" aria-hidden /> La última actualización pedida{who} falló el {fmtWhenShort(l.finishedAt ?? l.requestedAt)}
+        {l.error ? `: ${l.error}` : "."} Los datos anteriores siguen ahí.
+      </>
+    );
+
+  if (!isAdmin && !line) return null;
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="flex items-start gap-2 text-sm sm:items-center" role="status" aria-live="polite">
+        {line ?? <span className="text-muted-foreground">¿Ha salido algo hoy y no queréis esperar a mañana? Pedid una actualización.</span>}
+      </p>
+      {isAdmin && (
+        <Button variant="outline" size="sm" className="shrink-0" onClick={() => void ask()} disabled={asking || open || !st}>
+          {asking || open ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />}
+          {open ? "Actualizando…" : "Actualizar ahora"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function FuentesView() {
   const { data, refreshing, error, reload } = useRadar();
   const sources = data?.sources ?? [];
@@ -65,6 +177,8 @@ export function FuentesView() {
           página muestra su último resultado.
         </p>
       </header>
+
+      <IngestPanel />
 
       {data ? (
         <p className="text-sm text-muted-foreground">
@@ -165,7 +279,8 @@ export function FuentesView() {
 
       <p className="text-xs leading-relaxed text-muted-foreground">
         Cada ingesta guarda los resultados en la base de datos del radar. Si una fuente falla, se mantienen sus últimos datos buenos hasta la
-        siguiente. La página enseña siempre esos datos guardados: las fuentes solo se consultan en la ingesta diaria.
+        siguiente. La página enseña siempre esos datos guardados: las fuentes solo se consultan en la ingesta diaria o cuando un
+        administrador pide «Actualizar ahora».
       </p>
     </div>
   );
