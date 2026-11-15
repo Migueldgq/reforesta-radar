@@ -23,7 +23,7 @@ from app.auth.deps import Admin, Db, Role, User, client_ip, now, revoke_sessions
 from app.auth.passwords import hash_password_async, verify_password_async
 from app.config import settings
 from app.db.tables import invitations, password_resets, users
-from app.models import Contract
+from app.models import CleanStr, Contract
 
 log = logging.getLogger("auth")
 router = APIRouter(tags=["team"])
@@ -72,8 +72,8 @@ class TeamResponse(Contract):
 
 
 class InviteIn(Contract):
-    email: Annotated[str, Field(max_length=320)]
-    name: Annotated[str, Field(max_length=100)] = ""
+    email: Annotated[CleanStr, Field(max_length=320)]
+    name: Annotated[CleanStr, Field(max_length=100)] = ""
     role: Role = "member"
 
 
@@ -103,7 +103,7 @@ class PeopleResponse(Contract):
 
 
 class NameIn(Contract):
-    name: Annotated[str, Field(min_length=1, max_length=100)]
+    name: Annotated[CleanStr, Field(min_length=1, max_length=100)]
 
 
 class PasswordChangeIn(Contract):

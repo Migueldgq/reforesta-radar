@@ -241,3 +241,24 @@ async def test_shared_data_is_bounded(engine: AsyncEngine, member: httpx.AsyncCl
     assert (await member.put("/api/votes/rsc:x", json={"vote": "sirve", "reason": "x" * 2001})).status_code == 422
     assert (await member.patch("/api/me", json={"name": "x" * 101})).status_code == 422
     assert (await member.get("/api/settings")).json()["profile"] is None
+
+
+async def test_control_characters_are_422_not_500(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    """Postgres rejects NUL in text and jsonb: every free-text input answers 422 instead of a 500."""
+    items = _items(1)
+    await _ingest(engine, items)
+    oid = items[0].id
+    bad = "a\x00b"
+    assert (await member.post(f"/api/board/{oid}/notes", json={"body": bad})).status_code == 422
+    ok = await member.post(f"/api/board/{oid}/notes", json={"body": "línea 1\n\tlínea 2"})
+    assert ok.status_code == 201 and ok.json()["body"] == "línea 1\n\tlínea 2"  # tabs and line breaks are fine
+    assert (await member.put(f"/api/votes/{oid}", json={"vote": "sirve", "reason": bad})).status_code == 422
+    assert (await member.patch("/api/board/x%00y", json={"status": "estudio"})).status_code == 422
+    assert (await member.put("/api/votes/x%00y", json={"vote": "sirve"})).status_code == 422
+    assert (await member.patch("/api/me", json={"name": bad})).status_code == 422
+    assert (await member.post("/api/me/tokens", json={"name": bad})).status_code == 422
+    profile = {"extraKeywords": [{"term": bad, "weight": 10}]}
+    assert (await member.put("/api/settings", json={"profile": profile})).status_code == 422
+    assert (await member.put("/api/settings", json={"organisms": [bad]})).status_code == 422
+    assert (await member.post("/api/import", json={"tracking": {bad: {"status": "estudio"}}})).status_code == 422
+    assert (await member.post("/api/auth/login", json={"email": bad, "password": "x"})).status_code == 422

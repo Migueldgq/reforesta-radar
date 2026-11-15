@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Path, Response
 from pydantic import Field
 from sqlalchemy import delete, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from app.api.state import read_state
 from app.auth.deps import Admin, Db, User, now
 from app.db.tables import opportunities, org_settings, tracking, tracking_notes, users, votes
-from app.models import Contract, OpportunityKind, WorkLine
+from app.models import CleanStr, Contract, OpportunityKind, WorkLine
 from app.scoring.rank import rank
 
 log = logging.getLogger("board")
@@ -26,7 +26,8 @@ router = APIRouter(tags=["board"])
 
 Triage = Literal["nueva", "estudio", "presentar", "presentada", "descartada"]
 VoteValue = Literal["sirve", "no_sirve"]
-OpportunityId = Annotated[str, Field(min_length=1, max_length=200)]
+OpportunityId = Annotated[CleanStr, Field(min_length=1, max_length=200)]
+OpportunityPath = Annotated[CleanStr, Path(min_length=1, max_length=200)]
 UNKNOWN_CALL = "Esa convocatoria no está en el radar."
 SIRVE_LOW, NO_SIRVE_HIGH = 40, 60  # disagreement thresholds on the displayed score
 
@@ -73,7 +74,7 @@ class TrackingPatch(Contract):
 
 
 class NoteIn(Contract):
-    body: Annotated[str, Field(min_length=1, max_length=4000)]
+    body: Annotated[CleanStr, Field(min_length=1, max_length=4000)]
 
 
 # ---------- Profile (mirror of UserProfile in src/components/radar/profile.ts; ranges as its parseProfile) ----------
@@ -83,13 +84,13 @@ ALL_KINDS: tuple[OpportunityKind, ...] = ("subvencion", "licitacion", "boletin",
 
 
 class ExtraKeyword(Contract):
-    term: Annotated[str, Field(min_length=1, max_length=100)]
+    term: Annotated[CleanStr, Field(min_length=1, max_length=100)]
     weight: Annotated[int, Field(ge=5, le=25)]
     line: WorkLine | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class ExcludedTerm(Contract):
-    term: Annotated[str, Field(min_length=1, max_length=100)]
+    term: Annotated[CleanStr, Field(min_length=1, max_length=100)]
     penalty: Annotated[int, Field(ge=1, le=100)]
 
 
@@ -97,7 +98,7 @@ class TeamProfile(Contract):
     extra_keywords: Annotated[list[ExtraKeyword], Field(max_length=200)] = []
     excluded_terms: Annotated[list[ExcludedTerm], Field(max_length=200)] = []
     line_priority: dict[WorkLine, Delta] = {}
-    region_adjust: Annotated[dict[Annotated[str, Field(max_length=100)], Delta], Field(max_length=100)] = {}
+    region_adjust: Annotated[dict[Annotated[CleanStr, Field(max_length=100)], Delta], Field(max_length=100)] = {}
     kinds: Annotated[list[OpportunityKind], Field(max_length=5)] = [
         "subvencion",
         "licitacion",
@@ -120,7 +121,7 @@ class TeamProfile(Contract):
         )
 
 
-Organisms = Annotated[list[Annotated[str, Field(max_length=300)]], Field(max_length=300)]
+Organisms = Annotated[list[Annotated[CleanStr, Field(max_length=300)]], Field(max_length=300)]
 
 
 class TeamSettings(Contract):
@@ -140,7 +141,7 @@ class SettingsPatch(Contract):
 
 class VoteIn(Contract):
     vote: VoteValue
-    reason: Annotated[str, Field(max_length=2000)] = ""
+    reason: Annotated[CleanStr, Field(max_length=2000)] = ""
 
 
 class VoteOut(Contract):
@@ -178,10 +179,10 @@ class ImportedTriage(Contract):
 
     status: Triage
     # the rest of the entry is accepted for compatibility and ignored: the snapshot comes from the radar's data
-    at: Annotated[str, Field(max_length=40)] | None = None
-    titulo: Annotated[str, Field(max_length=1000)] = ""
-    organismo: Annotated[str, Field(max_length=1000)] = ""
-    deadline: Annotated[str, Field(max_length=40)] | None = None
+    at: Annotated[CleanStr, Field(max_length=40)] | None = None
+    titulo: Annotated[CleanStr, Field(max_length=1000)] = ""
+    organismo: Annotated[CleanStr, Field(max_length=1000)] = ""
+    deadline: Annotated[CleanStr, Field(max_length=40)] | None = None
 
 
 class ImportIn(Contract):
@@ -292,7 +293,7 @@ async def board(_: User, conn: Db) -> BoardResponse:
 
 
 @router.patch("/api/board/{opportunity_id}", response_model=BoardItem, responses={400: {}, 404: {}})
-async def patch_tracking(opportunity_id: str, body: TrackingPatch, user: User, conn: Db) -> BoardItem:
+async def patch_tracking(opportunity_id: OpportunityPath, body: TrackingPatch, user: User, conn: Db) -> BoardItem:
     """Set status and/or assignee (send only what changes). Creates the board entry on first use."""
     values: dict[str, Any] = {}
     if body.status is not None:
@@ -314,7 +315,7 @@ async def patch_tracking(opportunity_id: str, body: TrackingPatch, user: User, c
 
 
 @router.post("/api/board/{opportunity_id}/notes", response_model=Note, status_code=201, responses={404: {}})
-async def add_note(opportunity_id: str, body: NoteIn, user: User, conn: Db) -> Note:
+async def add_note(opportunity_id: OpportunityPath, body: NoteIn, user: User, conn: Db) -> Note:
     await _ensure_row(conn, opportunity_id, user.id)
     t = now()
     note_id = (
@@ -332,7 +333,7 @@ async def add_note(opportunity_id: str, body: NoteIn, user: User, conn: Db) -> N
 
 
 @router.delete("/api/board/{opportunity_id}/notes/{note_id}", status_code=204, responses={403: {}, 404: {}})
-async def delete_note(opportunity_id: str, note_id: int, user: User, conn: Db) -> Response:
+async def delete_note(opportunity_id: OpportunityPath, note_id: int, user: User, conn: Db) -> Response:
     """Only the author or an admin."""
     n = (
         await conn.execute(
@@ -416,7 +417,7 @@ async def list_votes(_: User, conn: Db) -> VotesResponse:
 
 
 @router.put("/api/votes/{opportunity_id}", response_model=VoteOut, responses={404: {}})
-async def put_vote(opportunity_id: str, body: VoteIn, user: User, conn: Db) -> VoteOut:
+async def put_vote(opportunity_id: OpportunityPath, body: VoteIn, user: User, conn: Db) -> VoteOut:
     """My vote on a call (one per person and call; voting again replaces it)."""
     if await _snapshot(conn, opportunity_id) is None:
         raise HTTPException(404, detail=UNKNOWN_CALL)
@@ -434,7 +435,7 @@ async def put_vote(opportunity_id: str, body: VoteIn, user: User, conn: Db) -> V
 
 
 @router.delete("/api/votes/{opportunity_id}", status_code=204)
-async def delete_vote(opportunity_id: str, user: User, conn: Db) -> Response:
+async def delete_vote(opportunity_id: OpportunityPath, user: User, conn: Db) -> Response:
     await conn.execute(delete(votes).where(votes.c.user_id == user.id, votes.c.opportunity_id == opportunity_id))
     return Response(status_code=204)
 

@@ -13,7 +13,7 @@ from pydantic import Field
 from app.auth import pats
 from app.auth.deps import Db, User
 from app.config import settings
-from app.models import Contract
+from app.models import CleanStr, Contract
 
 log = logging.getLogger("auth")
 router = APIRouter(tags=["tokens"])
@@ -34,7 +34,7 @@ class TokensResponse(Contract):
 
 
 class TokenIn(Contract):
-    name: Annotated[str, Field(min_length=1, max_length=100)]
+    name: Annotated[CleanStr, Field(min_length=1, max_length=100)]
     expires_in_days: Annotated[int, Field(ge=1, le=pats.MAX_DAYS)] = pats.DEFAULT_DAYS
 
 

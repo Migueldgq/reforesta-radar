@@ -4,9 +4,10 @@ Python attributes are snake_case; JSON (by alias) is camelCase exactly as in the
 Optional TS properties (`rsc?`, `firstSeenAt?`, `docId?`...) are omitted from JSON when unset.
 """
 
-from typing import Any, Literal
+import re
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 WorkLine = Literal["restauracion", "conservacion", "educacion", "agroambiental"]
@@ -15,6 +16,20 @@ NivelAdmin = Literal["Estatal", "Autonómica", "Local", "UE", "Privada", "Otros"
 Tier = Literal["alto", "medio", "bajo"]
 DeadlineState = Literal["abierta", "proxima", "cerrada", "sin_fecha"]
 HealthStatus = Literal["ok", "partial", "error"]
+
+
+_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _no_control(v: str) -> str:
+    """Postgres text and jsonb reject NUL (a 500); other C0 controls are never legitimate in what people type."""
+    if _CONTROL.search(v):
+        raise ValueError("must not contain control characters")
+    return v
+
+
+# Free text in request bodies and paths: tabs and line breaks allowed, other control characters answer 422.
+CleanStr = Annotated[str, AfterValidator(_no_control)]
 
 
 def _absent_if_none(v: Any) -> bool:
