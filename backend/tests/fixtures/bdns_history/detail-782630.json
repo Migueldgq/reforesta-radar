@@ -1,0 +1,24 @@
+{
+ "codigoBDNS": "782630",
+ "organo": {
+  "nivel1": "AUTONOMICA",
+  "nivel2": "COMUNIDAD DE MADRID",
+  "nivel3": "CONSEJERÍA DE MEDIO AMBIENTE, AGRICULTURA E INTERIOR"
+ },
+ "fechaRecepcion": "2024-08-28",
+ "descripcion": "SUBVENCIÓN ENTIDADES SIN ÁNIMO DE LUCRO PROYECTOS AMBIENTALES 2024",
+ "fechaInicioSolicitud": null,
+ "fechaFinSolicitud": null,
+ "textInicio": "DÍA SIGUIENTE A LA PUBLICACIÓN DEL EXTRACTO DE LA CONVOCATORIA EN EL BOCM",
+ "textFin": "10 DÍAS HÁBILES DESDE EL INICIO DEL PLAZO DE SOLICITUD",
+ "tipoConvocatoria": "Concurrencia competitiva - canónica",
+ "abierto": false,
+ "anuncios": [
+  {
+   "datPublicacion": "2024-09-09"
+  },
+  {
+   "datPublicacion": "2024-09-04"
+  }
+ ]
+}

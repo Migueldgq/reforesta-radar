@@ -1,0 +1,138 @@
+[
+{
+"descripcion": "ANDALUCÍA",
+"id": 4,
+"children": [
+{
+"descripcion": "AGENCIA ANDALUZA DE LA ENERGÍA",
+"id": 5907
+},
+{
+"descripcion": "AGENCIA ANDALUZA DE LA ENERGÍA",
+"id": 933
+},
+{
+"descripcion": "AGENCIA ANDALUZA DEL CONOCIMIENTO",
+"id": 5909
+},
+{
+"descripcion": "AGENCIA ANDALUZA DEL CONOCIMIENTO",
+"id": 1056
+}
+]
+},
+{
+"descripcion": "COMUNIDAD DE MADRID",
+"id": 16,
+"children": [
+{
+"descripcion": " AGENCIA MADRILEÑA PARA LA TUTELA DE ADULTOS (AMTA)",
+"id": 283
+},
+{
+"descripcion": "AGENCIA DE SEGURIDAD Y EMERGENCIAS MADRID 112 (ASEM)",
+"id": 6975
+},
+{
+"descripcion": "AGENCIA DE VIVIENDA SOCIAL DE LA COMUNIDAD DE MADRID",
+"id": 6453
+},
+{
+"descripcion": "AGENCIA MADRILEÑA DE ATENCIÓN SOCIAL (AMAS)",
+"id": 286
+},
+{
+"descripcion": "AGENCIA PARA LA ADMINISTRACIÓN DIGITAL DE LA COMUNIDAD DE MADRID (MADRID DIGITAL)",
+"id": 6459
+},
+{
+"descripcion": "AGENCIA PARA LA REEDUCACIÓN Y REINSERCIÓN DEL MENOR INFRACTOR",
+"id": 6447
+},
+{
+"descripcion": "ASAMBLEA DE LA COMUNIDAD DE MADRID",
+"id": 5272
+},
+{
+"descripcion": "BOLETÍN OFICIAL DE LA COMUNIDAD DE MADRID (BOCM)",
+"id": 6449
+},
+{
+"descripcion": "CONSEJERÍA DE CULTURA, TURISMO Y DEPORTE",
+"id": 4353
+},
+{
+"descripcion": "CONSEJERÍA DE DIGITALIZACIÓN",
+"id": 6458
+},
+{
+"descripcion": "CONSEJERÍA DE EDUCACIÓN, CIENCIA Y UNIVERSIDADES",
+"id": 6450
+},
+{
+"descripcion": "CONSEJERÍA DE FAMILIA, JUVENTUD Y ASUNTOS SOCIALES",
+"id": 302
+},
+{
+"descripcion": "CONSEJERÍA DE MEDIO AMBIENTE, AGRICULTURA E INTERIOR",
+"id": 6451
+},
+{
+"descripcion": "CONSEJERÍA DE PRESIDENCIA, JUSTICIA Y ADMINISTRACIÓN LOCAL",
+"id": 6446
+},
+{
+"descripcion": "CONSEJERÍA DE SANIDAD",
+"id": 6695
+},
+{
+"descripcion": "CONSEJERÍA DE VIVIENDA, TRANSPORTES E INFRAESTRUCTURAS",
+"id": 295
+},
+{
+"descripcion": "CONSEJERÍA ECONOMÍA, HACIENDA Y EMPLEO",
+"id": 6454
+},
+{
+"descripcion": "CONSORCIO REGIONAL DE TRANSPORTES PÚBLICOS REGULARES DE MADRID",
+"id": 290
+},
+{
+"descripcion": "INSTITUTO MADRILEÑO DE INVESTIGACIÓN Y DESARROLLO RURAL, AGRARIO Y ALIMENTARIO (IMIDRA)",
+"id": 291
+},
+{
+"descripcion": "INSTITUTO REGIONAL DE ARBITRAJE DE CONSUMO",
+"id": 6455
+},
+{
+"descripcion": "INSTITUTO REGIONAL DE SEGURIDAD Y SALUD EN EL TRABAJO (IRSST)",
+"id": 299
+},
+{
+"descripcion": "INSTITUTO REGIONAL DE SEGURIDAD Y SALUD EN EL TRABAJO (IRSST)",
+"id": 6456
+},
+{
+"descripcion": "INTERVENCIÓN GENERAL DE LA COMUNIDAD DE MADRID",
+"id": 278
+},
+{
+"descripcion": "MADRID 112",
+"id": 6448
+},
+{
+"descripcion": "METRO DE MADRID, S.A.",
+"id": 6461
+},
+{
+"descripcion": "OBRAS DE MADRID, GESTIÓN E INFRAESTRUCTURAS, S.A.",
+"id": 6460
+},
+{
+"descripcion": "SERVICIO MADRILEÑO DE SALUD (SERMAS)",
+"id": 304
+}
+]
+}
+]

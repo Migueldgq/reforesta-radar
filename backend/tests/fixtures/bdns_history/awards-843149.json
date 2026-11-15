@@ -1,0 +1,36 @@
+{
+"content": [
+{
+"fechaConcesion": "2025-11-28",
+"beneficiario": "***7839** PERSONA FÍSICA (NOMBRE RETIRADO)",
+"importe": 11000,
+"numeroConvocatoria": "843149"
+},
+{
+"fechaConcesion": "2025-11-28",
+"beneficiario": "***4341** PERSONA FÍSICA (NOMBRE RETIRADO)",
+"importe": 11000,
+"numeroConvocatoria": "843149"
+},
+{
+"fechaConcesion": "2025-11-28",
+"beneficiario": "G30072540 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 22000,
+"numeroConvocatoria": "843149"
+},
+{
+"fechaConcesion": "2025-11-28",
+"beneficiario": "***0218** PERSONA FÍSICA (NOMBRE RETIRADO)",
+"importe": 11000,
+"numeroConvocatoria": "843149"
+},
+{
+"fechaConcesion": "2025-11-28",
+"beneficiario": "***9182** PERSONA FÍSICA (NOMBRE RETIRADO)",
+"importe": 11000,
+"numeroConvocatoria": "843149"
+}
+],
+"totalElements": 5,
+"last": true
+}

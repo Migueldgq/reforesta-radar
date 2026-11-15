@@ -1,0 +1,86 @@
+[
+{
+"descripcion": "MADRID",
+"id": 41,
+"children": [
+{
+"descripcion": "ÁLAMO, EL",
+"id": 3405,
+"children": [
+{
+"descripcion": "AYUNTAMIENTO DE ÁLAMO, EL",
+"id": 4324
+}
+]
+},
+{
+"descripcion": "ALCALÁ DE HENARES",
+"id": 3406,
+"children": [
+{
+"descripcion": "AYUNTAMIENTO DE ALCALÁ DE HENARES",
+"id": 2433
+},
+{
+"descripcion": "E.P.E. ALCALA DESARROLLO",
+"id": 2435
+},
+{
+"descripcion": "O.A. CIUDAD DEPORTIVA MUNICIPAL",
+"id": 2434
+}
+]
+},
+{
+"descripcion": "ALCOBENDAS",
+"id": 3407,
+"children": [
+{
+"descripcion": "AYUNTAMIENTO DE ALCOBENDAS",
+"id": 738
+},
+{
+"descripcion": "EMPRESA MUNICIPAL DE LA VIVIENDA DE ALCOBENDAS S.A.",
+"id": 742
+},
+{
+"descripcion": "FUNDACIÓN CIUDAD DE ALCOBENDAS",
+"id": 743
+},
+{
+"descripcion": "PATRONATO DE BIENESTAR SOCIAL DEL AYUNTAMIENTO DE ALCOBENDAS",
+"id": 739
+},
+{
+"descripcion": "PATRONATO MUNICIPAL DE DEPORTES DEL AYUNTAMIENTO DE ALCOBENDAS",
+"id": 740
+},
+{
+"descripcion": "PATRONATO SOCIOCULTURAL DEL AYUNTAMIENTO DE ALCOBENDAS",
+"id": 741
+}
+]
+},
+{
+"descripcion": "ALCORCÓN",
+"id": 3408,
+"children": [
+{
+"descripcion": "AYUNTAMIENTO DE ALCORCÓN",
+"id": 1749
+}
+]
+},
+{
+"descripcion": "ALDEA DEL FRESNO",
+"id": 3409,
+"children": [
+{
+"descripcion": "AYUNTAMIENTO DE ALDEA DEL FRESNO",
+"id": 6848
+}
+]
+}
+]
+}
+]
