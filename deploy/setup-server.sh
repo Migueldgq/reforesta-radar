@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
-# Prepares an Ubuntu 24.04 server (Oracle Cloud Always Free, ARM) for Reforesta Radar. Safe to re-run: every step
-# checks before it changes anything. Runs as root:
+# Prepares an Ubuntu 24.04 server (Oracle Cloud Always Free, ARM) for Reforesta Radar on Dokploy (ADR 0039). Safe to
+# re-run: every step checks before it changes anything. Runs as root, from a clone of the repository:
 #
-#   sudo RADAR_DOMAIN=130-61-182-106.sslip.io /opt/reforesta-radar/deploy/setup-server.sh
+#   sudo git clone https://github.com/Migueldgq/reforesta-radar.git /opt/reforesta-radar
+#   sudo /opt/reforesta-radar/deploy/setup-server.sh
 #
-# Installs Docker Engine + the compose plugin from Docker's apt repository, keeps unattended security upgrades on,
-# opens 80/443 in the host firewall (Oracle's image ships its own iptables rules), adds a swap file, clones the repo
-# to /opt/reforesta-radar, generates /opt/reforesta-radar/.env (secrets, mode 600) and installs the daily backup
-# timer. Leaves the time zone alone (UTC). Guide: docs/despliegue.md.
+# Machine: Docker Engine from Docker's apt repository with log rotation, unattended security upgrades, a swap file,
+# 80/443 in the host firewall (Oracle's image ships its own iptables rules) and only 80/443 towards containers
+# (docker-user-firewall). Dokploy, pinned (installer checked against its SHA-256), with Docker Swarm on an address pool
+# that does not overlap Oracle's 10.0.0.0/16, and Traefik's static config from deploy/traefik.yml. Radar: the
+# `reforesta-radar-edge` network shared by `web` and Traefik, the deploy scripts in /usr/local/sbin, the CI user
+# `deploy` and its sudo rule, the backup timer.
+# What it cannot do (needs the panel; docs/despliegue.md, "Preparar un servidor nuevo"): create the panel's admin, its
+# API key and the compose app, which then go into /etc/reforesta-radar/.
 set -euo pipefail
 
-APP_DIR=${APP_DIR:-/opt/reforesta-radar}
-REPO_URL=${REPO_URL:-https://github.com/Migueldgq/reforesta-radar.git}
-# Owns the checkout and runs the stack; no password, no sudo. The admin (who ran sudo) also gets the docker group.
-DEPLOY_USER=${DEPLOY_USER:-deploy}
-ADMIN_USER=${ADMIN_USER:-${SUDO_USER:-}}
+APP_DIR=$(cd "$(dirname "$0")/.." && pwd)
+DOKPLOY_VERSION=v0.31.2
+DOKPLOY_INSTALLER_SHA256=792721a30ba788f21fea42ffd7ae54fd158cd366a50121592138068112188f32
+SWARM_POOL=${SWARM_POOL:-10.200.0.0/16}
+DEPLOY_USER=deploy
 SWAP_SIZE=${SWAP_SIZE:-2G}
-BACKUP_DIR=${BACKUP_DIR:-/var/backups/reforesta-radar}
+CONF_DIR=/etc/reforesta-radar
 
 log() { printf '\n== %s\n' "$*"; }
 [ "$(id -u)" -eq 0 ] || { echo "Run as root (sudo)." >&2; exit 1; }
@@ -24,7 +29,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 log "Base packages"
 apt-get update -q
-apt-get install -y -q ca-certificates curl git openssl unattended-upgrades iptables-persistent
+apt-get install -y -q ca-certificates curl git jq openssl unattended-upgrades iptables-persistent
 
 log "Docker Engine (official apt repository)"
 if [ ! -f /etc/apt/sources.list.d/docker.sources ]; then
@@ -43,19 +48,12 @@ EOF
   apt-get update -q
 fi
 apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-# Default log rotation for every container (the compose files also set it per service).
+# Default log rotation for every container, Dokploy's included (the radar's compose files also set it per service).
 if [ ! -f /etc/docker/daemon.json ]; then
   printf '{\n  "log-driver": "json-file",\n  "log-opts": { "max-size": "10m", "max-file": "3" }\n}\n' > /etc/docker/daemon.json
   systemctl restart docker
 fi
 systemctl enable --now docker containerd
-log "Deploy user $DEPLOY_USER"
-# Members of the docker group are root-equivalent on this machine (they can mount / in a container): the deploy
-# user has no sudo, but whoever controls it controls the server. That is why its SSH key is limited to one command
-# (deploy/ci-deploy.sh, see docs/despliegue.md).
-id "$DEPLOY_USER" >/dev/null 2>&1 || adduser --system --group --shell /bin/bash --home "/home/$DEPLOY_USER" "$DEPLOY_USER"
-usermod -aG docker "$DEPLOY_USER"
-[ -z "$ADMIN_USER" ] || usermod -aG docker "$ADMIN_USER"
 
 log "Unattended security upgrades"
 cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
@@ -67,8 +65,7 @@ systemctl enable --now unattended-upgrades
 log "Host firewall: allow 80 and 443"
 # Oracle's Ubuntu image ends INPUT with a REJECT rule (and keeps it in /etc/iptables/rules.v4). Insert the accept
 # rules before it, live and in the saved file. Never `netfilter-persistent save` here: it would also save Docker's
-# own chains, which Docker recreates at start. Docker's published ports go through FORWARD, where Docker puts its
-# chains ahead of Oracle's REJECT, so these INPUT rules are for the host itself (and are harmless for Docker).
+# own chains, which Docker recreates at start.
 for port in 80 443; do
   rule=(-p tcp -m state --state NEW -m tcp --dport "$port" -j ACCEPT)
   if ! iptables -C INPUT "${rule[@]}" 2>/dev/null; then
@@ -84,7 +81,14 @@ for port in 80 443; do
     fi
   fi
 done
-iptables -L INPUT -n --line-numbers
+
+log "Firewall for container ports: only 80/443 from outside (the panel's 3000 stays closed)"
+# Docker's published ports bypass INPUT; DOCKER-USER is where they can be filtered (deploy/docker-user-firewall.sh).
+install -m 755 "$APP_DIR/deploy/docker-user-firewall.sh" /usr/local/sbin/docker-user-firewall
+install -m 644 "$APP_DIR/deploy/systemd/docker-user-firewall.service" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable docker-user-firewall.service
+systemctl restart docker-user-firewall.service
 
 log "Swap file ($SWAP_SIZE)"
 if ! swapon --show=NAME --noheadings | grep -qx /swapfile; then
@@ -95,37 +99,57 @@ grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fs
 echo 'vm.swappiness=10' > /etc/sysctl.d/90-reforesta-swap.conf
 sysctl -q -p /etc/sysctl.d/90-reforesta-swap.conf
 
-log "Repository at $APP_DIR"
-if [ ! -d "$APP_DIR/.git" ]; then
-  git clone "$REPO_URL" "$APP_DIR"
-fi
-chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR"
-
-log "Secrets in $APP_DIR/.env"
-if [ ! -f "$APP_DIR/.env" ]; then
-  [ -n "${RADAR_DOMAIN:-}" ] || { echo "First run: pass RADAR_DOMAIN=<hostname> (e.g. 130-61-182-106.sslip.io)." >&2; exit 1; }
-  (
-    umask 077
-    cat > "$APP_DIR/.env" <<EOF
-# Production settings for Reforesta Radar (generated by deploy/setup-server.sh). Never commit or share this file.
-# Plain \`docker compose …\` in this folder uses both compose files.
-COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
-# Public hostname (DNS must point at this server). Change it here, then run deploy/deploy.sh (docs/despliegue.md).
-RADAR_DOMAIN=${RADAR_DOMAIN}
-# Only applied when the Postgres volume is created (to change it later see docs/mantenimiento.md).
-RADAR_DB_PASSWORD=$(openssl rand -hex 32)
-# SMTP stays unset: admins copy invitation and reset links by hand.
-EOF
-  )
-  echo "Created $APP_DIR/.env (values not shown)."
+log "Dokploy $DOKPLOY_VERSION"
+if ! docker service inspect dokploy > /dev/null 2>&1; then
+  installer=$(mktemp)
+  curl -fsSL -o "$installer" "https://github.com/Dokploy/dokploy/releases/download/$DOKPLOY_VERSION/install.sh"
+  echo "$DOKPLOY_INSTALLER_SHA256  $installer" | sha256sum -c --quiet - \
+    || { echo "Dokploy installer checksum mismatch: not running it." >&2; exit 1; }
+  # Needs 80, 443 and 3000 free. Swarm's default pool (10.0.0.0/8) would overlap Oracle's VCN (10.0.0.0/16).
+  DOCKER_SWARM_INIT_ARGS="--default-addr-pool $SWARM_POOL --default-addr-pool-mask-length 24" bash "$installer"
+  rm -f "$installer"
+  echo "Waiting for Dokploy to write its Traefik config"
+  for _ in $(seq 1 60); do [ -f /etc/dokploy/traefik/dynamic/middlewares.yml ] && break; sleep 5; done
 else
-  echo "$APP_DIR/.env already exists; left as is."
+  echo "Dokploy already installed: $(docker service inspect dokploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')"
 fi
-chown "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR/.env"
-chmod 600 "$APP_DIR/.env"
+# Compose apps' checkouts hold their .env (secrets): root only.
+install -d -m 700 /etc/dokploy/compose
 
-log "Daily backup timer"
-install -d -m 700 "$BACKUP_DIR"
+log "Traefik static config (deploy/traefik.yml)"
+if ! cmp -s "$APP_DIR/deploy/traefik.yml" /etc/dokploy/traefik/traefik.yml; then
+  [ ! -f /etc/dokploy/traefik/traefik.yml ] || cp /etc/dokploy/traefik/traefik.yml "/etc/dokploy/traefik/traefik.yml.$(date +%Y%m%d%H%M%S)"
+  install -m 644 "$APP_DIR/deploy/traefik.yml" /etc/dokploy/traefik/traefik.yml
+  docker restart dokploy-traefik > /dev/null
+  echo "installed and Traefik restarted"
+else
+  echo "up to date"
+fi
+
+log "Network shared by the radar's web and Traefik"
+docker network inspect reforesta-radar-edge > /dev/null 2>&1 || docker network create --internal reforesta-radar-edge > /dev/null
+docker network inspect reforesta-radar-edge --format '{{range .Containers}}{{.Name}} {{end}}' | grep -qw dokploy-traefik \
+  || docker network connect reforesta-radar-edge dokploy-traefik
+
+log "Deploy scripts, CI user, backups"
+# Root runs these files: only root may change this checkout.
+chown -R root:root "$APP_DIR"
+install -m 755 "$APP_DIR/deploy/deploy.sh" /usr/local/sbin/reforesta-radar-deploy
+install -m 755 "$APP_DIR/deploy/ci-deploy.sh" /usr/local/sbin/reforesta-radar-ci-deploy
+install -m 755 "$APP_DIR/deploy/backup.sh" /usr/local/sbin/reforesta-radar-backup
+install -d -m 755 "$CONF_DIR"
+# The CI key's user: no password, no docker group, one sudo rule (deploy/ci-deploy.sh explains the chain).
+id "$DEPLOY_USER" > /dev/null 2>&1 || adduser --system --group --shell /bin/bash --home "/home/$DEPLOY_USER" "$DEPLOY_USER"
+! id -nG "$DEPLOY_USER" | grep -qw docker || gpasswd -d "$DEPLOY_USER" docker
+printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/reforesta-radar-deploy\n' "$DEPLOY_USER" > /etc/sudoers.d/reforesta-radar.tmp
+visudo -cqf /etc/sudoers.d/reforesta-radar.tmp && install -m 440 /etc/sudoers.d/reforesta-radar.tmp /etc/sudoers.d/reforesta-radar
+rm -f /etc/sudoers.d/reforesta-radar.tmp
+keys=/home/$DEPLOY_USER/.ssh/authorized_keys
+if [ -f "$keys" ] && grep -q 'command="/opt/reforesta-radar/deploy/ci-deploy.sh"' "$keys"; then
+  sed -i 's#command="/opt/reforesta-radar/deploy/ci-deploy.sh"#command="/usr/local/sbin/reforesta-radar-ci-deploy"#' "$keys"
+  echo "CI key now runs /usr/local/sbin/reforesta-radar-ci-deploy"
+fi
+install -d -m 700 /var/backups/reforesta-radar
 install -m 644 "$APP_DIR/deploy/systemd/reforesta-radar-backup.service" /etc/systemd/system/
 install -m 644 "$APP_DIR/deploy/systemd/reforesta-radar-backup.timer" /etc/systemd/system/
 systemctl daemon-reload
@@ -133,5 +157,5 @@ systemctl enable --now reforesta-radar-backup.timer
 
 log "Done"
 docker --version
-docker compose version
-echo "Next: sudo -u $DEPLOY_USER $APP_DIR/deploy/deploy.sh"
+docker service ls --format '{{.Name}} {{.Image}} {{.Replicas}}'
+[ -f "$CONF_DIR/deploy.env" ] || echo "Next: the panel steps in docs/despliegue.md, then $CONF_DIR/deploy.env and dokploy-api-key."

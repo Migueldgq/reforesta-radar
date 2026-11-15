@@ -1,0 +1,42 @@
+# Static config of Dokploy's Traefik (container `dokploy-traefik`), installed at /etc/dokploy/traefik/traefik.yml by
+# deploy/setup-server.sh (ADR 0039, docs/despliegue.md). Dokploy's default (v0.31.2) with these changes:
+#  - ACME account without e-mail (Dokploy writes test@localhost.com; Let's Encrypt no longer needs one, and the owner's
+#    address must not go to a third party). Traefik then registers an anonymous account when it needs one.
+#  - No `api.insecure`: the Traefik dashboard/API (port 8080) is off, not even reachable from other containers.
+#  - No HTTP/3: UDP 443 is closed in Oracle's security list, so advertising it (Alt-Svc) only costs clients a retry.
+#  - Up to 2 minutes to read a request (a 16 MiB PDF on a slow uplink); Traefik's default is 60 s.
+#  - No access log (Dokploy's "Requests" page turns one on; see docs/despliegue.md before doing that).
+# X-Forwarded-For: no `forwardedHeaders.trustedIPs`, so Traefik discards whatever a client sends and sets the TCP
+# peer, which the radar's API then trusts (FORWARDED_ALLOW_IPS in docker-compose.prod.yml).
+# Dokploy rewrites parts of this file when some panel settings change (e.g. Let's Encrypt e-mail, Requests, Traefik
+# ports): re-run setup-server.sh afterwards, or compare with this file.
+global:
+  sendAnonymousUsage: false
+providers:
+  swarm:
+    exposedByDefault: false
+    watch: true
+  docker:
+    exposedByDefault: false
+    watch: true
+    network: dokploy-network
+  file:
+    directory: /etc/dokploy/traefik/dynamic
+    watch: true
+entryPoints:
+  web:
+    address: :80
+  websecure:
+    address: :443
+    http:
+      tls:
+        certResolver: letsencrypt
+    transport:
+      respondingTimeouts:
+        readTimeout: 120s
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      storage: /etc/dokploy/traefik/dynamic/acme.json
+      httpChallenge:
+        entryPoint: web

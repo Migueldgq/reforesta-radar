@@ -1,0 +1,14 @@
+[Unit]
+Description=Host firewall for published container ports: only 80/443 from outside (deploy/docker-user-firewall.sh)
+After=docker.service
+Requires=docker.service
+# Re-applied whenever Docker (re)starts.
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/docker-user-firewall
+
+[Install]
+WantedBy=docker.service
