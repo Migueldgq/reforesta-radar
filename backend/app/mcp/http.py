@@ -12,6 +12,10 @@ Order of checks on every request (all before any MCP parsing):
      a silent downgrade to public); after 30 of those per IP in 15 min, further invalid ones get 429 instead. The
      token is checked first, so a valid token is never throttled; malformed ones never reach the database;
    - a valid token: team view (the tools read the person from the scope state).
+   /mcp/equipo (ADR 0035) never answers without credentials: a personal token or an OAuth access token issued for
+   this URL (audience check), else 401 with `WWW-Authenticate: Bearer resource_metadata="…", scope="radar:leer"` so
+   the assistant discovers the authorization server and opens the radar's sign-in. Invalid credentials there count
+   in the same per-IP limit as /mcp's.
 The SDK runs stateless with plain JSON responses: no MCP sessions to keep, nothing to resume, POST only.
 """
 
@@ -30,9 +34,13 @@ from app.auth import pats, throttle
 from app.body_limit import DEFAULT_LIMIT
 from app.config import settings
 from app.mcp.server import USER_STATE_KEY, mcp
+from app.oauth.provider import GrantUser, access_token_user, same_resource
+from app.oauth.routes import challenge as oauth_challenge
+from app.oauth.routes import oauth_available
 
 log = logging.getLogger("mcp")
 REALM = 'Bearer realm="reforesta-radar"'
+TEAM_PATH = "/mcp/equipo"
 
 
 def security_settings() -> TransportSecuritySettings:
@@ -94,8 +102,12 @@ class McpEndpoint:
             return
         ip = request.client.host if request.client else "unknown"
         auth = request.headers.get("authorization")
-        user: pats.TokenUser | None = None
-        if auth is None:
+        user: pats.TokenUser | GrantUser | None = None
+        if scope["path"].rstrip("/") == TEAM_PATH:
+            user = await self._team_user(scope, send, ip, auth)
+            if user is None:
+                return
+        elif auth is None:
             if not settings.mcp_public:
                 await _reply(
                     send, 401, "Hace falta un token personal (Authorization: Bearer).", {"WWW-Authenticate": REALM}
@@ -113,20 +125,53 @@ class McpEndpoint:
                 async with scope["app"].state.engine.begin() as conn:
                     user = await pats.token_user(conn, token.strip())
             if user is None:
-                log.info("mcp: invalid token ip=%s", ip)
-                if wait := throttle.mcp_bad_token.retry_after(ip):
-                    await _reply(
-                        send, 429, "Demasiados tokens no válidos. Espera unos minutos.", {"Retry-After": str(wait)}
-                    )
-                    return
-                throttle.mcp_bad_token.hit(ip)
                 challenge = f'{REALM}, error="invalid_token", error_description="unknown, expired or revoked token"'
-                await _reply(
-                    send, 401, "El token no es válido, ha caducado o se ha revocado.", {"WWW-Authenticate": challenge}
-                )
+                if await self._bad_token(send, ip):
+                    await _reply(send, 401, "El token no es válido, ha caducado o se ha revocado.",
+                                 {"WWW-Authenticate": challenge})  # fmt: skip
                 return
         scope.setdefault("state", {})[USER_STATE_KEY] = user
         await self._manager.handle_request(scope, receive, send)
+
+    async def _bad_token(self, send: Send, ip: str) -> bool:
+        """Counts an invalid credential from `ip`. False (and 429 already sent) when the IP is over its limit."""
+        log.info("mcp: invalid token ip=%s", ip)
+        if wait := throttle.mcp_bad_token.retry_after(ip):
+            await _reply(send, 429, "Demasiados tokens no válidos. Espera unos minutos.", {"Retry-After": str(wait)})
+            return False
+        throttle.mcp_bad_token.hit(ip)
+        return True
+
+    async def _team_user(
+        self, scope: Scope, send: Send, ip: str, auth: str | None
+    ) -> pats.TokenUser | GrantUser | None:
+        """/mcp/equipo: a personal token or an access token issued for this URL (audience), else 401 with the
+        RFC 9728 pointer so the assistant can start the sign-in. Returns None when the answer was already sent."""
+        oauth = oauth_available()
+
+        def challenge(error: str | None = None) -> str:
+            if oauth:
+                return oauth_challenge(error)
+            return REALM + (f', error="{error}"' if error else "")
+
+        if auth is None:
+            await _reply(send, 401, "Esta dirección del radar pide iniciar sesión.", {"WWW-Authenticate": challenge()})
+            return None
+        scheme, _, token = auth.partition(" ")
+        token = token.strip()
+        user: pats.TokenUser | GrantUser | None = None
+        if scheme.lower() == "bearer":
+            if pats.looks_like_token(token):
+                async with scope["app"].state.engine.begin() as conn:
+                    user = await pats.token_user(conn, token)
+            elif oauth:
+                grant = await access_token_user(scope["app"].state.engine, token)
+                # audience: only tokens issued for this URL (RFC 8707), never one meant for another resource
+                user = grant if grant is not None and same_resource(grant.resource, settings.mcp_team_url) else None
+        if user is None and await self._bad_token(send, ip):
+            await _reply(send, 401, "La sesión del asistente no es válida, ha caducado o se ha desconectado.",
+                         {"WWW-Authenticate": challenge("invalid_token")})  # fmt: skip
+        return user
 
 
 endpoint = McpEndpoint()

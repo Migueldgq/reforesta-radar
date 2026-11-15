@@ -69,10 +69,18 @@ class Settings:
     mcp_allowed_origins: list[str] = field(default_factory=lambda: _list(os.getenv("RADAR_MCP_ALLOWED_ORIGINS", "")))
     # stdio mode (`python -m app.mcp`) only: e-mail of the active account whose team view the tools show.
     mcp_user: str = field(default_factory=lambda: os.getenv("RADAR_MCP_USER", ""))
+    # Sign-in from the assistant (OAuth 2.1, app/oauth, ADR 0035) for the team address `<RADAR_MCP_URL>/equipo`.
+    # Needs an https RADAR_PUBLIC_URL (or a loopback one for local use); off when that is not the case.
+    mcp_oauth: bool = field(default_factory=lambda: _bool(os.getenv("RADAR_MCP_OAUTH", "true")))
 
     @property
     def mcp_public_url(self) -> str:
         return (self.mcp_url or f"{self.public_url}/mcp").rstrip("/")
+
+    @property
+    def mcp_team_url(self) -> str:
+        """The team address: always asks the assistant to sign in (OAuth) or to send a personal token."""
+        return f"{self.mcp_public_url}/equipo"
 
     @property
     def email_enabled(self) -> bool:

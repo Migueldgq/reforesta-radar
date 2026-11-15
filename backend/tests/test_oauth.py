@@ -1,0 +1,585 @@
+"""Sign-in from the assistant (OAuth 2.1, ADR 0035) against a real Postgres (conftest.py): discovery documents, the
+team address /mcp/equipo, registration, authorize + consent, code and refresh grants, revocation, and every failure
+the design promises to refuse. The web's consent page is played by the `member` client (session cookie + the
+`radar_oauth` cookie /oauth/authorize sets)."""
+
+import asyncio
+import base64
+import hashlib
+import logging
+import secrets
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
+from typing import Any
+from urllib.parse import parse_qs, urlsplit
+
+import httpx
+import httpx2
+import pytest
+from mcp import Client
+from mcp.client.streamable_http import streamable_http_client
+from mcp.shared.auth import OAuthMetadata, ProtectedResourceMetadata
+from sqlalchemy import func, select, text, update
+from sqlalchemy.ext.asyncio import AsyncEngine
+from starlette.routing import Route
+
+from app.config import settings
+from app.db.tables import oauth_clients, oauth_codes, oauth_grants, users
+from app.main import app
+from app.oauth import provider
+from tests.conftest import login, make_client
+from tests.test_mcp import SECRET_NOTE, _seed, _team_state, _token, running  # noqa: F401 - fixture
+
+LOCAL = "http://127.0.0.1:33418/callback"
+CLAUDE = "https://claude.ai/api/mcp/auth_callback"
+
+
+def team_url() -> str:
+    return settings.mcp_team_url
+
+
+def pkce() -> tuple[str, str]:
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    return verifier, challenge
+
+
+def bare(engine: AsyncEngine, ip: str = "127.0.0.1") -> httpx.AsyncClient:
+    """A non-browser client: no CSRF header, no cookies (what an assistant's HTTP library sends)."""
+    c = make_client(engine, ip)
+    del c.headers["X-Radar-CSRF"]
+    return c
+
+
+async def register(c: httpx.AsyncClient, **meta: Any) -> httpx.Response:
+    body = {"client_name": "Claude Code", "redirect_uris": [LOCAL], "token_endpoint_auth_method": "none",
+            "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"], **meta}  # fmt: skip
+    return await c.post("/oauth/register", json=body)
+
+
+async def new_client(engine: AsyncEngine, **meta: Any) -> dict[str, Any]:
+    async with bare(engine) as c:
+        res = await register(c, **meta)
+    assert res.status_code == 201, res.text
+    return res.json()
+
+
+async def authorize(browser: httpx.AsyncClient, client_id: str, challenge: str, redirect: str = LOCAL,
+                    **extra: str) -> httpx.Response:  # fmt: skip
+    params = {"response_type": "code", "client_id": client_id, "redirect_uri": redirect, "code_challenge": challenge,
+              "code_challenge_method": "S256", "state": "st-123", "resource": team_url(), "scope": "radar:leer",
+              **extra}  # fmt: skip
+    return await browser.get("/oauth/authorize", params={k: v for k, v in params.items() if v is not None})
+
+
+def request_id(res: httpx.Response) -> str:
+    assert res.status_code == 302, res.text
+    loc = urlsplit(res.headers["location"])
+    assert f"{loc.scheme}://{loc.netloc}" == settings.public_url and loc.path == "/autorizar"
+    return parse_qs(loc.query)["solicitud"][0]
+
+
+async def consent(browser: httpx.AsyncClient, rid: str, allow: bool = True) -> dict[str, list[str]]:
+    res = await browser.post("/api/oauth/consent/decision", json={"request": rid, "allow": allow})
+    assert res.status_code == 200, res.text
+    return parse_qs(urlsplit(res.json()["redirectTo"]).query)
+
+
+async def exchange(engine: AsyncEngine, client_id: str, code: str, verifier: str, redirect: str = LOCAL,
+                   **extra: str) -> httpx.Response:  # fmt: skip
+    form = {"grant_type": "authorization_code", "code": code, "client_id": client_id, "code_verifier": verifier,
+            "redirect_uri": redirect, "resource": team_url(), **extra}  # fmt: skip
+    async with bare(engine) as c:
+        return await c.post("/oauth/token", data={k: v for k, v in form.items() if v is not None})
+
+
+async def refresh(engine: AsyncEngine, client_id: str, token: str, **extra: str) -> httpx.Response:
+    async with bare(engine) as c:
+        return await c.post("/oauth/token", data={"grant_type": "refresh_token", "refresh_token": token,
+                                                  "client_id": client_id, **extra})  # fmt: skip
+
+
+async def sign_in(engine: AsyncEngine, browser: httpx.AsyncClient, client: dict[str, Any] | None = None,
+                  redirect: str = LOCAL) -> tuple[dict[str, Any], dict[str, Any]]:  # fmt: skip
+    """The whole flow: register (unless given), authorize, approve, exchange. Returns (client, token response)."""
+    client = client or await new_client(engine, redirect_uris=[redirect])
+    verifier, challenge = pkce()
+    query = await consent(browser, request_id(await authorize(browser, client["client_id"], challenge, redirect)))
+    res = await exchange(engine, client["client_id"], query["code"][0], verifier, redirect)
+    assert res.status_code == 200, res.text
+    return client, res.json()
+
+
+def _http(engine: AsyncEngine, token: str | None) -> httpx2.AsyncClient:
+    app.state.engine = engine
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    return httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app, client=("127.0.0.1", 123)),
+                              base_url="http://localhost", headers=headers)  # fmt: skip
+
+
+async def team_status(engine: AsyncEngine, token: str | None, path: str = "/mcp/equipo") -> httpx2.Response:
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    hdrs = {"Accept": "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25"}
+    async with _http(engine, token) as c:
+        return await c.post(path, json=body, headers=hdrs)
+
+
+@asynccontextmanager
+async def team_client(engine: AsyncEngine, token: str) -> AsyncIterator[Client]:
+    async with _http(engine, token) as http, Client(streamable_http_client("http://localhost/mcp/equipo",
+                                                                           http_client=http)) as c:  # fmt: skip
+        yield c
+
+
+# ---------- discovery ----------
+
+
+async def test_metadata_documents(engine: AsyncEngine) -> None:
+    async with bare(engine) as c:
+        prm = await c.get("/.well-known/oauth-protected-resource/mcp/equipo")
+        assert prm.status_code == 200
+        assert (await c.get("/.well-known/oauth-protected-resource")).json() == prm.json()  # root fallback
+        assert (await c.get("/.well-known/oauth-protected-resource/mcp")).status_code == 404  # public URL: none
+        asm = await c.get("/.well-known/oauth-authorization-server")
+        assert (await c.get("/.well-known/oauth-authorization-server/x")).status_code == 404
+        assert (await c.get("/.well-known/openid-configuration")).status_code == 404
+        # built from settings, never from the Host header
+        evil = await c.get("/.well-known/oauth-authorization-server", headers={"Host": "evil.example"})
+        assert evil.json() == asm.json()
+    p = ProtectedResourceMetadata.model_validate(prm.json())
+    assert prm.json()["resource"] == team_url() and prm.json()["authorization_servers"] == [settings.public_url]
+    assert p.scopes_supported == ["radar:leer"] and p.bearer_methods_supported == ["header"]
+    m = OAuthMetadata.model_validate(asm.json())
+    body = asm.json()
+    assert body["issuer"] == settings.public_url  # exactly: clients compare it as a string
+    assert body["authorization_endpoint"] == f"{settings.public_url}/oauth/authorize"
+    assert body["token_endpoint"] == f"{settings.public_url}/oauth/token"
+    assert m.code_challenge_methods_supported == ["S256"] and m.response_types_supported == ["code"]
+    assert m.authorization_response_iss_parameter_supported is True
+    assert "offline_access" not in body["scopes_supported"]
+    assert "client_id_metadata_document_supported" not in body  # CIMD not offered: clients fall back to DCR
+
+
+async def test_team_address_always_asks_to_sign_in(engine: AsyncEngine, running: None) -> None:  # noqa: F811
+    res = await team_status(engine, None)
+    assert res.status_code == 401
+    rm = f'resource_metadata="{settings.public_url}/.well-known/oauth-protected-resource/mcp/equipo"'
+    assert res.headers["www-authenticate"] == f'Bearer {rm}, scope="radar:leer"'
+    res = await team_status(engine, "rr_at_" + "x" * 43)
+    assert res.status_code == 401 and res.headers["www-authenticate"].startswith('Bearer error="invalid_token", ')
+    assert (await team_status(engine, None, "/mcp")).status_code == 200  # the public address is unchanged
+
+
+async def test_personal_token_still_opens_both_addresses(engine: AsyncEngine, running: None,  # noqa: F811
+                                                         member: httpx.AsyncClient) -> None:  # fmt: skip
+    secret = (await _token(member))["secret"]
+    assert (await team_status(engine, secret)).status_code == 200
+    assert (await team_status(engine, secret, "/mcp")).status_code == 200
+
+
+# ---------- the happy path ----------
+
+
+async def test_full_flow(engine: AsyncEngine, running: None, member: httpx.AsyncClient,  # noqa: F811
+                         caplog: pytest.LogCaptureFixture) -> None:  # fmt: skip
+    caplog.set_level(logging.DEBUG)
+    await _seed(engine)
+    await _team_state(engine, member)
+    client = await new_client(engine)
+    assert "client_secret" not in client  # public client (PKCE only)
+    verifier, challenge = pkce()
+    res = await authorize(member, client["client_id"], challenge)
+    assert res.headers["cache-control"] == "no-store"
+    cookie = res.headers["set-cookie"]
+    assert (
+        "radar_oauth=" in cookie and "HttpOnly" in cookie and "Path=/api/oauth/" in cookie and "SameSite=lax" in cookie
+    )
+    rid = request_id(res)
+    info = await member.post("/api/oauth/consent", json={"request": rid})
+    assert info.json() == {"assistant": "Claude Code", "kind": "local", "redirectHost": "127.0.0.1:33418"}
+    query = await consent(member, rid)
+    assert (
+        query["state"] == ["st-123"]
+        and query["iss"] == [settings.public_url]
+        and set(query) == {"code", "state", "iss"}
+    )
+    code = query["code"][0]
+    res = await exchange(engine, client["client_id"], code, verifier)
+    assert res.status_code == 200 and res.headers["cache-control"] == "no-store"
+    tokens = res.json()
+    assert tokens["token_type"] == "Bearer" and tokens["expires_in"] == 3600 and tokens["scope"] == "radar:leer"
+    assert tokens["access_token"].startswith("rr_at_") and tokens["refresh_token"].startswith("rr_rt_")
+
+    async with team_client(engine, tokens["access_token"]) as c:
+        res = await c.call_tool("tablero_equipo", {})
+        assert not res.is_error and res.structured_content["porEstado"] == {"estudio": 1}
+        assert res.structured_content["convocatorias"][0]["ultimaNota"]["texto"] == SECRET_NOTE
+    listed = (await member.get("/api/me/assistants")).json()
+    assert (
+        listed["teamUrl"] == team_url() and listed["signIn"] is True and listed["publicUrl"] == settings.mcp_public_url
+    )
+    [row] = listed["assistants"]
+    assert (row["name"], row["kind"], row["redirectHost"]) == ("Claude Code", "local", "127.0.0.1:33418")
+    assert row["lastUsedAt"] is not None
+
+    # refresh: rotated; the new pair works
+    res = await refresh(engine, client["client_id"], tokens["refresh_token"])
+    assert res.status_code == 200, res.text
+    fresh = res.json()
+    assert fresh["refresh_token"] != tokens["refresh_token"]
+    assert (await team_status(engine, fresh["access_token"])).status_code == 200
+
+    # nothing secret in the logs
+    logged = "\n".join(r.getMessage() for r in caplog.records)
+    for secret in (code, verifier, rid, tokens["access_token"], tokens["refresh_token"], fresh["access_token"],
+                   fresh["refresh_token"]):  # fmt: skip
+        assert secret not in logged
+    # only hashes in the database
+    async with engine.connect() as conn:
+        dump = str((await conn.execute(text("select * from oauth_tokens, oauth_codes, oauth_requests"))).all())
+        dump += str((await conn.execute(text("select * from oauth_tokens"))).all())
+    for secret in (code, tokens["access_token"], tokens["refresh_token"], fresh["refresh_token"]):
+        assert secret not in dump
+
+
+async def test_claude_redirect_is_recognised_and_secret_clients_work(engine: AsyncEngine,
+                                                                    member: httpx.AsyncClient) -> None:  # fmt: skip
+    client = await new_client(engine, client_name="Claude", redirect_uris=[CLAUDE],
+                              token_endpoint_auth_method="client_secret_post")  # fmt: skip
+    secret = client["client_secret"]
+    async with engine.connect() as conn:
+        stored = (await conn.execute(select(oauth_clients.c.secret_hash))).scalar()
+    assert stored == hashlib.sha256(secret.encode()).hexdigest()  # only the hash
+    verifier, challenge = pkce()
+    rid = request_id(await authorize(member, client["client_id"], challenge, CLAUDE))
+    info = (await member.post("/api/oauth/consent", json={"request": rid})).json()
+    assert (info["kind"], info["redirectHost"]) == ("conocido", "claude.ai")
+    code = (await consent(member, rid))["code"][0]
+    bad = await exchange(engine, client["client_id"], code, verifier, CLAUDE, client_secret="wrong")
+    assert bad.status_code == 401 and bad.json()["error"] == "invalid_client"
+    res = await exchange(engine, client["client_id"], code, verifier, CLAUDE, client_secret=secret)
+    assert res.status_code == 200, res.text
+    # client_secret_basic
+    client = await new_client(engine, redirect_uris=[CLAUDE], token_endpoint_auth_method="client_secret_basic")
+    verifier, challenge = pkce()
+    code = (await consent(member, request_id(await authorize(member, client["client_id"], challenge, CLAUDE))))["code"][
+        0
+    ]
+    basic = base64.b64encode(f"{client['client_id']}:{client['client_secret']}".encode()).decode()
+    async with bare(engine) as c:
+        res = await c.post("/oauth/token", headers={"Authorization": f"Basic {basic}"},
+                           data={"grant_type": "authorization_code", "code": code, "client_id": client["client_id"],
+                                 "code_verifier": verifier, "redirect_uri": CLAUDE})  # fmt: skip
+    assert res.status_code == 200, res.text
+
+
+async def test_loopback_port_may_change(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    client = await new_client(engine, redirect_uris=["http://localhost:1111/callback"])
+    _, tokens = await sign_in(engine, member, client, "http://localhost:2222/callback")  # RFC 8252 §7.3
+    assert tokens["access_token"]
+    _, challenge = pkce()
+    for other in ("http://localhost:2222/other", "http://127.0.0.1:1111/callback", "https://localhost:1111/callback"):
+        res = await authorize(member, client["client_id"], challenge, other)
+        assert res.status_code == 400 and "location" not in res.headers, other  # never redirected to an unknown URI
+
+
+async def test_refusing_redirects_with_access_denied(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    client = await new_client(engine)
+    _, challenge = pkce()
+    query = await consent(member, request_id(await authorize(member, client["client_id"], challenge)), allow=False)
+    assert query == {"error": ["access_denied"], "state": ["st-123"], "iss": [settings.public_url]}
+    assert (await member.get("/api/me/assistants")).json()["assistants"] == []
+
+
+# ---------- what must be refused ----------
+
+
+async def test_authorize_refusals(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    client = await new_client(engine)
+    cid = client["client_id"]
+    _, challenge = pkce()
+    # unknown client or unregistered redirect: an error page, never a redirect
+    res = await authorize(member, "nope", challenge)
+    assert res.status_code == 400 and "location" not in res.headers
+    res = await authorize(member, cid, challenge, "https://evil.example/cb")
+    assert res.status_code == 400 and "location" not in res.headers
+
+    def error(res: httpx.Response) -> str:
+        assert res.status_code == 302 and res.headers["location"].startswith(LOCAL), res.text
+        q = parse_qs(urlsplit(res.headers["location"]).query)
+        assert len(q["state"]) == 1  # passed back even on errors
+        return q["error"][0]
+
+    assert error(await authorize(member, cid, None)) == "invalid_request"  # type: ignore[arg-type]  # no PKCE
+    assert error(await authorize(member, cid, challenge, code_challenge_method="plain")) == "invalid_request"
+    assert error(await authorize(member, cid, "short")) == "invalid_request"
+    assert error(await authorize(member, cid, challenge, response_type="token")) == "unsupported_response_type"
+    assert error(await authorize(member, cid, challenge, resource="https://other.example/mcp")) == "invalid_target"
+    assert error(await authorize(member, cid, challenge, resource=settings.mcp_public_url)) == "invalid_target"
+    assert error(await authorize(member, cid, challenge, state="s" * 600)) == "invalid_request"
+
+
+async def test_token_refusals(engine: AsyncEngine, running: None, member: httpx.AsyncClient) -> None:  # noqa: F811
+    client = await new_client(engine)
+    other = await new_client(engine)
+    cid = client["client_id"]
+
+    async def code_for(c: dict[str, Any] = client) -> tuple[str, str]:
+        verifier, challenge = pkce()
+        q = await consent(member, request_id(await authorize(member, c["client_id"], challenge)))
+        return q["code"][0], verifier
+
+    code, verifier = await code_for()
+    assert (await exchange(engine, cid, code, "x" * 50)).json()["error"] == "invalid_grant"  # wrong verifier
+    res = await exchange(engine, cid, code, None)  # type: ignore[arg-type]  # missing verifier
+    assert res.status_code == 400 and res.json()["error"] == "invalid_request"
+    assert (await exchange(engine, other["client_id"], code, verifier)).json()[
+        "error"
+    ] == "invalid_grant"  # wrong client
+    res = await exchange(engine, cid, code, verifier, "http://127.0.0.1:9/callback")  # other redirect URI
+    assert res.json()["error"] == "invalid_request"
+    res = await exchange(engine, cid, code, verifier, resource="https://other.example/mcp")
+    assert res.json()["error"] == "invalid_target"
+    res = await exchange(engine, cid, code, verifier)  # still valid after the failures above
+    assert res.status_code == 200, res.text
+    first = res.json()
+
+    # code reuse: refused, and the grant it produced is revoked
+    assert (await exchange(engine, cid, code, verifier)).json()["error"] == "invalid_grant"
+    assert (await team_status(engine, first["access_token"])).status_code == 401
+    assert (await refresh(engine, cid, first["refresh_token"])).json()["error"] == "invalid_grant"
+
+    # expired code (60 s)
+    code, verifier = await code_for()
+    async with engine.begin() as conn:
+        assert (await conn.execute(select(func.max(oauth_codes.c.expires_at) - func.now()))).scalar() <= timedelta(
+            seconds=61  # 60 s, give or take the clocks of Python and the database container
+        )
+        await conn.execute(update(oauth_codes).values(expires_at=datetime.now(UTC) - timedelta(seconds=1)))
+    assert (await exchange(engine, cid, code, verifier)).json()["error"] == "invalid_grant"
+
+    # refresh reuse: the whole family is revoked
+    _, tokens = await sign_in(engine, member, client)
+    rotated = (await refresh(engine, cid, tokens["refresh_token"])).json()
+    assert (await refresh(engine, other["client_id"], rotated["refresh_token"])).json()["error"] == "invalid_grant"
+    assert (await refresh(engine, cid, tokens["refresh_token"])).json()["error"] == "invalid_grant"  # reuse
+    assert (await team_status(engine, rotated["access_token"])).status_code == 401
+    assert (await refresh(engine, cid, rotated["refresh_token"])).json()["error"] == "invalid_grant"
+    assert (await member.get("/api/me/assistants")).json()["assistants"] == []
+
+    # audience: a token whose grant is for another resource never opens /mcp/equipo; OAuth tokens never open /mcp
+    _, tokens = await sign_in(engine, member, client)
+    assert (await team_status(engine, tokens["access_token"], "/mcp")).status_code == 401
+    async with engine.begin() as conn:
+        await conn.execute(update(oauth_grants).values(resource="https://other.example/mcp"))
+    assert (await team_status(engine, tokens["access_token"])).status_code == 401
+
+    # expired access token
+    _, tokens = await sign_in(engine, member, client)
+    async with engine.begin() as conn:
+        await conn.execute(text("update oauth_tokens set expires_at = now() - interval '1 second' where kind='access'"))
+    assert (await team_status(engine, tokens["access_token"])).status_code == 401
+    assert (await refresh(engine, cid, tokens["refresh_token"])).status_code == 200  # the refresh token still works
+
+
+async def test_parallel_exchanges_of_one_code_give_one_token(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    client = await new_client(engine)
+    verifier, challenge = pkce()
+    code = (await consent(member, request_id(await authorize(member, client["client_id"], challenge))))["code"][0]
+    results = await asyncio.gather(*(exchange(engine, client["client_id"], code, verifier) for _ in range(5)))
+    assert sorted(r.status_code for r in results) == [200, 400, 400, 400, 400]
+
+
+async def test_revocation_paths(engine: AsyncEngine, running: None, member: httpx.AsyncClient,  # noqa: F811
+                                admin: httpx.AsyncClient) -> None:  # fmt: skip
+    client = await new_client(engine)
+    cid = client["client_id"]
+    # "Desconectar" in Mi cuenta
+    _, tokens = await sign_in(engine, member, client)
+    [row] = (await member.get("/api/me/assistants")).json()["assistants"]
+    assert (await admin.delete(f"/api/me/assistants/{row['id']}")).status_code == 404  # not hers
+    assert (await member.delete(f"/api/me/assistants/{row['id']}")).status_code == 204
+    assert (await team_status(engine, tokens["access_token"])).status_code == 401
+    assert (await refresh(engine, cid, tokens["refresh_token"])).json()["error"] == "invalid_grant"
+    # /oauth/revoke (RFC 7009) with the refresh token revokes the access token too
+    _, tokens = await sign_in(engine, member, client)
+    async with bare(engine) as c:
+        res = await c.post("/oauth/revoke", data={"token": tokens["refresh_token"], "client_id": cid})
+    assert res.status_code == 200
+    assert (await team_status(engine, tokens["access_token"])).status_code == 401
+    # signing in again replaces the old grant of the same assistant
+    _, old = await sign_in(engine, member, client)
+    _, new = await sign_in(engine, member, client)
+    assert (await team_status(engine, old["access_token"])).status_code == 401
+    assert (await team_status(engine, new["access_token"])).status_code == 200
+    assert len((await member.get("/api/me/assistants")).json()["assistants"]) == 1
+    # deactivation stops it at once; reactivation does not bring it back (revoke_sessions)
+    luis = next(u["id"] for u in (await admin.get("/api/users")).json()["users"] if u["name"] == "Luis")
+    assert (await admin.patch(f"/api/team/users/{luis}", json={"active": False})).status_code == 200
+    assert (await team_status(engine, new["access_token"])).status_code == 401
+    assert (await admin.patch(f"/api/team/users/{luis}", json={"active": True})).status_code == 200
+    assert (await team_status(engine, new["access_token"])).status_code == 401
+    # password change revokes every grant
+    await login(member, "luis@example.org")
+    _, tokens = await sign_in(engine, member, client)
+    res = await member.post("/api/me/password", json={"currentPassword": "correct horse battery",
+                                                      "newPassword": "another long password"})  # fmt: skip
+    assert res.status_code == 204
+    assert (await team_status(engine, tokens["access_token"])).status_code == 401
+    # a deactivated person's refresh token is refused too
+    _, tokens = await sign_in(engine, member, client)
+    async with engine.begin() as conn:
+        await conn.execute(update(users).where(users.c.email == "luis@example.org").values(active=False))
+    assert (await refresh(engine, cid, tokens["refresh_token"])).json()["error"] == "invalid_grant"
+
+
+async def test_consent_is_bound_to_session_browser_and_csrf(engine: AsyncEngine, member: httpx.AsyncClient,
+                                                           admin: httpx.AsyncClient) -> None:  # fmt: skip
+    client = await new_client(engine)
+    _, challenge = pkce()
+    rid = request_id(await authorize(member, client["client_id"], challenge))
+    body = {"request": rid, "allow": True}
+    # another signed-in person (another browser, without the radar_oauth cookie) cannot see or approve it
+    assert (await admin.post("/api/oauth/consent", json={"request": rid})).status_code == 404
+    assert (await admin.post("/api/oauth/consent/decision", json=body)).status_code == 404
+    async with make_client(engine) as c:  # same cookies, no session: 401
+        c.cookies.update({k: v for k, v in member.cookies.items() if k != "radar_session"})
+        assert (await c.post("/api/oauth/consent/decision", json=body)).status_code == 401
+    async with make_client(engine) as c:  # CSRF rule
+        del c.headers["X-Radar-CSRF"]
+        c.cookies.update(member.cookies)
+        assert (await c.post("/api/oauth/consent/decision", json=body)).status_code == 403
+        cross = {"X-Radar-CSRF": "1", "Sec-Fetch-Site": "cross-site"}
+        res = await c.post("/api/oauth/consent/decision", json=body, headers=cross)
+        assert res.status_code == 403
+    assert (await member.post("/api/oauth/consent", json={"request": "x" * 43})).status_code == 404
+    # single use
+    await consent(member, rid)
+    assert (await member.post("/api/oauth/consent/decision", json=body)).status_code == 404
+    # expired (10 minutes)
+    rid = request_id(await authorize(member, client["client_id"], challenge))
+    async with engine.begin() as conn:
+        await conn.execute(text("update oauth_requests set expires_at = now() - interval '1 second'"))
+    assert (await member.post("/api/oauth/consent", json={"request": rid})).status_code == 404
+
+
+async def test_registration_limits(engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch) -> None:
+    async with bare(engine) as c:
+        for uris in (["http://evil.example/cb"], ["cursor://callback"], ["https://x.example/cb#frag"],
+                     ["https://user:pw@x.example/cb"], [f"https://x.example/{'a' * 600}"],
+                     [f"https://x{n}.example/cb" for n in range(6)], []):  # fmt: skip
+            res = await register(c, redirect_uris=uris)
+            assert res.status_code == 400, uris
+        res = await register(c, token_endpoint_auth_method="private_key_jwt")
+        assert res.status_code == 400
+        res = await register(c, grant_types=["authorization_code", "client_credentials"])
+        assert res.status_code == 400
+        res = await register(c, client_name="Claude‮​  de\n confianza" + "x" * 200, redirect_uris=[CLAUDE])
+        assert res.status_code == 201
+        res = await c.post("/oauth/register", content=b"{" + b" " * 20_000 + b"}",
+                           headers={"Content-Type": "application/json"})  # fmt: skip
+        assert res.status_code == 413
+    async with engine.connect() as conn:
+        name = (await conn.execute(select(oauth_clients.c.name))).scalar()
+    assert name.startswith("Claude de confianza") and len(name) <= 60 and "‮" not in name
+
+    # per IP: 10 per hour
+    async with bare(engine, "10.0.0.9") as c:
+        codes = [(await register(c)).status_code for _ in range(11)]
+    assert codes[:10] == [201] * 10 and codes[10] == 429
+    # stored clients are capped; unused registrations expire after a day
+    monkeypatch.setattr(provider, "MAX_CLIENTS", 11)
+    async with bare(engine, "10.0.0.10") as c:
+        assert (await register(c)).status_code == 400
+        async with engine.begin() as conn:
+            await conn.execute(update(oauth_clients).values(created_at=datetime.now(UTC) - timedelta(days=2)))
+        assert (await register(c)).status_code == 201
+    async with engine.connect() as conn:
+        assert (await conn.execute(select(func.count()).select_from(oauth_clients))).scalar() == 1
+
+
+async def test_token_endpoint_is_not_blocked_by_browser_rules(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+    """Form-encoded POSTs from a non-browser client, no X-Radar-CSRF and any Sec-Fetch-Site: CSRF is /api/ only."""
+    client = await new_client(engine)
+    verifier, challenge = pkce()
+    code = (await consent(member, request_id(await authorize(member, client["client_id"], challenge))))["code"][0]
+    async with bare(engine) as c:
+        res = await c.post("/oauth/token", headers={"Sec-Fetch-Site": "cross-site"},
+                           data={"grant_type": "authorization_code", "code": code, "client_id": client["client_id"],
+                                 "code_verifier": verifier, "redirect_uri": LOCAL})  # fmt: skip
+        assert res.status_code == 200, res.text
+        big = await c.post("/oauth/token", content=b"a=" + b"b" * 20_000,
+                           headers={"Content-Type": "application/x-www-form-urlencoded"})  # fmt: skip
+        assert big.status_code == 413
+
+
+async def test_token_failures_are_throttled(engine: AsyncEngine) -> None:
+    client = await new_client(engine)
+    async with bare(engine, "10.0.0.7") as c:
+        codes = [(await c.post("/oauth/token", data={"grant_type": "refresh_token", "refresh_token": "rr_rt_x",
+                                                     "client_id": client["client_id"]})).status_code
+                 for _ in range(61)]  # fmt: skip
+    assert codes[:60] == [400] * 60 and codes[60] == 429
+
+
+async def test_oauth_off_without_https(engine: AsyncEngine, running: None, patch_settings) -> None:  # noqa: ANN001, F811
+    patch_settings(cookie_secure=True)  # served over https, but RADAR_PUBLIC_URL still says http
+    async with bare(engine) as c:
+        assert (await c.get("/.well-known/oauth-authorization-server")).status_code == 404
+        assert (await register(c)).status_code == 404
+    res = await team_status(engine, None)
+    assert res.status_code == 401 and "resource_metadata" not in res.headers["www-authenticate"]
+    patch_settings(cookie_secure=True, public_url="https://radar.example.org", mcp_url="")
+    async with bare(engine) as c:
+        body = (await c.get("/.well-known/oauth-authorization-server")).json()
+    assert body["issuer"] == "https://radar.example.org"
+    assert body["token_endpoint"] == "https://radar.example.org/oauth/token"
+    async with bare(engine) as c:
+        res = await register(c, redirect_uris=["http://radar.example.org/cb"])  # https only (loopback aside)
+        assert res.status_code == 400
+    patch_settings(mcp_oauth=False, public_url="http://localhost:3010", cookie_secure=False)
+    async with bare(engine) as c:
+        assert (await c.get("/.well-known/oauth-protected-resource/mcp/equipo")).status_code == 404
+
+
+# ---------- route inventory ----------
+
+OPEN_NON_API = {
+    ("GET", "/health"),
+    ("POST", "/mcp"),
+    ("POST", "/mcp/equipo"),
+    ("GET", "/.well-known/oauth-protected-resource{rest:path}"),
+    ("GET", "/.well-known/oauth-authorization-server{rest:path}"),
+    ("GET", "/oauth/authorize"),
+    ("POST", "/oauth/token"),
+    ("POST", "/oauth/register"),
+    ("POST", "/oauth/revoke"),
+}
+FASTAPI_DOCS = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+
+
+def test_no_route_outside_api_by_accident() -> None:
+    """Everything outside /api/ skips the session check and the CSRF rule: it must be on this list on purpose. Every
+    state-changing one of them reads no cookie (/mcp*, /oauth/token|register|revoke)."""
+    found = set()
+    for r in app.routes:
+        path = getattr(r, "path", None)
+        if path is None or path.startswith("/api/") or path in FASTAPI_DOCS:
+            continue
+        methods = getattr(r, "methods", None) or {"POST", "GET", "PUT", "PATCH", "DELETE"}  # raw ASGI endpoints
+        if isinstance(r, Route) and r.methods is None:
+            methods = {"POST"}  # /mcp*: the endpoint itself answers 405 to anything but POST
+        found |= {(m, path) for m in methods if m != "HEAD"}
+    assert found == OPEN_NON_API
+    # routes of included routers (not in app.routes as such): all under /api/, where the session and CSRF rules apply
+    assert {p for p in app.openapi()["paths"] if not p.startswith("/api/")} == {"/health"}
+
+
+async def test_mcp_endpoints_refuse_other_methods(engine: AsyncEngine, running: None) -> None:  # noqa: F811
+    async with _http(engine, None) as c:
+        for path in ("/mcp", "/mcp/equipo"):
+            assert (await c.get(path)).status_code == 405
+    async with bare(engine) as c:
+        assert (await c.post("/oauth/authorize")).status_code == 405
+        assert (await c.get("/oauth/token")).status_code == 405
