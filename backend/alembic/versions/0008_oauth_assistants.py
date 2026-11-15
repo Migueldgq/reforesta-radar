@@ -37,6 +37,7 @@ def upgrade() -> None:
         sa.Column("id_hash", sa.Text, primary_key=True),
         sa.Column("browser_hash", sa.Text, nullable=False),
         sa.Column("client_id", sa.Text, sa.ForeignKey("oauth_clients.client_id", ondelete="CASCADE"), nullable=False),
+        sa.Column("user_id", sa.BigInteger, sa.ForeignKey("users.id", ondelete="CASCADE")),
         sa.Column("redirect_uri", sa.Text, nullable=False),
         sa.Column("redirect_explicit", sa.Boolean, nullable=False),
         sa.Column("state", sa.Text),
@@ -46,6 +47,8 @@ def upgrade() -> None:
         sa.Column("created_at", TSTZ, nullable=False, server_default=NOW),
         sa.Column("expires_at", TSTZ, nullable=False),
     )
+    op.create_index("ix_oauth_requests_client_id", "oauth_requests", ["client_id"])
+    op.create_index("ix_oauth_requests_expires_at", "oauth_requests", ["expires_at"])
     op.create_table(
         "oauth_grants",
         sa.Column("id", sa.BigInteger, sa.Identity(always=True), primary_key=True),

@@ -81,16 +81,14 @@ mcp_public = Throttle(limit=settings.mcp_public_rate, window_s=60)
 # none of these may refuse a request that would succeed:
 # - /oauth/authorize, /oauth/token, /oauth/revoke: processed first, only failures count, per client IP. Over the limit
 #   further failures answer 429 (never a success, never `invalid_grant` at /oauth/token);
-# - /oauth/register (unauthenticated by nature): a global budget per 10 minutes, plus per IP only when a trusted proxy
-#   gives real client IPs (FORWARDED_ALLOW_IPS set to the proxy). Someone spending the global budget delays
-#   new registrations by at most 10 minutes; connected assistants keep working.
+# - /oauth/register (unauthenticated by nature): no global budget (one outsider could keep it spent); the provider
+#   bounds the table instead. Per IP only when a trusted proxy gives real client IPs (FORWARDED_ALLOW_IPS).
 oauth_authorize_failures = Throttle(limit=30, window_s=10 * 60)
 oauth_token_failures = Throttle(limit=60, window_s=WINDOW_S)
-oauth_register_global = Throttle(limit=60, window_s=10 * 60)
 oauth_register_ip = Throttle(limit=10, window_s=10 * 60)
 
 ALL = (account_ceiling, account_ip, password_change, forgot_by_account, forgot_by_ip, mcp_bad_token, mcp_public,
-       oauth_authorize_failures, oauth_token_failures, oauth_register_global, oauth_register_ip)  # fmt: skip
+       oauth_authorize_failures, oauth_token_failures, oauth_register_ip)  # fmt: skip
 
 
 def clear_all() -> None:

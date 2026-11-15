@@ -26,7 +26,7 @@ from starlette.routing import Route
 
 from app.auth import throttle
 from app.config import settings
-from app.db.tables import oauth_clients, oauth_codes, oauth_grants, oauth_tokens, users
+from app.db.tables import oauth_clients, oauth_codes, oauth_grants, oauth_requests, oauth_tokens, users
 from app.main import app
 from app.oauth import provider
 from app.oauth.clients import clean_name
@@ -539,52 +539,76 @@ async def test_registration_limits(engine: AsyncEngine, monkeypatch: pytest.Monk
         name = (await conn.execute(select(oauth_clients.c.name))).scalar()
     assert name.startswith("Claude de confianza") and len(name) <= 60 and "‮" not in name
 
-    # stored clients are capped; unused registrations expire after a day
-    monkeypatch.setattr(provider, "MAX_CLIENTS", 2)
-    async with bare(engine, "10.0.0.10") as c:
-        assert (await register(c)).status_code == 201
-        assert (await register(c)).status_code == 400  # full
-        async with engine.begin() as conn:
-            await conn.execute(update(oauth_clients).values(created_at=datetime.now(UTC) - timedelta(days=2)))
+    # unused registrations expire after a day
+    async with engine.begin() as conn:
+        await conn.execute(update(oauth_clients).values(created_at=datetime.now(UTC) - timedelta(days=2)))
+    async with bare(engine) as c:
         assert (await register(c)).status_code == 201
     async with engine.connect() as conn:
         assert (await conn.execute(select(func.count()).select_from(oauth_clients))).scalar() == 1
+    # stored clients are capped: when full, the oldest unused one makes room; refused only if all are in use
+    monkeypatch.setattr(provider, "MAX_CLIENTS", 2)
+    async with bare(engine) as c:
+        second = (await register(c)).json()["client_id"]
+        third = (await register(c)).json()["client_id"]
+        async with engine.connect() as conn:
+            ids = set((await conn.execute(select(oauth_clients.c.client_id))).scalars())
+        assert ids == {second, third}
+        async with engine.begin() as conn:
+            await conn.execute(update(oauth_clients).values(last_used_at=datetime.now(UTC)))  # both approved once
+        assert (await register(c)).status_code == 400
 
 
 async def test_registration_flood_does_not_lock_the_team_out(engine: AsyncEngine, member: httpx.AsyncClient,
                                                              monkeypatch: pytest.MonkeyPatch,
                                                              patch_settings) -> None:  # noqa: ANN001  # fmt: skip
-    """Behind the web origin every caller has the same IP, so a per-IP limit would be a team-wide one. The budget is
-    global, an assistant that already registered never needs it again, and near the cap unused registrations go
-    after 10 minutes, so a flood delays new registrations by at most 10 minutes and never blocks sign-in."""
-    known = await new_client(engine)  # registered before the flood (Claude keeps its client_id)
-    async with bare(engine) as c:
-        codes = [(await register(c)).status_code for _ in range(throttle.oauth_register_global.limit - 1)]
-        assert set(codes) == {201}
-        res = await register(c)
-        assert res.status_code == 429 and int(res.headers["retry-after"]) <= 600
-    # the assistant registered earlier still signs in and refreshes
-    _, tokens = await sign_in(engine, member, known)
-    assert (await refresh(engine, known["client_id"], tokens["refresh_token"])).status_code == 200
-    # the budget is per 10 minutes, then registration works again
-    throttle.oauth_register_global.clear()
-    async with bare(engine) as c:
-        assert (await register(c)).status_code == 201
-
-    # near the cap, registrations nobody used for 10 minutes make room (instead of a day)
-    monkeypatch.setattr(provider, "MAX_CLIENTS", 10)
-    async with engine.begin() as conn:
-        await conn.execute(update(oauth_clients).where(oauth_clients.c.client_id != known["client_id"])
-                           .values(created_at=datetime.now(UTC) - timedelta(minutes=11)))  # fmt: skip
-    throttle.oauth_register_global.clear()
-    async with bare(engine) as c:
-        assert (await register(c)).status_code == 201
+    """Attack: a sustained flood of registrations, each with junk authorisation requests to keep it "in use", over
+    several 10-minute windows (the clock is moved, not slept). There is no global budget to spend; the table stays
+    under MAX_CLIENTS because the oldest unused registration makes room, and anonymous pending requests are capped,
+    so a new legitimate registration and a whole sign-in still succeed, even when the person takes longer than the
+    purge of unused clients."""
+    monkeypatch.setattr(provider, "MAX_CLIENTS", 30)
+    monkeypatch.setattr(provider, "MAX_PENDING", 8)
+    offset = timedelta()
+    monkeypatch.setattr(provider, "_now", lambda: datetime.now(UTC) + offset)
+    _, challenge = pkce()
+    known = await new_client(engine)
+    _, tokens = await sign_in(engine, member, known)  # an assistant connected before the flood
+    async with bare(engine) as attacker:
+        for _ in range(4):  # four windows
+            offset += timedelta(minutes=11)
+            for _ in range(40):
+                res = await register(attacker)
+                assert res.status_code == 201
+                await authorize(attacker, res.json()["client_id"], challenge)  # accepted or refused, either way
     async with engine.connect() as conn:
-        assert (await conn.execute(select(func.count()).select_from(oauth_clients))).scalar() == 2
+        assert (await conn.execute(select(func.count()).select_from(oauth_clients))).scalar() <= 30
+
+    # a new assistant registers and its person signs in, with the flood going on in between
+    async with bare(engine) as c:
+        res = await register(c)
+    assert res.status_code == 201
+    new = res.json()
+    async with bare(engine) as anon:  # anonymous requests are full of junk: the page asks to sign in first
+        res = await authorize(anon, new["client_id"], challenge)
+        assert res.status_code == 429 and "location" not in res.headers and "Entra en el radar" in res.text
+    verifier, challenge = pkce()
+    rid = request_id(await authorize(member, new["client_id"], challenge))  # signed in: never crowded out
+    offset += timedelta(hours=25)  # the person is slow: the client is past the purge of unused registrations...
+    async with engine.begin() as conn:  # ...and its request is still live (the clock moved; the request did not)
+        await conn.execute(update(oauth_requests).values(expires_at=datetime.now(UTC) + offset + timedelta(minutes=5)))
+    async with bare(engine) as attacker:
+        for _ in range(40):
+            assert (await register(attacker)).status_code == 201
+    query = await consent(member, rid)
+    res = await exchange(engine, new["client_id"], query["code"][0], verifier)
+    assert res.status_code == 200, res.text
+    offset = timedelta()
+    assert (await refresh(engine, known["client_id"], tokens["refresh_token"])).status_code == 200
 
     # with a trusted proxy (real client IPs) there is also a per-IP limit of 10 per 10 minutes
     patch_settings(forwarded_allow_ips="10.0.0.1")
-    monkeypatch.setattr(provider, "MAX_CLIENTS", 500)
+    monkeypatch.setattr(provider, "MAX_CLIENTS", 5000)
     async with bare(engine, "10.0.0.9") as c:
         codes = [(await register(c)).status_code for _ in range(11)]
     assert codes[:10] == [201] * 10 and codes[10] == 429
@@ -742,3 +766,48 @@ def test_clean_name() -> None:
     assert clean_name("x" * 100) == "x" * 60
     assert clean_name("\u200b") == "Asistente sin nombre"
     assert clean_name("\u2800\u3164 Claude \u2800") == "Claude"  # blank-looking letters count as spaces
+
+
+async def test_pending_requests_are_bounded_without_evicting(engine: AsyncEngine, member: httpx.AsyncClient,
+                                                             monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    """Valid /oauth/authorize calls are not rate-limited, so the table of pending requests is bounded instead:
+    anonymous requests per client and in total, refusing the newest (a real request already waiting is never pushed
+    out); a signed-in person's requests have their own cap. Expired rows are deleted by index, at most once a minute."""
+    monkeypatch.setattr(provider, "PENDING_PER_CLIENT", 3)
+    monkeypatch.setattr(provider, "MAX_PENDING", 5)
+    monkeypatch.setattr(provider, "PENDING_PER_USER", 4)
+    a, b = await new_client(engine), await new_client(engine)
+    _, challenge = pkce()
+    async with make_client(engine) as browser:  # a real person, not signed in yet
+        first = request_id(await authorize(browser, a["client_id"], challenge))
+        async with bare(engine) as junk:
+            codes = [(await authorize(junk, a["client_id"], challenge)).status_code for _ in range(4)]
+            assert codes == [302, 302, 429, 429]  # per client: 3 anonymous
+            codes = [(await authorize(junk, b["client_id"], challenge)).status_code for _ in range(3)]
+            assert codes == [302, 302, 429]  # in total: 5 anonymous
+        # the first request was not evicted: the person signs in and approves it; the consent page claims it
+        await login(browser, "luis@example.org")
+        assert (await browser.post("/api/oauth/consent", json={"request": first})).status_code == 200
+        async with engine.connect() as conn:
+            claimed = (await conn.execute(select(func.count()).select_from(oauth_requests)
+                                          .where(oauth_requests.c.user_id.is_not(None)))).scalar()  # fmt: skip
+        assert claimed == 1
+        assert "code" in await consent(browser, first)
+    # signed-in requests do not count with anonymous ones, and have their own cap
+    codes = [(await authorize(member, b["client_id"], challenge)).status_code for _ in range(5)]
+    assert codes == [302] * 4 + [429]
+
+    # expired rows: not counted, deleted at most once per PURGE_EVERY
+    async with engine.begin() as conn:
+        await conn.execute(update(oauth_requests).values(expires_at=datetime.now(UTC) - timedelta(seconds=1)))
+    monkeypatch.setattr(provider, "_requests_purged_at", None)
+    async with bare(engine) as anon:
+        assert (await authorize(anon, a["client_id"], challenge)).status_code == 302  # purges, then records
+        async with engine.begin() as conn:
+            await conn.execute(update(oauth_requests).values(expires_at=datetime.now(UTC) - timedelta(seconds=1)))
+        assert (await authorize(anon, a["client_id"], challenge)).status_code == 302  # no purge within the minute
+    async with engine.connect() as conn:
+        assert (await conn.execute(select(func.count()).select_from(oauth_requests))).scalar() == 2
+        indexes = set((await conn.execute(text("select indexname from pg_indexes where tablename='oauth_requests'")))
+                      .scalars())  # fmt: skip
+    assert {"ix_oauth_requests_expires_at", "ix_oauth_requests_client_id"} <= indexes

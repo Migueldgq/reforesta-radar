@@ -222,13 +222,15 @@ oauth_clients = Table(
 )
 
 # An authorisation request waiting for the person to sign in and decide (10 minutes). Bound to the browser that
-# opened /oauth/authorize by a cookie nonce.
+# opened /oauth/authorize by a cookie nonce. `user_id`: the signed-in person who opened it or its consent page (null:
+# anonymous so far; anonymous requests are capped, ADR 0035).
 oauth_requests = Table(
     "oauth_requests",
     metadata,
     Column("id_hash", Text, primary_key=True),
     Column("browser_hash", Text, nullable=False),
-    Column("client_id", Text, ForeignKey("oauth_clients.client_id", ondelete="CASCADE"), nullable=False),
+    Column("client_id", Text, ForeignKey("oauth_clients.client_id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("user_id", BigInteger, ForeignKey("users.id", ondelete="CASCADE")),
     Column("redirect_uri", Text, nullable=False),
     Column("redirect_explicit", Boolean, nullable=False),
     Column("state", Text),
@@ -236,7 +238,7 @@ oauth_requests = Table(
     Column("scopes", Text, nullable=False),
     Column("resource", Text, nullable=False),
     Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
-    Column("expires_at", TSTZ, nullable=False),
+    Column("expires_at", TSTZ, nullable=False, index=True),
 )
 
 # A person's permission for one assistant ("connected assistant" in Mi cuenta). Its codes and tokens die with it.

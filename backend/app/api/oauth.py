@@ -75,6 +75,7 @@ async def consent(body: ConsentIn, user: User, conn: Db, request: Request) -> Co
     pending = await provider.pending_request(conn, body.request, request.cookies.get(BROWSER_COOKIE))
     if pending is None:
         raise HTTPException(404, detail=GONE)
+    await provider.claim_request(conn, body.request, user.id)
     return ConsentInfo(assistant=pending.client_name, kind=clients.kind_of(pending.redirect_uri),
                        redirect_host=clients.host_of(pending.redirect_uri))  # fmt: skip
 

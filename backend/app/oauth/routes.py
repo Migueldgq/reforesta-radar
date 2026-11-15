@@ -32,6 +32,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
 from app.auth import throttle
+from app.auth.deps import session_user
 from app.config import settings
 from app.oauth.clients import is_loopback
 from app.oauth.provider import (
@@ -40,6 +41,7 @@ from app.oauth.provider import (
     RadarOAuthProvider,
     current_engine,
     pending_browser_nonce,
+    pending_user,
     same_resource,
 )
 
@@ -182,6 +184,8 @@ ERROR_MESSAGES = {
     "invalid_target": "El asistente ha pedido una dirección del radar que no existe.",
     "unsupported_response_type": "El asistente ha hecho una petición que el radar no admite.",
     "temporarily_unavailable": "Hay demasiadas peticiones ahora mismo. Espera unos minutos.",
+    "busy": "Hay demasiadas solicitudes de conexión pendientes. Entra en el radar con tu cuenta en este navegador y "
+    "vuelve a pulsar «Conectar» en tu asistente: con la sesión iniciada no hace falta esperar.",
 }
 ERROR_HEADERS = {
     **NO_STORE,
@@ -194,6 +198,7 @@ ERROR_HEADERS = {
 def _error_page(code: str, status: int = 400, headers: dict[str, str] | None = None) -> Response:
     safe = code if code.replace("_", "").isalpha() else "invalid_request"
     message = ERROR_MESSAGES.get(safe, "La solicitud de conexión no es válida o el asistente no está registrado.")
+    safe = "temporarily_unavailable" if safe == "busy" else safe
     return HTMLResponse(ERROR_PAGE.format(message=message, code=safe), status_code=status,
                         headers={**ERROR_HEADERS, **(headers or {})})  # fmt: skip
 
@@ -217,13 +222,22 @@ async def authorize(request: Request) -> Response:
     if not oauth_available():
         return _not_found()
     pending_browser_nonce.set(None)
+    # A signed-in browser's requests are not counted with anonymous ones (provider caps), so junk cannot crowd them out.
+    session = Response()
+    async with request.app.state.engine.begin() as conn:
+        user = await session_user(conn, request, session)
+    pending_user.set(user.id if user else None)
     response = await _run(request, _authorize.handle)
     nonce = pending_browser_nonce.get()
     if nonce is not None and response.status_code == 302:
         response.set_cookie(BROWSER_COOKIE, nonce, max_age=600, path=COOKIE_PATH, httponly=True, samesite="lax",
                             secure=settings.cookie_secure)  # fmt: skip
+        for cookie in session.headers.getlist("set-cookie"):  # a slid session keeps its cookie up to date
+            response.headers.append("set-cookie", cookie)
         response.headers["Referrer-Policy"] = "no-referrer"
         return response
+    if _error_of(response) == "temporarily_unavailable":  # too many pending requests (provider), not this caller's
+        return _error_page("busy", 429, {"Retry-After": "60"})
     wait = _count_failure(request, throttle.oauth_authorize_failures)
     location = response.headers.get("location")
     if response.status_code == 302 and location and is_loopback(location) and not wait:
@@ -278,21 +292,17 @@ async def token(request: Request) -> Response:
 
 
 async def register(request: Request) -> Response:
-    """Unauthenticated by nature (RFC 7591). A global budget per 10 minutes bounds how fast the client table fills
-    (with the cap and the purge in the provider); per IP only when a trusted proxy gives real client IPs (otherwise
-    every caller shares one IP and the per-IP limit would be the global one)."""
+    """Unauthenticated by nature (RFC 7591). No global rate limit: any budget shared by everyone can be kept empty by
+    one outsider. The table is bounded by the provider instead (MAX_CLIENTS; when full, the oldest unused registration
+    makes room). Per IP only when a trusted proxy gives real client IPs (otherwise every caller shares one IP)."""
     if not oauth_available():
         return _not_found()
-    limiters = [throttle.oauth_register_global]
     if settings.trusted_proxy:
-        limiters.append(throttle.oauth_register_ip)
-    keys = ["*", _ip(request)]
-    for limiter, key in zip(limiters, keys, strict=False):
-        if wait := limiter.retry_after(key):
-            log.warning("oauth: registration refused, %s over its limit", "budget" if key == "*" else "ip")
+        ip = _ip(request)
+        if wait := throttle.oauth_register_ip.retry_after(ip):
+            log.warning("oauth: registration refused, ip over its limit")
             return _too_many(wait)
-    for limiter, key in zip(limiters, keys, strict=False):
-        limiter.hit(key)
+        throttle.oauth_register_ip.hit(ip)
     response = await _run(request, _register.handle)
     response.headers.update(NO_STORE)
     return response

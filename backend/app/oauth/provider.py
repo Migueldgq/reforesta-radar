@@ -56,11 +56,17 @@ REFRESH_DAYS = 30
 CODE_TTL = timedelta(seconds=60)
 REQUEST_TTL = timedelta(minutes=10)
 UNUSED_CLIENT_TTL = timedelta(hours=24)  # a registration nobody authorised is deleted after this
-UNUSED_CLIENT_TTL_NEAR_CAP = timedelta(minutes=10)  # ...or after this once the table is 80 % full (= REQUEST_TTL)
-NEAR_CAP = 0.8
 REUSE_GRACE = timedelta(seconds=10)  # a used code or rotated refresh token again within this: refused, not revoked
 IDLE_CLIENT_TTL = timedelta(days=90)  # a client with no live grant and no use for this long, too
-MAX_CLIENTS = 500
+# Registration is unauthenticated and never rate-limited as a whole (a global budget is one anyone can keep empty):
+# when the table is full, the oldest registration nobody uses (no approval, no pending request) makes room.
+MAX_CLIENTS = 5000
+# Pending authorisation requests. Anonymous ones (nobody signed in yet) are capped per client and in total, refusing the
+# newest so junk can never evict a real one; a signed-in person's requests do not count there (their own cap).
+PENDING_PER_CLIENT = 10
+MAX_PENDING = 1000
+PENDING_PER_USER = 20
+PURGE_EVERY = timedelta(minutes=1)  # expired requests are deleted at most this often
 USED_EVERY = timedelta(minutes=5)  # grants' last_used_at is written at most this often
 AUTH_METHODS = ("none", "client_secret_post", "client_secret_basic")
 GRANT_TYPES = frozenset({"authorization_code", "refresh_token"})
@@ -71,6 +77,9 @@ MAX_STATE = 512
 current_engine: contextvars.ContextVar[AsyncEngine] = contextvars.ContextVar("radar_oauth_engine")
 # The browser nonce of the request /oauth/authorize just recorded; the route puts it in a cookie.
 pending_browser_nonce: contextvars.ContextVar[str | None] = contextvars.ContextVar("radar_oauth_nonce", default=None)
+# The person signed in in the browser that calls /oauth/authorize, if any (set by the route from the session cookie).
+pending_user: contextvars.ContextVar[int | None] = contextvars.ContextVar("radar_oauth_user", default=None)
+_requests_purged_at: datetime | None = None
 
 
 def _now() -> datetime:
@@ -195,8 +204,8 @@ class RadarOAuthProvider:
         async with _engine().begin() as conn:
             await purge_clients(conn, t)
             count = (await conn.execute(select(func.count()).select_from(oauth_clients))).scalar_one()
-            if count >= MAX_CLIENTS * NEAR_CAP:  # under pressure, unused registrations go after 10 minutes
-                await purge_clients(conn, t, unused_ttl=UNUSED_CLIENT_TTL_NEAR_CAP)
+            if count >= MAX_CLIENTS:
+                await _evict_unused(conn, t, count - MAX_CLIENTS + 1)
                 count = (await conn.execute(select(func.count()).select_from(oauth_clients))).scalar_one()
             full = count >= MAX_CLIENTS
             if not full:
@@ -228,24 +237,31 @@ class RadarOAuthProvider:
             raise AuthorizeError("invalid_request", "state too long")
         request_id, request_hash = new_token()
         nonce, nonce_hash = new_token()
+        user_id = pending_user.get()
         t = _now()
         async with _engine().begin() as conn:
-            await conn.execute(delete(oauth_requests).where(oauth_requests.c.expires_at < t))
-            await conn.execute(
-                insert(oauth_requests).values(
-                    id_hash=request_hash,
-                    browser_hash=nonce_hash,
-                    client_id=client.client_id,
-                    redirect_uri=str(params.redirect_uri),
-                    redirect_explicit=params.redirect_uri_provided_explicitly,
-                    state=params.state,
-                    code_challenge=params.code_challenge,
-                    scopes=SCOPE,
-                    resource=settings.mcp_team_url,
-                    created_at=t,
-                    expires_at=t + REQUEST_TTL,
+            await _purge_requests(conn, t)
+            refused = await _too_many_pending(conn, t, client.client_id, user_id)
+            if not refused:
+                await conn.execute(
+                    insert(oauth_requests).values(
+                        id_hash=request_hash,
+                        browser_hash=nonce_hash,
+                        client_id=client.client_id,
+                        user_id=user_id,
+                        redirect_uri=str(params.redirect_uri),
+                        redirect_explicit=params.redirect_uri_provided_explicitly,
+                        state=params.state,
+                        code_challenge=params.code_challenge,
+                        scopes=SCOPE,
+                        resource=settings.mcp_team_url,
+                        created_at=t,
+                        expires_at=t + REQUEST_TTL,
+                    )
                 )
-            )
+        if refused:  # raised outside `async with` (frozen dataclass, see register_client)
+            log.warning("oauth: authorization request refused, too many pending (client %s)", client.client_id)
+            raise AuthorizeError("temporarily_unavailable", "too many pending authorization requests")
         pending_browser_nonce.set(nonce)
         return f"{settings.public_url}/autorizar?solicitud={request_id}"
 
@@ -448,9 +464,15 @@ async def access_token_user(engine: AsyncEngine, token: str) -> GrantUser | None
                      resource=row.resource)  # fmt: skip
 
 
-async def purge_clients(conn: AsyncConnection, t: datetime, unused_ttl: timedelta = UNUSED_CLIENT_TTL) -> None:
-    """Registrations nobody authorised within `unused_ttl`, and clients without a live grant idle for
-    IDLE_CLIENT_TTL (their dead grants go with them)."""
+def _pending_for_client(t: datetime):  # noqa: ANN202
+    return select(oauth_requests.c.id_hash).where(
+        oauth_requests.c.client_id == oauth_clients.c.client_id, oauth_requests.c.expires_at > t
+    )
+
+
+async def purge_clients(conn: AsyncConnection, t: datetime) -> None:
+    """Registrations nobody authorised within UNUSED_CLIENT_TTL, and clients without a live grant idle for
+    IDLE_CLIENT_TTL (their dead grants go with them). Never one with a pending request: its person may be signing in."""
     live = select(oauth_grants.c.id).where(
         oauth_grants.c.client_id == oauth_clients.c.client_id,
         oauth_grants.c.revoked_at.is_(None),
@@ -459,9 +481,49 @@ async def purge_clients(conn: AsyncConnection, t: datetime, unused_ttl: timedelt
     await conn.execute(
         delete(oauth_clients).where(
             ~live.exists(),
-            ((oauth_clients.c.last_used_at.is_(None)) & (oauth_clients.c.created_at < t - unused_ttl))
+            ~_pending_for_client(t).exists(),
+            ((oauth_clients.c.last_used_at.is_(None)) & (oauth_clients.c.created_at < t - UNUSED_CLIENT_TTL))
             | (oauth_clients.c.last_used_at < t - IDLE_CLIENT_TTL),
         )
+    )
+
+
+async def _evict_unused(conn: AsyncConnection, t: datetime, n: int) -> None:
+    """The table is full: the `n` oldest registrations never approved and without a pending request make room. Junk
+    registrations can only push out other unused ones; anonymous pending requests are capped (MAX_PENDING), so
+    nearly the whole table stays evictable."""
+    oldest = (
+        select(oauth_clients.c.client_id)
+        .where(oauth_clients.c.last_used_at.is_(None), ~_pending_for_client(t).exists())
+        .order_by(oauth_clients.c.created_at)
+        .limit(n)
+    )
+    await conn.execute(delete(oauth_clients).where(oauth_clients.c.client_id.in_(oldest.scalar_subquery())))
+
+
+async def _purge_requests(conn: AsyncConnection, t: datetime) -> None:
+    """Deletes expired authorisation requests, at most every PURGE_EVERY (by index); live counts ignore expired rows."""
+    global _requests_purged_at
+    if _requests_purged_at is None or t - _requests_purged_at >= PURGE_EVERY:
+        _requests_purged_at = t
+        await conn.execute(delete(oauth_requests).where(oauth_requests.c.expires_at <= t))
+
+
+async def _too_many_pending(conn: AsyncConnection, t: datetime, client_id: str, user_id: int | None) -> bool:
+    live = select(func.count()).select_from(oauth_requests).where(oauth_requests.c.expires_at > t)
+    if user_id is not None:
+        return (await conn.execute(live.where(oauth_requests.c.user_id == user_id))).scalar_one() >= PENDING_PER_USER
+    anonymous = live.where(oauth_requests.c.user_id.is_(None))
+    per_client = (await conn.execute(anonymous.where(oauth_requests.c.client_id == client_id))).scalar_one()
+    return per_client >= PENDING_PER_CLIENT or (await conn.execute(anonymous)).scalar_one() >= MAX_PENDING
+
+
+async def claim_request(conn: AsyncConnection, request_id: str, user_id: int) -> None:
+    """The consent page opened by a signed-in person: the request is theirs from now on (no longer anonymous)."""
+    await conn.execute(
+        update(oauth_requests)
+        .where(oauth_requests.c.id_hash == hash_token(request_id), oauth_requests.c.user_id.is_(None))
+        .values(user_id=user_id)
     )
 
 
