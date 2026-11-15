@@ -1,0 +1,87 @@
+# Continuous deployment (docs/despliegue.md, ADR 0037). After CI passes on a push to main, SSH to the server with a
+# key that can only run deploy/ci-deploy.sh, deploy that exact commit and check the public site. Manual runs
+# (Actions -> Deploy -> Run workflow) deploy main's head or a given commit of main, e.g. to roll back.
+#
+# Settings of the `production` environment (Settings -> Environments):
+#   secret   DEPLOY_SSH_KEY      private half of the deploy key (generated on the server)
+#   variable DEPLOY_HOST         server address
+#   variable DEPLOY_USER         deploy
+#   variable DEPLOY_KNOWN_HOSTS  the server's host key line(s), as in ~/.ssh/known_hosts
+#   variable RADAR_PUBLIC_URL    https://<domain>, the same as on the server
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit of main to deploy (40 hex characters). Empty: main's head."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+# Never two deploys at once, and never cancel one halfway.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Only this repository, only a CI run of a push to main (not a pull request, not a fork), or a manual run on main.
+    if: >-
+      github.repository == 'Migueldgq/reforesta-radar' && (
+        (github.event_name == 'workflow_run'
+          && github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.event == 'push'
+          && github.event.workflow_run.head_branch == 'main'
+          && github.event.workflow_run.head_repository.full_name == github.repository)
+        || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.RADAR_PUBLIC_URL }}
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || inputs.sha || github.sha }}
+      URL: ${{ vars.RADAR_PUBLIC_URL }}
+    steps:
+      - name: Check the commit id
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Not a full commit id: $SHA"; exit 1; }
+          [[ "$URL" =~ ^https://[a-z0-9.-]+$ ]] || { echo "RADAR_PUBLIC_URL must be https://<domain> with no path"; exit 1; }
+          echo "Deploying $SHA to $URL"
+
+      - name: SSH key and pinned host key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Deploy on the server
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ServerAliveInterval=30 "$DEPLOY_USER@$DEPLOY_HOST" "deploy $SHA"
+
+      - name: Public health check
+        run: |
+          curl -fsS --retry 6 --retry-delay 10 --retry-all-errors -o /dev/null "$URL/login"
+          issuer=$(curl -fsS --retry 3 --retry-all-errors "$URL/.well-known/oauth-authorization-server" | jq -r .issuer)
+          [ "$issuer" = "$URL" ] || { echo "OAuth issuer is '$issuer', expected '$URL'"; exit 1; }
+          echo "OK: $URL"
+
+      - name: Remove the key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
