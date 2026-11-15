@@ -26,6 +26,32 @@ export interface Opportunity {
   rsc?: { whyReforesta: string; pitchAngle: string; cadence: string };
   fit: FitAnalysis;           // existing type in src/lib/types.ts
   firstSeenAt?: string;       // ISO; only with the Postgres store (first ingest that saw it)
+  history?: History | null;   // BDNS only: previous editions and who won them (null/absent when unknown)
+}
+/** Previous editions of a BDNS call (newest first; the current one is not listed). Never names natural persons. */
+export interface History {
+  editions: HistoryEdition[];
+  typicalOpening: { from: number; to: number; text: string; irregular: boolean } | null; // text: ready Spanish phrase
+  typicalWindow: string | null; // "10 días hábiles"
+  awards: AwardsSummary | null;
+}
+export interface HistoryEdition {
+  year: number;
+  numero: string;
+  url: string;              // BDNS page of that edition
+  openedAt: string | null;  // YYYY-MM-DD
+  closesAt: string | null;
+  window: string | null;    // "10 días hábiles"
+  awards: { count: number; nonProfit: number; importe: number | null } | null; // null: not checked
+}
+export interface AwardsSummary {
+  editions: number[];       // years the counts come from
+  total: number;
+  nonProfit: number;
+  nonProfitShare: number;
+  byClass: Record<string, number>; // sinAnimo, empresa, ayuntamiento, publico, persona, cooperativa, ...
+  wonByReforesta: { year: number; importe: number | null }[];
+  peers: string[];          // environmental NGOs among the winners
 }
 export interface OpportunitiesResponse {
   items: Opportunity[]; sources: SourceHealth[]; fetchedAt: string; cached: boolean;

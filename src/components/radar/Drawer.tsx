@@ -1,14 +1,14 @@
 "use client";
 
-import { ArrowUpRight, CircleAlert, CircleCheck, FileText, Loader2, ScanSearch } from "lucide-react";
+import { ArrowUpRight, Award, CircleAlert, CircleCheck, FileText, Loader2, ScanSearch } from "lucide-react";
 import { Fragment, useState } from "react";
-import type { Opportunity, OpportunityDocument } from "@/lib/opportunity";
+import type { AwardsSummary, History, Opportunity, OpportunityDocument } from "@/lib/opportunity";
 import type { PdfAnalysisResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { daysLeft, fmtDate, fmtEuros, KIND_LABELS, tidy, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel } from "./model";
+import { daysLeft, fmtDate, fmtDayShort, fmtEuros, joinEs, KIND_LABELS, parseDay, tidy, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel } from "./model";
 import { useRadar } from "./store";
 import { analyzePdf, PdfResult } from "./PdfView";
 import { DeadlineChip, ScoreChip } from "./ui";
@@ -94,6 +94,7 @@ function DrawerBody({ o }: { o: Opportunity }) {
         )}
       </dl>
     </section>,
+    o.history && hasHistory(o.history) && <HistorySection key="history" h={o.history} />,
     o.summary && (
       <section key="summary" className="space-y-2">
         <SectionTitle>De qué va</SectionTitle>
@@ -173,6 +174,153 @@ function Fact({ label, children, wide }: { label: string; children: React.ReactN
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd>{children}</dd>
     </div>
+  );
+}
+
+function hasHistory(h: History): boolean {
+  return h.editions.length > 0 || !!h.awards || !!h.typicalOpening || !!h.typicalWindow;
+}
+
+/** Recipient classes in plain Spanish (plural, singular); anything not listed is "otras". */
+const CLASS_NAMES: Record<string, [string, string]> = {
+  sinAnimo: ["entidades sin ánimo de lucro", "entidad sin ánimo de lucro"],
+  ayuntamiento: ["ayuntamientos", "ayuntamiento"],
+  empresa: ["empresas", "empresa"],
+  publico: ["universidades y organismos públicos", "universidad u organismo público"],
+  persona: ["particulares", "particular"],
+  otras: ["otras", "otra"],
+};
+// One hue for the class Reforesta belongs to; greys for the rest, darkest for the largest.
+const GREYS = ["bg-foreground/45", "bg-foreground/30", "bg-foreground/18", "bg-foreground/10"];
+
+function classRows(byClass: Record<string, number>) {
+  const m = new Map<string, number>();
+  for (const [k, n] of Object.entries(byClass)) {
+    const key = k in CLASS_NAMES ? k : "otras";
+    if (n > 0) m.set(key, (m.get(key) ?? 0) + n);
+  }
+  const rows = [...m].map(([key, n]) => ({ key, n })).sort((a, b) => (a.key === "sinAnimo" ? -1 : b.key === "sinAnimo" ? 1 : b.n - a.n));
+  let g = 0;
+  return rows.map((r) => ({ ...r, swatch: r.key === "sinAnimo" ? "bg-primary" : GREYS[Math.min(g++, GREYS.length - 1)] }));
+}
+
+const plural = (n: number, one: string, many: string) => `${n.toLocaleString("es-ES")} ${n === 1 ? one : many}`;
+
+function WinnersBlock({ a }: { a: AwardsSummary }) {
+  const ayudas = plural(a.total, "ayuda", "ayudas");
+  const where =
+    a.total === 0
+      ? null
+      : a.nonProfit === a.total
+        ? a.total === 1 ? "fue a una entidad sin ánimo de lucro" : "todas a entidades sin ánimo de lucro"
+        : a.nonProfit === 0
+          ? "ninguna a entidades sin ánimo de lucro"
+          : `${a.nonProfit.toLocaleString("es-ES")} a entidades sin ánimo de lucro`;
+  const rows = classRows(a.byClass);
+  const years = joinEs([...a.editions].sort((x, y) => y - x).map(String));
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">Quién la ganó</p>
+      <p className="leading-snug">
+        {a.total === 0 ? `No consta ninguna ayuda concedida en ${years}.` : `En ${years} se dieron ${ayudas}: ${where}.`}
+        {a.peers.length > 0 && a.nonProfit > 0 && <> Entre ellas: {joinEs(a.peers)}.</>}
+      </p>
+      {rows.length > 1 && (
+        <figure className="space-y-2 pt-1">
+          <div className="flex h-2 w-full gap-px overflow-hidden rounded-full" aria-hidden>
+            {rows.map((r) => (
+              <span key={r.key} className={r.swatch} style={{ flexGrow: r.n, flexBasis: 0, minWidth: 3 }} />
+            ))}
+          </div>
+          <figcaption>
+            <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              {rows.map((r) => (
+                <li key={r.key} className="flex items-center gap-1.5">
+                  <span className={cn("size-2 shrink-0 rounded-[2px]", r.swatch)} aria-hidden />
+                  <span>
+                    <span className="font-medium text-foreground tabular-nums">{r.n.toLocaleString("es-ES")}</span> {CLASS_NAMES[r.key][r.n === 1 ? 1 : 0]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </figcaption>
+        </figure>
+      )}
+    </div>
+  );
+}
+
+function HistorySection({ h }: { h: History }) {
+  const wins = h.awards?.wonByReforesta ?? [];
+  const wonYears = new Set(wins.map((w) => w.year));
+  const opened = (s: string | null) => {
+    const t = parseDay(s);
+    return t == null ? null : fmtDayShort(t);
+  };
+  return (
+    <section aria-labelledby="hist-h" className="space-y-4">
+      <SectionTitle id="hist-h">Ediciones anteriores</SectionTitle>
+
+      {wins.length > 0 && (
+        <div className="flex gap-2.5 rounded-lg bg-primary/[0.06] px-3.5 py-3">
+          <Award className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+          <div className="min-w-0 space-y-0.5">
+            <p className="font-medium">Reforesta la ganó en {joinEs(wins.map((w) => String(w.year)))}</p>
+            {wins.some((w) => w.importe) && (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {wins.map((w) => `${w.year}: ${fmtEuros(w.importe) ?? "importe no publicado"}`).join(" · ")}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(h.typicalOpening || h.typicalWindow) && (
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+          {h.typicalOpening && <Fact label="Cuándo abre">{h.typicalOpening.text}</Fact>}
+          {h.typicalWindow && <Fact label="Plazo habitual">{h.typicalWindow}</Fact>}
+        </dl>
+      )}
+
+      {h.awards && <WinnersBlock a={h.awards} />}
+
+      {h.editions.length > 0 && (
+        <ul className="divide-y rounded-lg border" aria-label="Ediciones anteriores en BDNS">
+          {h.editions.map((e) => {
+            const from = opened(e.openedAt);
+            const to = opened(e.closesAt);
+            const when = from ? `Abrió el ${from}${to ? ` → ${to}` : e.window ? ` · ${e.window}` : ""}` : (e.window ?? "Sin fecha de apertura");
+            const aw = e.awards;
+            const awText = !aw ? "Sin datos de ayudas" : aw.count === 0 ? "Sin ayudas registradas" : [plural(aw.count, "ayuda", "ayudas"), fmtEuros(aw.importe)].filter(Boolean).join(" · ");
+            return (
+              <li key={e.numero} className="flex items-center gap-3 px-3.5 py-2.5">
+                <span className="w-10 shrink-0 font-medium tabular-nums">{e.year}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="leading-snug">{when}</p>
+                  <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground tabular-nums">
+                    {awText}
+                    {wonYears.has(e.year) && (
+                      <span className="inline-flex items-center gap-1 font-medium text-primary">
+                        <Award className="size-3" aria-hidden /> La ganasteis
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <a
+                  href={e.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Ver la edición de ${e.year} en BDNS (se abre en otra pestaña)`}
+                  className="inline-flex shrink-0 items-center gap-0.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                  BDNS <ArrowUpRight className="size-3.5" aria-hidden />
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 

@@ -125,6 +125,28 @@ export function fmtEuros(n: number | null): string | null {
   return new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 }
 
+/** "a, b y c" */
+export function joinEs(xs: string[]): string {
+  return xs.length < 2 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`;
+}
+
+/** Past editions Reforesta won (newest first); empty when unknown. */
+export function reforestaWins(o: Opportunity): { year: number; importe: number | null }[] {
+  return o.history?.awards?.wonByReforesta ?? [];
+}
+
+/**
+ * When the next edition usually opens, short enough for the list's date note.
+ * Keeps the API's own wording; a "Convocatoria irregular: no sale…" phrase keeps only what follows the colon.
+ */
+export function openingNote(o: Opportunity): string | null {
+  const t = o.history?.typicalOpening?.text?.trim();
+  if (!t) return null;
+  const i = t.indexOf(": ");
+  const s = i >= 0 ? t.slice(i + 2) : t;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export function fmtAgo(iso: string | null): string {
   if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
