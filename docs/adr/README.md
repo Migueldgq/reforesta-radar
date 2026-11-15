@@ -78,6 +78,7 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0025](0025-servidor-mcp-de-solo-lectura.md) | Servidor MCP de solo lectura para el asistente del equipo | Sustituida por 0026 | 2026-11-15 |
 | [0026](0026-servidor-mcp-de-solo-lectura-con-dos-niveles.md) | Servidor MCP de solo lectura en `/mcp`, con acceso público y de equipo | Aceptada | 2026-11-15 |
 | [0027](0027-tokens-personales-para-el-mcp.md) | Tokens personales de acceso para el servidor MCP | Aceptada | 2026-11-15 |
+| [0028](0028-plazo-estimado-de-las-convocatorias-sin-fecha.md) | Plazo estimado de las convocatorias BDNS sin fecha de cierre | Aceptada | 2026-11-15 |
 
 Las ADR 0016, 0017 y 0018 y la parte de peticiones de ingesta de la 0011 están en la rama `feat/fase-2-usuarios`,
 aún sin fusionar en `main`.

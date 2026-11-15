@@ -5,7 +5,7 @@ in settings.timezone, like the TS (`today.setHours(0, 0, 0, 0)` on a Madrid mach
 """
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from app.config import local_today, settings
 from app.models import Contract, DeadlineState, FitAnalysis, OpportunityKind, Tier, WorkLine
@@ -60,6 +60,10 @@ class ScoreInput(Contract):
     abierto: bool | None = None
     extra_text: str | None = None  # purpose / description text, used for topic matching
     kind: OpportunityKind | None = None
+    # Only for calls without an end date (BDNS): the official publication date and the term as written
+    # ("Dos meses desde el día siguiente a la publicación"), to estimate whether the window is over (step 6).
+    fecha_publicacion: str | None = None
+    texto_plazo: str | None = None
 
 
 def tier_for(score: int) -> Tier:
@@ -81,6 +85,69 @@ def _parse_date(s: str | None) -> datetime | None:
     except ValueError:
         return None
     return d if d.tzinfo else d.replace(tzinfo=settings.tz)
+
+
+# ---------- undated calls: is the window over? ----------
+
+# An undated call published this long ago is probably closed: 98% of the dated competitive BDNS calls (271 of 277 in
+# the Nov 2026 data) close within 270 days of their publication.
+STALE_UNDATED_DAYS = 270
+_NUM_WORDS = {"un": 1, "una": 1, "uno": 1, "dos": 2, "dues": 2, "dous": 2, "tres": 3, "cuatro": 4, "quatre": 4,
+              "catro": 4, "cinco": 5, "cinc": 5, "seis": 6, "sis": 6, "diez": 10, "deu": 10, "quince": 15,
+              "quinze": 15, "veinte": 20, "vint": 20, "treinta": 30, "trenta": 30}  # fmt: skip
+# "N días hábiles / naturales" (es, ca, gl), "N meses / mesos", also "VEINTE (20) DÍAS HÁBILES"; a bare "N días" is
+# left out: whether it means working or calendar days is not said.
+_TERM_RE = re.compile(
+    r"(?<![a-z0-9])(" + "|".join(_NUM_WORDS) + r"|[0-9]{1,3})(?:\s*\([0-9]{1,3}\))?\s+"
+    r"(?:(?:dias?|dies)\s+)?(habiles|habils|naturales|naturals|meses|mesos|mes)(?![a-z])"
+)
+_SAME_DAY_NEXT_MONTH = re.compile(r"\b(mismo|mesmo) ordinal\b")  # Galicia: "mismo ordinal del mes siguiente"
+_FROM_PUBLICATION = re.compile(r"publicac|publicidad|publicacio|endema")
+_NO_FIXED_END = ("todo el ano", "tot l any", "todo o ano", "permanent", "hasta agotar", "fins a esgotar",
+                 "ata esgotar", "mientras exista", "pendiente de", "no es necesario", "convocatoria abierta",
+                 "de forma continua")  # fmt: skip
+
+
+def _add_months(d: date, n: int) -> date:
+    y, m = divmod(d.month - 1 + n, 12)
+    y, m = d.year + y, m + 1
+    last = (date(y + m // 12, m % 12 + 1, 1) - date.resolution).day
+    return date(y, m, min(d.day, last))
+
+
+def estimated_end(term: str | None, published: str | None, opens: str | None) -> tuple[date, str] | None:
+    """(estimated last day, how it was counted) from a relative term counted from the publication, or None when the
+    term is missing, ambiguous (two different terms, "N días" without hábiles/naturales) or not tied to the
+    publication. The term runs from the day after `published`, or from `opens` when BDNS gives the start date.
+    Working days skip weekends only (no holidays), so the result is an estimate, never an exact date."""
+    if not term or not (published or opens):
+        return None
+    text = normalize_text(term)
+    found = {(_NUM_WORDS.get(n) or int(n), "mes" if u.startswith("mes") else u[:5]) for n, u in _TERM_RE.findall(text)}
+    if _SAME_DAY_NEXT_MONTH.search(text):
+        found.add((1, "mes"))
+    if len(found) != 1 or not _FROM_PUBLICATION.search(text):
+        return None
+    [(n, unit)] = found
+    try:  # the day before the first day of the window
+        base = date.fromisoformat(opens[:10]) - date.resolution if opens else date.fromisoformat(published or "")
+    except ValueError:
+        return None
+    if unit == "mes":
+        end, label = _add_months(base, n), f"{n} {'mes' if n == 1 else 'meses'}"
+    elif unit == "natur":
+        end, label = base + timedelta(days=n), f"{n} días naturales"
+    else:
+        end, left = base, n
+        while left:
+            end += date.resolution
+            left -= end.weekday() < 5
+        label = f"{n} días hábiles"
+    return end, f"{label} desde {'la apertura del plazo' if opens else 'la publicación'}"
+
+
+def _short_date(d: date) -> str:
+    return f"{d.day} {_MONTHS_SHORT[d.month - 1]} {d.year}"
 
 
 def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysis:
@@ -212,6 +279,25 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
     elif inp.abierto is False and start and start.timestamp() <= today_ts - 45 * DAY_S:
         # started 45+ days ago, BDNS says not open and no end date: treat as closed
         deadline_state = "cerrada"
+    elif inp.abierto is not True and inp.fecha_publicacion:
+        # no end date and BDNS does not say open: estimate from the term, else from the age of the publication
+        today_d = today_dt.date()
+        if est := estimated_end(inp.texto_plazo, inp.fecha_publicacion, inp.fecha_inicio_solicitud):
+            if est[0] < today_d:
+                deadline_state = "cerrada"
+                warnings.append(f"Plazo estimado: cerró hacia el {_short_date(est[0])} ({est[1]}).")
+        else:
+            try:
+                age = (today_d - date.fromisoformat(inp.fecha_publicacion[:10])).days
+            except ValueError:
+                age = 0
+            open_ended = normalize_text(f"{inp.texto_plazo or ''} {inp.titulo}")
+            if age >= STALE_UNDATED_DAYS and not any(t in open_ended for t in _NO_FIXED_END):
+                deadline_state = "cerrada"
+                warnings.append(
+                    f"Probablemente cerrada: sin fecha de cierre y publicada hace {age // 30} meses; "
+                    "confirmar en las bases."
+                )
 
     # Closed competitive grant open to non-profits = next year's pipeline: keep its fit, small timing
     # penalty only (an open equivalent gets +10, so it always ranks above). Anything else closed sinks.

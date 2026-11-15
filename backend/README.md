@@ -121,8 +121,9 @@ Correctness over elegance: same numbers, same Spanish strings, same order of rea
 The goldens and the `expected.json` fixtures are **frozen**: they were dumped from the TypeScript backend before it
 was deleted (the dump tools `tools/dump_ts_*.ts` and `tools/capture_*_inputs.py` went with it; see git history
 before the Python cutover). They pin the scoring as it was at parity. When you change the scoring on purpose,
-update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 14: the
-BDNS history signal; it is stored in `ingest_runs.scoring_version`).
+update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 15: the
+BDNS history signal, then the estimated end of undated BDNS calls, ADR 0028; it is stored in
+`ingest_runs.scoring_version`).
 
 Details that matter when porting more code:
 
