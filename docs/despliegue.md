@@ -49,7 +49,9 @@ cd /opt/reforesta-radar
 ## Cómo llega un cambio a producción (CI/CD)
 
 1. Se abre un PR. **CI** (`.github/workflows/ci.yml`) pasa `ruff check`, `ruff format --check` y `pytest` del
-   backend (con un Postgres 16 de usar y tirar) y `npm ci`, `tsc --noEmit`, `npm run lint` y `npm run build` de la web.
+   backend (con un Postgres 16 de usar y tirar), `npm ci`, `tsc --noEmit`, `npm run lint` y `npm run build` de la web,
+   y las pruebas de extremo a extremo con Playwright ([e2e/README.md](../e2e/README.md)). Deploy solo arranca si los
+   tres trabajos salen en verde.
 2. Se fusiona en `main`. CI vuelve a pasar sobre `main`.
 3. Si CI sale en verde, **Deploy** (`.github/workflows/deploy.yml`) entra por SSH con la clave de despliegue y pide
    `deploy <commit>`. En el servidor, `deploy/ci-deploy.sh` comprueba que es un commit completo de 40 caracteres que
@@ -60,6 +62,13 @@ cd /opt/reforesta-radar
    través de Caddy. Si la versión nueva no arranca sana, **vuelve sola a la anterior** (sus imágenes siguen en disco)
    y el workflow sale en rojo.
 5. El workflow comprueba desde fuera `https://<dominio>/login` y que el emisor OAuth es exactamente la URL pública.
+6. Después ejecuta `deploy/smoke.sh <URL pública>` (del commit desplegado): comprobaciones de solo lectura desde fuera
+   (`/login` con el nombre de la app, `/api/board` → 401 sin sesión, `/api/public/oportunidades` con datos, `POST /mcp`
+   público → 200, `POST /mcp/equipo` → 401 con `resource_metadata`, emisor OAuth, http → https y HSTS). No crea
+   cuentas, clientes OAuth ni datos. **Ojo: corre después de la vuelta atrás automática de `deploy.sh`.** Si falla, el
+   workflow sale en rojo con cada comprobación fallida anotada, pero la versión nueva sigue en marcha: vuelve a la
+   anterior a mano (abajo, «Volver a una versión anterior»). Se puede lanzar en cualquier momento desde cualquier
+   ordenador: `deploy/smoke.sh https://reforesta-radar.miguelddev.com`.
 
 Tarda unos 3-5 minutos desde que CI termina (la mayor parte es construir en el servidor).
 

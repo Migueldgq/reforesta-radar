@@ -214,6 +214,9 @@ Qué hacer, cada cuánto y cómo: [docs/mantenimiento.md](./docs/mantenimiento.m
 - [docs/adr/](./docs/adr/README.md): decisiones de arquitectura y por qué se tomaron.
 - [backend/README.md](./backend/README.md): código del backend, tests y cómo añadir una fuente.
 
+Pruebas de extremo a extremo (Playwright, app entera con datos fijos, en una pila aparte en los puertos 3090/8090/5490):
+`npm run e2e`. Detalle en [e2e/README.md](./e2e/README.md).
+
 Desarrollo del frontend con recarga en caliente (Node.js 20.9 o superior): `docker compose up -d postgres api`,
 `npm install` y `npm run dev` (http://localhost:3000, llama a la API en `localhost:8010`).
 
