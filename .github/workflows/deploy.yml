@@ -82,6 +82,13 @@ jobs:
           [ "$issuer" = "$URL" ] || { echo "OAuth issuer is '$issuer', expected '$URL'"; exit 1; }
           echo "OK: $URL"
 
+      # Read-only checks from outside (deploy/smoke.sh, of the deployed commit). Runs after deploy.sh's own rollback
+      # window: a failure here turns the run red but does not roll back (docs/despliegue.md).
+      - name: Post-deploy smoke checks
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/smoke.sh" "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$SHA/deploy/smoke.sh"
+          bash "$RUNNER_TEMP/smoke.sh" "$URL"
+
       - name: Remove the key
         if: always()
         run: rm -f ~/.ssh/deploy_key

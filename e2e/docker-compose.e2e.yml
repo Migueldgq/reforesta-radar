@@ -1,0 +1,16 @@
+# End-to-end stack (e2e/README.md): the normal compose file plus this override, always as its own project with its
+# own env file, so it never touches a developer's stack (other project name, images, volume and ports):
+#
+#   docker compose -p radar-e2e --env-file e2e/e2e.env -f docker-compose.yml -f e2e/docker-compose.e2e.yml up -d --build --wait
+#
+# Same images as production. Differences: no scheduler (no live ingest from the official sites; the data comes from
+# backend/tests/e2e_seed.py) and the backend tests mounted read-only so the seed and its fixtures are available.
+services:
+  api:
+    environment:
+      RADAR_E2E: "1" # lets backend/tests/e2e_seed.py empty this database
+    volumes:
+      - ./backend/tests:/app/tests:ro
+
+  ingest-scheduler:
+    profiles: ["live-ingest"] # never started here

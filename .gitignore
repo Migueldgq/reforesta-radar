@@ -37,6 +37,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# end-to-end tests (e2e/README.md): generated accounts and sessions, reports
+/e2e/.auth/
+/playwright-report/
+/test-results/
+/blob-report/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
