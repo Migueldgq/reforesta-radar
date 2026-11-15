@@ -93,3 +93,4 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0040](0040-palabras-ambiguas-y-sin-bonificacion-sin-tema.md) | Palabras clave ambiguas y ninguna bonificación sin encaje temático | Aceptada | 2026-11-15 |
 | [0041](0041-revision-por-ia-que-solo-descarta.md) | Revisión por IA: una segunda opinión que solo descarta, nunca puntúa | Aceptada | 2026-11-15 |
 | [0042](0042-licitaciones-de-instalaciones-por-su-objeto-y-motivo-life-por-subprograma.md) | Licitaciones de instalaciones juzgadas por su objeto y motivo LIFE según el subprograma | Aceptada | 2026-11-15 |
+| [0043](0043-panel-de-dokploy-con-dominio-publico.md) | Panel de Dokploy en un dominio público, con 2FA obligatorio y límites de peticiones | Propuesta | 2026-11-15 |
