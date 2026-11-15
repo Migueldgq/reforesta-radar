@@ -23,11 +23,12 @@ curl localhost:8010/api/oportunidades             # OpportunitiesResponse, same 
 
 - API: http://localhost:8010 · OpenAPI docs: http://localhost:8010/docs · Postgres: `localhost:5440` (user,
   password and database `radar`; local development only).
-- Host ports, password and ingest interval are overridable in a root `.env` (see `../.env.example`).
+- Host ports, password and daily ingest time are overridable in a root `.env` (see `../.env.example`).
   `backend/.env.example` is only for running the API or the ingest on the host with `uv run --env-file .env`.
-- Schedule: `ingest-scheduler` is part of the default `docker compose up`; it ingests on start and then every
-  `RADAR_INGEST_EVERY_S` seconds (default 8 h). For anything sturdier use the host's cron with
-  `docker compose run --rm ingest --trigger schedule`.
+- Schedule: `ingest-scheduler` (part of the default `docker compose up`) runs `python -m app.ingest.scheduler`: one
+  ingest a day at `RADAR_INGEST_AT` (default `09:00`, `RADAR_TZ`). It checks every 5 min and runs when no ingest
+  (any trigger) has succeeded since the latest 09:00, so a laptop asleep at 09:00 catches up on waking; it runs
+  right away when the database was never ingested; a failed run is retried an hour later.
 - Migrations by hand: `docker compose run --rm --entrypoint alembic ingest upgrade head`.
 
 ### Without Docker (development)
@@ -67,6 +68,7 @@ backend/
       bdns.py            BDNS connector (68 searches + a memoised detail for every candidate; retries 429 x3)
     ingest/
       __main__.py        CLI (python -m app.ingest), per-source run, summary table
+      scheduler.py       daily run at RADAR_INGEST_AT (python -m app.ingest.scheduler), is_due()
       store.py           one-transaction write: upsert, change log, gone, run records, fetch_cache
       hashing.py         content_hash / dedupe_key (byte-identical to store-pg.ts)
     api/state.py       read path: live items, source health, last ingest
@@ -91,7 +93,7 @@ Correctness over elegance: same numbers, same Spanish strings, same order of rea
 The goldens and the `expected.json` fixtures are **frozen**: they were dumped from the TypeScript backend before it
 was deleted (the dump tools `tools/dump_ts_*.ts` and `tools/capture_*_inputs.py` went with it; see git history
 before the Python cutover). They pin the scoring as it was at parity. When you change the scoring on purpose,
-update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 11; it is
+update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 12; it is
 stored in `ingest_runs.scoring_version`).
 
 Details that matter when porting more code:
@@ -111,9 +113,12 @@ Details that matter when porting more code:
     is now only a safety bound. Cold run ≈ 2 min (BDNS answers about half the first attempts with 429; retries
     absorb all but a handful), warm run ≈ 10 s. "Lite" items (search row only: no deadline, type or beneficiaries;
     −5 and the "Ficha BDNS no cargada" warning) now appear only when a detail fails or past the bound. With details,
-    `keep()` sees the real call type and beneficiaries: non-competitive calls are dropped, and generic calls from
-    priority searches (IRPF, tercer sector, MITECO organs) open to NGOs are kept without a work line, as in the TS.
-  - BDNS retries 429/5xx/network errors up to 3 times (the TS retried once).
+    `keep()` sees the real call type and beneficiaries: non-competitive calls are dropped.
+  - BDNS `keep()` requires a work line (a topic match) for every call. The TS also kept calls from priority
+    searches (IRPF, tercer sector, interés general) open to NGOs without one; that let in ~260 social calls and no
+    environmental one, so the exception is gone (priority searches still get their details read first).
+  - BDNS retries 429/5xx/network errors up to 3 times (the TS retried once) and reads details 4 at a time
+    (`DETAIL_CONCURRENCY`), half the TS fan-out, to be gentle with the public API.
   - `tests/test_parity_golden.py` still rebuilds the golden's 286 lite items as lite (the golden is the TS output),
     so it keeps covering the lite adjustment; a live ingest no longer produces them in bulk.
 - The golden still holds items from sources dropped from the product (`ted`, `bocyl`); they are kept as extra

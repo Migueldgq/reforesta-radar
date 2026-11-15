@@ -109,7 +109,10 @@ function IngestStaleAlert({ lastIngestAt }: { lastIngestAt: string }) {
   return (
     <Alert role="status" className="mb-6">
       <TriangleAlert />
-      <AlertDescription>Los datos no se actualizan desde hace {h} h. Avisad a quien mantiene el radar.</AlertDescription>
+      <AlertDescription>
+        Los datos son de hace {h >= 48 ? `${Math.floor(h / 24)} días` : `${h} h`}: la carga diaria no ha terminado bien
+        desde entonces. Avisad a quien mantiene el radar.
+      </AlertDescription>
     </Alert>
   );
 }

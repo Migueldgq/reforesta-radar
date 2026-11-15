@@ -184,7 +184,10 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
     outside_manual_sources = manual_source_match is None
     if outside_manual_sources and inp.kind != "empresa":
         raw += 4
-        reasons.append("Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.")
+        reasons.append(
+            "No es de los organismos que ya revisáis a mano (Fundación Biodiversidad, MITECO, Comunidad de Madrid, "
+            "Agenda 2030): fácil que se os pase."
+        )
 
     # 6. Deadline state from real dates
     today_dt = _midnight(today or local_today())

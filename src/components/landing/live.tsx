@@ -18,7 +18,7 @@ export function Live({ render }: { render: (data: LandingData | null) => ReactNo
 
 export function HeroFigures({ data }: { data: LandingData | null }) {
   if (!data)
-    return <p className="text-sm text-muted-foreground">Datos de fuentes oficiales y programas de empresa, actualizados cada 8 horas.</p>;
+    return <p className="text-sm text-muted-foreground">Datos de fuentes oficiales y programas de empresa, actualizados cada mañana.</p>;
   const figures = [
     { n: data.total, label: "convocatorias" },
     { n: data.sources.length, label: "fuentes" },

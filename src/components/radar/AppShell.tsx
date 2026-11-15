@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { AlarmClock, Building2, ChevronRight, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, RotateCw, SlidersHorizontal, Sprout, Target } from "lucide-react";
+import { AlarmClock, Building2, ChevronRight, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, SlidersHorizontal, Sprout, Target } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -26,7 +25,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { DEFAULT_FILTERS, EMPTY_DIMS, fmtAgo, isClosed, plazoValues, type Filters } from "./model";
+import { DEFAULT_FILTERS, EMPTY_DIMS, fmtFreshness, isClosed, plazoValues, type Filters } from "./model";
 import { RadarProvider, useRadar } from "./store";
 import { DetailDrawer } from "./Drawer";
 
@@ -103,10 +102,9 @@ function MobileBar() {
 function AppSidebar() {
   const path = usePathname();
   const router = useRouter();
-  const { triage, data, filters, setFilters, refreshing, loading, reload } = useRadar();
+  const { triage, data, filters, setFilters, loading } = useRadar();
   const { isMobile, setOpenMobile } = useSidebar();
   const tracking = Object.values(triage).filter((t) => t.status === "estudio" || t.status === "presentar").length;
-  const busy = loading || refreshing;
 
   const counts = useMemo(() => {
     const c: Record<QuickKey, number> = { abierta: 0, "30d": 0, alto: 0 };
@@ -217,14 +215,9 @@ function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="flex items-center gap-2 px-2 py-1 group-data-[collapsible=icon]:hidden">
-          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-            {busy ? "Cargando…" : data ? `Datos de ${fmtAgo(data.lastIngestAt ?? data.fetchedAt)}` : "Sin datos"}
-          </p>
-          <Button variant="ghost" size="icon" className="size-7" disabled={busy} onClick={() => reload()} aria-label="Volver a cargar los datos">
-            {busy ? <Loader2 className="animate-spin" aria-hidden /> : <RotateCw aria-hidden />}
-          </Button>
-        </div>
+        <p className="truncate px-2 py-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+          {data ? fmtFreshness(data.lastIngestAt ?? data.fetchedAt) : loading ? "Cargando…" : "Sin datos"}
+        </p>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild size="sm" tooltip="Sobre el proyecto" className="text-muted-foreground">
@@ -232,14 +225,6 @@ function AppSidebar() {
                 <Info aria-hidden />
                 <span>Sobre el proyecto</span>
               </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <SidebarMenu className="hidden group-data-[collapsible=icon]:flex">
-          <SidebarMenuItem>
-            <SidebarMenuButton tooltip={data ? `Datos de ${fmtAgo(data.lastIngestAt ?? data.fetchedAt)} · volver a cargar` : "Volver a cargar"} disabled={busy} onClick={() => reload()}>
-              {busy ? <Loader2 className="animate-spin" aria-hidden /> : <RotateCw aria-hidden />}
-              <span>Volver a cargar</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

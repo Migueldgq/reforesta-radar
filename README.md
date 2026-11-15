@@ -15,7 +15,7 @@ El cuello de botella no es escribir, es **encontrar y decidir**. El radar ataca 
 
 | Dolor de Reforesta (RETO.md) | Qué hace el radar |
 |---|---|
-| Revisan siempre las mismas 4 fuentes | Lee 7 fuentes y marca con **«Fuera de tus 4 fuentes»** lo que no habrían visto. En la foto del 15/11/2026, 497 de 528 resultados vienen de fuera de MITECO, Fundación Biodiversidad, Comunidad de Madrid y Agenda 2030. |
+| Revisan siempre las mismas 4 fuentes | Lee 7 fuentes y marca con **«No es de los organismos que ya revisáis a mano»** lo que no habrían visto. En la foto del 15/11/2026, 497 de 528 resultados vienen de fuera de MITECO, Fundación Biodiversidad, Comunidad de Madrid y Agenda 2030. |
 | Leer decenas de páginas para saber si encaja | Cada resultado trae una puntuación de 0 a 100 con sus **motivos** y sus **avisos** en frases cortas («Concurrencia competitiva…», «Dirigida a ayuntamientos…»). Las bases en PDF se resumen en una ficha. |
 | Las convocatorias anuales se pasan de fecha | Las convocatorias competitivas que cerraron en los últimos 12 meses **se conservan a propósito** como aviso de «próxima edición», para preparar la siguiente con tiempo. |
 | El canal de empresas (RSC) está a cero | Vista **Empresas** con programas privados seleccionados a mano, el motivo de encaje y un ángulo para el primer contacto. |
@@ -26,14 +26,14 @@ Relación con los tres criterios de evaluación:
 2. **Funciona con convocatorias reales.** Todos los datos salen en vivo de fuentes oficiales. La prueba de la organización: las dos convocatorias de ejemplo del reto aparecen en la lista, ambas como convocatorias periódicas cerradas, con el motivo «la edición actual cerró el …; prepara la siguiente con tiempo»:
    - **BDNS 923290** — MITECO, ayudas para actividades de interés general en investigación científica y técnica y protección del medio ambiente, anualidad 2026 (cerró el 24/08/2026, fecha estimada).
    - **BDNS 904719** — Comunidad de Madrid, subvenciones a entidades sin ánimo de lucro para proyectos ambientales 2026 (Orden 1689/2026; cerró el 08/06/2026).
-3. **El lunes.** Se arranca con un solo `docker compose up` y se abre en el navegador: sin cuentas ni claves de API. Una ingesta programada consulta las fuentes cada 8 horas; si una fuente falla, se siguen mostrando sus últimos datos buenos y la vista Fuentes lo dice.
+3. **El lunes.** Se arranca con un solo `docker compose up` y se abre en el navegador: sin cuentas ni claves de API. Una ingesta programada consulta las fuentes cada mañana a las 9:00; si una fuente falla, se siguen mostrando sus últimos datos buenos y la vista Fuentes lo dice.
 
 ---
 
 ## Qué hace, vista por vista
 
 **Inicio.** Lista única de oportunidades (subvenciones, licitaciones, anuncios en boletines, fondos europeos y programas de empresas).
-- Cuatro cifras arriba que también sirven de filtro rápido: abiertas ahora, cierran en 30 días o menos, encaje alto, fuera de tus 4 fuentes.
+- Cuatro cifras arriba que también sirven de filtro rápido: abiertas ahora, cierran en 30 días o menos, encaje alto, de organismos que no revisáis a mano.
 - Gráficos de resumen que filtran al pulsarlos: cuándo cierran (próximas 12 semanas), línea de trabajo, territorio, fuente, tipo, importe total y estado de seguimiento.
 - Tabla ordenable por columnas, con barra de filtros, chips para quitar cada filtro y buscador de texto (atajo `⌘K` o `/`).
 - Los filtros se guardan en la dirección de la página: se puede copiar el enlace y enviárselo a un compañero con la misma vista.
@@ -74,7 +74,7 @@ Resumen de esa foto: 30 abiertas, 20 que abren próximamente, 165 cerradas (pró
 La puntuación (0–100) se calcula con reglas fijas, en `backend/app/scoring/` (`score.py`, `profile.py`, `rank.py`). En palabras sencillas:
 
 - **Suma** si el título o la finalidad hablan de lo que hace Reforesta. Hay listas de palabras por cada línea de trabajo (restauración, conservación, educación ambiental, agroambiental y custodia), en castellano, catalán, gallego y euskera. Lo que aparece en el título cuenta el doble que lo que solo aparece en la finalidad.
-- **Suma** si es de concurrencia competitiva, si menciona expresamente a entidades sin ánimo de lucro, si está abierta o abre pronto, si viene de fuera de las 4 fuentes habituales y si el presupuesto es de 50.000 € o más.
+- **Suma** si es de concurrencia competitiva, si menciona expresamente a entidades sin ánimo de lucro, si está abierta o abre pronto, si no es de los cuatro organismos que ya revisan a mano y si el presupuesto es de 50.000 € o más.
 - **Resta** si es nominativa, de concesión directa o un convenio; si es solo para empresas o para ayuntamientos; o si es de otro ámbito (patrimonio cultural, caza, pesca, eficiencia energética, becas, trámites de impacto ambiental, adjudicaciones…).
 - **Topes**: sin ningún tema ambiental, como mucho 35; nominativa o directa, como mucho 25; cerrada, como mucho 50; si no puede pedirla una ONG, como mucho 45. Las de Horizon Europe se limitan a 58 porque Reforesta entraría como socio de un consorcio, no como líder.
 - **Niveles**: encaje alto desde 60, medio de 40 a 59, bajo por debajo de 40.
@@ -93,7 +93,7 @@ docker compose up -d --build   # Postgres + API + ingesta programada + web
 
 - Web: http://localhost:3010 (la portada en `/landing`).
 - API (FastAPI): http://localhost:8010, documentación en http://localhost:8010/docs.
-- La primera ingesta empieza sola al arrancar y tarda unos minutos; después se repite cada 8 h. Para lanzar una a mano: `docker compose run --rm ingest` (o `--source boe,rsc` para algunas fuentes).
+- La primera ingesta empieza sola al arrancar y tarda unos minutos; después se repite cada día a las 9:00 (hora de Madrid, `RADAR_INGEST_AT`; si el equipo estaba dormido, al despertar). Para lanzar una a mano: `docker compose run --rm ingest` (o `--source boe,rsc` para algunas fuentes).
 - Puertos, contraseña de Postgres e intervalo de ingesta: copiar `.env.example` a `.env` y editarlo.
 
 Desarrollo del frontend (recarga en caliente, Node.js 20.9 o superior):
@@ -120,7 +120,7 @@ Endpoints (todos los sirve la API de Python; la web los expone en su mismo orige
 ## Arquitectura
 
 ```
-fuentes ──► ingesta (cada 8 h) ──► Postgres ◄── API (FastAPI) ◄── /api/* ── Next.js ◄── navegador
+fuentes ──► ingesta (diaria, 9:00) ──► Postgres ◄── API (FastAPI) ◄── /api/* ── Next.js ◄── navegador
 ```
 
 - **Frontend** (`src/`): Next.js 16 (App Router, TypeScript) y Tailwind CSS v4. Solo interfaz: no tiene rutas de API propias. Next reenvía `/api/*` a la API (rewrite en `next.config.ts`, destino en `API_URL`), así el navegador siempre llama al mismo origen. La portada lee las cifras de la API en el servidor; si la API no responde, se pinta sin números.
@@ -140,7 +140,7 @@ fuentes ──► ingesta (cada 8 h) ──► Postgres ◄── API (FastAPI) 
 - **LIFE.** Ahora mismo no hay ninguna convocatoria LIFE de naturaleza abierta. La única LIFE abierta (European City Facility) es de transición energética y va dirigida a municipios. La mayoría de los fondos europeos que aparecen son de Horizon Europe, para consorcios de investigación.
 - **Las reglas se pueden equivocar.** La puntuación busca palabras, no entiende el texto: puede dar nota alta a algo que no encaja o pasar por alto una convocatoria redactada de forma poco habitual. Por eso siempre muestra sus motivos.
 - **Fuentes frágiles.** Los boletines leídos en HTML (DOG, Fundación Biodiversidad) dejan de funcionar si cambian su web. Si una fuente falla, la vista Fuentes lo indica y se siguen mostrando sus últimos datos buenos.
-- **Datos con hasta 8 h de retraso.** La API solo enseña lo que guardó la última ingesta; una convocatoria publicada esta mañana aparece en la siguiente pasada. Si la ingesta lleva más de 12 h sin terminar bien, Inicio muestra un aviso.
+- **Datos de la mañana.** La API solo enseña lo que guardó la última ingesta, la de las 9:00; una convocatoria publicada más tarde aparece al día siguiente. Si la ingesta lleva más de 36 h sin terminar bien (se ha perdido una carga diaria), Inicio muestra un aviso.
 - **Cobertura autonómica parcial.** Hoy se leen 2 boletines autonómicos (Madrid y Galicia), los que propone el reto. Los demás territorios llegan solo a través de la BDNS. Los boletines provinciales y municipales no se leen directamente.
 
 ---

@@ -136,6 +136,20 @@ export function fmtAgo(iso: string | null): string {
   return `hace ${Math.round(h / 24)} días`;
 }
 
+/** "Datos de hoy, 9:02" / "Datos de ayer, 9:02" / "Datos del 12 nov" (local time). */
+export function fmtFreshness(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  const days = Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
+      new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) /
+      86_400_000,
+  );
+  const time = d.toLocaleTimeString("es-ES", { hour: "numeric", minute: "2-digit" });
+  if (days <= 0) return `Datos de hoy, ${time}`;
+  if (days === 1) return `Datos de ayer, ${time}`;
+  return `Datos del ${d.toLocaleDateString("es-ES", { day: "numeric", month: "short" }).replace(".", "")}`;
+}
+
 /* ---------- Filters ---------- */
 
 export type Dim = "source" | "organismo" | "region" | "workLine" | "kind" | "tier" | "budget" | "triage" | "plazo";

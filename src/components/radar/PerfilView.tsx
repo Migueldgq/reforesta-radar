@@ -184,7 +184,7 @@ function WhoSection({ rules }: { rules: Rules | null }) {
             </Badge>
           ))}
         </dd>
-        <dt className="text-muted-foreground">Fuentes habituales</dt>
+        <dt className="text-muted-foreground">Organismos que ya revisáis</dt>
         <dd className="flex flex-wrap gap-1.5">
           {rules?.usualSources.map((s) => (
             <Badge key={s} variant="outline">
