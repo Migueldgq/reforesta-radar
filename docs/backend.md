@@ -28,7 +28,7 @@ ingest-scheduler (al arrancar y cada 8 h)
 - Si Postgres no responde, la API devuelve 503; si la API no responde, la web muestra un estado de error (o la
   última copia guardada en el navegador, con un aviso). La portada se pinta sin cifras.
 - Esquema: migraciones de Alembic en `backend/alembic/` (la API las aplica al arrancar).
-- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 11) se guarda en cada `ingest_runs`; súbelo cuando
+- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 12) se guarda en cada `ingest_runs`; súbelo cuando
   cambie la puntuación base.
 
 ## Puesta en marcha

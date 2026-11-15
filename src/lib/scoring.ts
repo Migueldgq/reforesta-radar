@@ -198,7 +198,7 @@ export function scoreConvocatoria(input: ScoreInput): FitAnalysis {
   const outsideManualSources = manualSourceMatch === null;
   if (outsideManualSources && input.kind !== "empresa") {
     raw += 4;
-    reasons.push("Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.");
+    reasons.push("No es de los organismos que ya revisáis a mano (Fundación Biodiversidad, MITECO, Comunidad de Madrid, Agenda 2030): fácil que se os pase.");
   }
 
   // 6. Deadline state from real dates

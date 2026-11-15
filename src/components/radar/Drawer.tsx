@@ -69,7 +69,7 @@ function DrawerBody({ o }: { o: Opportunity }) {
       <ul className="space-y-1 text-xs text-muted-foreground">
         <li>{elig}</li>
         <li>{fit.isCompetitive ? "Concurrencia competitiva" : "No es de concurrencia competitiva"}</li>
-        <li>{fit.outsideManualSources ? "Fuera de vuestras 4 fuentes habituales" : `Fuente habitual: ${fit.manualSourceMatch ?? "sí"}`}</li>
+        <li>{fit.outsideManualSources ? "No es de los organismos que ya revisáis a mano" : `Organismo que ya revisáis: ${fit.manualSourceMatch ?? "sí"}`}</li>
       </ul>
     </section>,
     <TriagePicker key="triage" o={o} />,
