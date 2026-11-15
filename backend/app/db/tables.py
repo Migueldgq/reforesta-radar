@@ -1,4 +1,5 @@
-"""Table definitions (SQLAlchemy Core). Schema owner: alembic/versions/ (0001 init, 0002 + 0003 bdns_editions).
+"""Table definitions (SQLAlchemy Core). Schema owner: alembic/versions/ (0001 init, 0002 + 0003 bdns_editions,
+0004 accounts and team state).
 
 Same tables and columns as supabase/migrations/0001_init.sql, so data and semantics carry over:
 rows hold the BASE opportunity (connector output + base fit); geographic and kind fit are applied at read time.
@@ -6,11 +7,14 @@ rows hold the BASE opportunity (connector output + base fit); geographic and kin
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
+    CheckConstraint,
     Column,
     Computed,
     Date,
     ForeignKey,
     Identity,
+    Index,
     Integer,
     MetaData,
     Numeric,
@@ -128,4 +132,141 @@ bdns_editions = Table(
     Column("match", Numeric),  # title Jaccard with the current call (null for the current edition)
     Column("fetched_at", TSTZ, nullable=False, server_default=text("now()")),
     PrimaryKeyConstraint("call_numero", "numero"),
+)
+
+# ---------- Accounts (0004). Tokens are never stored: only their sha256 (app/auth/tokens.py). ----------
+
+users = Table(
+    "users",
+    metadata,
+    Column("id", BigInteger, Identity(always=True), primary_key=True),
+    Column("email", Text, nullable=False),  # stored lower-case; unique on lower(email)
+    Column("name", Text, nullable=False, server_default=""),
+    Column("role", Text, nullable=False),  # admin | member
+    Column("active", Boolean, nullable=False, server_default=text("true")),
+    Column("password_hash", Text, nullable=False),  # argon2id
+    Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("last_login_at", TSTZ),
+    CheckConstraint("role in ('admin', 'member')", name="users_role"),
+    Index("users_email_lower", text("lower(email)"), unique=True),
+)
+
+sessions = Table(
+    "sessions",
+    metadata,
+    Column("id", BigInteger, Identity(always=True), primary_key=True),
+    Column("token_hash", Text, nullable=False, unique=True),
+    Column("user_id", BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("last_seen_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("expires_at", TSTZ, nullable=False),  # sliding: pushed forward on use
+)
+
+invitations = Table(
+    "invitations",
+    metadata,
+    Column("id", BigInteger, Identity(always=True), primary_key=True),
+    Column("email", Text, nullable=False),  # lower-case; fixed: the invitee cannot change it
+    Column("name", Text, nullable=False, server_default=""),
+    Column("role", Text, nullable=False),
+    Column("token_hash", Text, nullable=False, unique=True),
+    Column("created_by", BigInteger, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("expires_at", TSTZ, nullable=False),
+    Column("accepted_at", TSTZ),
+    Column("revoked_at", TSTZ),
+    CheckConstraint("role in ('admin', 'member')", name="invitations_role"),
+)
+
+password_resets = Table(
+    "password_resets",
+    metadata,
+    Column("id", BigInteger, Identity(always=True), primary_key=True),
+    Column("user_id", BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("token_hash", Text, nullable=False, unique=True),
+    Column("created_by", BigInteger, ForeignKey("users.id", ondelete="SET NULL")),  # null: self-service (e-mail)
+    Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("expires_at", TSTZ, nullable=False),
+    Column("used_at", TSTZ),
+)
+
+# ---------- Team state (0004) ----------
+
+# One row per tracked opportunity, keyed by the stable opportunity id with no foreign key: tracking outlives the
+# call (a call that leaves the sources keeps its row; the snapshot columns let the board still show it).
+tracking = Table(
+    "tracking",
+    metadata,
+    Column("opportunity_id", Text, primary_key=True),
+    Column("status", Text, nullable=False),  # nueva | estudio | presentar | presentada | descartada
+    Column("assignee_id", BigInteger, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("titulo", Text, nullable=False, server_default=""),
+    Column("organismo", Text, nullable=False, server_default=""),
+    Column("source", Text, nullable=False, server_default=""),
+    Column("url", Text, nullable=False, server_default=""),
+    Column("deadline", Text),  # YYYY-MM-DD as in the contract
+    Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("updated_by", BigInteger, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("updated_at", TSTZ, nullable=False, server_default=text("now()")),
+    CheckConstraint("status in ('nueva', 'estudio', 'presentar', 'presentada', 'descartada')", name="tracking_status"),
+)
+
+tracking_notes = Table(
+    "tracking_notes",
+    metadata,
+    Column("id", BigInteger, Identity(always=True), primary_key=True),
+    Column(
+        "opportunity_id",
+        Text,
+        ForeignKey("tracking.opportunity_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column("author_id", BigInteger, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("body", Text, nullable=False),
+    Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
+)
+
+# The organisation's settings: exactly one row (id = 1). Null columns: never saved by the team.
+org_settings = Table(
+    "org_settings",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("profile", JSONB),  # UserProfile of the web Perfil (src/components/radar/profile.ts)
+    Column("organisms", JSONB),  # enabled organism filter: list of organismo names
+    Column("updated_by", BigInteger, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("updated_at", TSTZ),
+    CheckConstraint("id = 1", name="org_settings_single_row"),
+)
+
+votes = Table(
+    "votes",
+    metadata,
+    Column("user_id", BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("opportunity_id", Text, nullable=False),
+    Column("vote", Text, nullable=False),  # sirve | no_sirve
+    Column("reason", Text, nullable=False, server_default=""),
+    Column("updated_at", TSTZ, nullable=False, server_default=text("now()")),
+    PrimaryKeyConstraint("user_id", "opportunity_id"),
+    CheckConstraint("vote in ('sirve', 'no_sirve')", name="votes_vote"),
+)
+
+# "Update now" requests from admins; ingest-scheduler claims and runs them. At most one open (requested or running).
+ingest_requests = Table(
+    "ingest_requests",
+    metadata,
+    Column("id", BigInteger, Identity(always=True), primary_key=True),
+    Column("status", Text, nullable=False),  # requested | running | done | failed
+    Column("requested_by", BigInteger, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("requested_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("started_at", TSTZ),
+    Column("finished_at", TSTZ),
+    Column("error", Text),
+    CheckConstraint("status in ('requested', 'running', 'done', 'failed')", name="ingest_requests_status"),
+    Index(
+        "ingest_requests_one_open",
+        text("(true)"),
+        unique=True,
+        postgresql_where=text("status in ('requested', 'running')"),
+    ),
 )

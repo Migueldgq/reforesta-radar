@@ -10,6 +10,10 @@ def _list(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
+def _bool(value: str) -> bool:
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str = field(
@@ -29,6 +33,29 @@ class Settings:
     history_timeout_s: float = field(default_factory=lambda: float(os.getenv("HISTORY_TIMEOUT_S", "1800")))
     # Local time (RADAR_TZ) of the daily scheduled ingest (app.ingest.scheduler).
     ingest_at: str = field(default_factory=lambda: os.getenv("RADAR_INGEST_AT", "09:00"))
+
+    # --- accounts (app/auth) ---
+    # Public base URL of the web app: invitation and reset links are `<public_url>/invitacion/<token>` etc.
+    public_url: str = field(default_factory=lambda: os.getenv("RADAR_PUBLIC_URL", "http://localhost:3010").rstrip("/"))
+    # Secure flag on the session cookie. Off by default because local runs are plain http; on behind https.
+    cookie_secure: bool = field(default_factory=lambda: _bool(os.getenv("RADAR_COOKIE_SECURE", "")))
+    session_days: int = field(default_factory=lambda: int(os.getenv("RADAR_SESSION_DAYS", "30")))
+    # Argon2 hashes/verifications running at once (64 MiB each); the rest wait.
+    argon2_concurrency: int = field(default_factory=lambda: int(os.getenv("RADAR_ARGON2_CONCURRENCY", "2")))
+    # First admin on a fresh install (used only while the users table is empty); prefer `python -m app.users`.
+    bootstrap_admin_email: str = field(default_factory=lambda: os.getenv("RADAR_BOOTSTRAP_ADMIN_EMAIL", ""))
+    bootstrap_admin_password: str = field(default_factory=lambda: os.getenv("RADAR_BOOTSTRAP_ADMIN_PASSWORD", ""))
+    # Optional e-mail (app/auth/mail.py): with SMTP_HOST set, links are e-mailed and "forgot password" is enabled.
+    smtp_host: str = field(default_factory=lambda: os.getenv("SMTP_HOST", ""))
+    smtp_port: int = field(default_factory=lambda: int(os.getenv("SMTP_PORT", "587")))
+    smtp_user: str = field(default_factory=lambda: os.getenv("SMTP_USER", ""))
+    smtp_password: str = field(default_factory=lambda: os.getenv("SMTP_PASSWORD", ""))
+    smtp_from: str = field(default_factory=lambda: os.getenv("SMTP_FROM", ""))
+    smtp_starttls: bool = field(default_factory=lambda: _bool(os.getenv("SMTP_STARTTLS", "true")))
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.smtp_host and self.smtp_from)
 
     @property
     def tz(self) -> ZoneInfo:

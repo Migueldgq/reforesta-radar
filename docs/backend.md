@@ -11,8 +11,10 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
             │  una transacción por ejecución
             ▼
    Postgres 16: opportunities · opportunity_changes · ingest_runs · source_runs · fetch_cache · bdns_editions
-            ▲  lectura
-   API FastAPI (/api/oportunidades, /api/fuentes, /api/perfil, /api/analyze-pdf)
+                users · sessions · invitations · password_resets · tracking · tracking_notes · org_settings ·
+                votes · ingest_requests
+            ▲  lectura / escritura del equipo
+   API FastAPI (/api/oportunidades, /api/fuentes, /api/perfil, /api/analyze-pdf, /api/auth, /api/board, …)
             ▲  rewrite /api/* (next.config.ts, API_URL)
    Next.js ──► navegador
 ```
@@ -49,10 +51,41 @@ docker compose ps                   # api "healthy"; la primera ingesta tarda un
 | `web` | http://localhost:3010 (`RADAR_WEB_PORT`) | Next.js `standalone`, usuario sin privilegios. `API_URL=http://api:8000` se fija al construir la imagen (rewrites) y al ejecutar (portada). |
 | `api` | http://localhost:8010 (`RADAR_API_PORT`), docs en `/docs` | Con healthcheck sobre `/health`. |
 | `postgres` | `localhost:5440` (`RADAR_DB_PORT`) | Usuario, contraseña y base `radar` (solo desarrollo; `RADAR_DB_PASSWORD`). |
-| `ingest-scheduler` | — | Una ingesta al día a las `RADAR_INGEST_AT` (09:00, hora de Madrid). Comprueba cada 5 min: si el equipo estaba dormido a esa hora, ingesta al despertar; si la base nunca se ha ingestado, ingesta en el acto. Un fallo se reintenta a la hora. |
+| `ingest-scheduler` | — | Una ingesta al día a las `RADAR_INGEST_AT` (09:00, hora de Madrid). Comprueba cada 30 s: si el equipo estaba dormido a esa hora, ingesta al despertar; si la base nunca se ha ingestado, ingesta en el acto. Un fallo se reintenta a la hora. También ejecuta el «Actualizar ahora» que pide un administrador (en ~30 s). |
 
 Los valores se cambian en un `.env` en la raíz (ver `.env.example`). Para el frontend en local con recarga en
 caliente: `docker compose up -d postgres api` y `npm run dev` (usa `API_URL`, por defecto `http://localhost:8010`).
+
+## Cuentas y equipo
+
+La app (todo salvo la portada) exige iniciar sesión. Una sola organización, dos roles: `admin` (gestiona personas y
+puede pedir una actualización de datos) y `member` (edita todo el tablero). No hay registro abierto: se entra solo
+por invitación. Contrato completo para la web: [api-auth.md](api-auth.md).
+
+```bash
+# Primer administrador (nunca desde la web). Pide la contraseña dos veces; sin terminal, o con --generate,
+# genera una y la muestra una sola vez.
+docker compose run --rm api python -m app.users create-admin ana@example.org --name Ana
+```
+
+- **Crea al menos dos administradores.** Si el único admin olvida su contraseña, otro admin le genera un enlace de
+  restablecimiento; sin ninguno, solo queda crear otro con el comando de arriba.
+- Arranque desatendido (opcional): `RADAR_BOOTSTRAP_ADMIN_EMAIL` y `RADAR_BOOTSTRAP_ADMIN_PASSWORD` en el `.env`
+  crean el primer admin al arrancar la API, solo si la tabla `users` está vacía. Quítalos después.
+- Invitaciones y restablecimientos: un admin genera el enlace (`RADAR_PUBLIC_URL/invitacion/…`, 7 días;
+  `…/restablecer/…`, 24 h; un solo uso) y lo envía él mismo. Con `SMTP_HOST` y `SMTP_FROM` configurados, la API
+  además lo manda por correo y se activa «¿Olvidaste la contraseña?».
+- Seguridad: contraseñas Argon2id (mínimo 10 caracteres); sesión en cookie `HttpOnly` + `SameSite=Lax` (con
+  `RADAR_COOKIE_SECURE=true` detrás de https), caduca a los 30 días sin uso y se revoca al cerrar sesión, cambiar
+  la contraseña o el rol, o desactivar la cuenta; en la base solo hay hashes de los tokens. Las peticiones que
+  cambian datos llevan la cabecera `X-Radar-CSRF: 1` y se rechazan si el navegador dice que vienen de otro sitio.
+  Inicio de sesión limitado: 50 fallos por cuenta cada 15 min como tope duro; por cuenta e IP, 5 (a partir de ahí
+  se responde «espera» a las contraseñas incorrectas, pero la correcta sigue entrando). Cuerpos de más de 1 MiB
+  (16 MiB para PDF) se rechazan antes de mirar la sesión; Argon2 se ejecuta como mucho 2 a la vez.
+- Estado compartido en Postgres: tablero de seguimiento (`tracking`, `tracking_notes`; sobrevive a que una
+  convocatoria desaparezca de las fuentes), perfil y filtro de organismos del equipo (`org_settings`), votos
+  «sirve / no sirve» (`votes`) y peticiones de actualización (`ingest_requests`). Lo que cada navegador tenía en
+  `localStorage` se importa una vez al entrar sin pisar lo que el equipo ya guardó.
 
 ## Ejecutar la ingesta a mano
 
@@ -72,17 +105,29 @@ El backend anterior en TypeScript (rutas `src/app/api/*`, conectores y caché en
 3 veces al día) se eliminó al pasar a Python. Ya no hay ingesta en GitHub Actions ni base de datos en Supabase:
 la ingesta programada es el servicio `ingest-scheduler` (`backend/app/ingest/scheduler.py`).
 
+## Antes de publicarlo en internet
+
+- [ ] Proxy inverso (Caddy, nginx) con https delante de `web` que **sobrescriba** `X-Forwarded-For`; solo entonces
+      `FORWARDED_ALLOW_IPS` = red de compose (p. ej. `172.16.0.0/12`). Sin proxy, déjalo en `127.0.0.1`.
+- [ ] Límite de tamaño de cuerpo también en el proxy (16 MB basta: el PDF más grande).
+- [ ] `RADAR_COOKIE_SECURE=true` y `RADAR_PUBLIC_URL=https://…` (los enlaces de invitación usan esa URL).
+- [ ] El puerto de la API (`8010`) solo en `127.0.0.1` (como ya está) o sin publicar; si se expone, quitar `/docs`
+      y `/openapi.json`.
+- [ ] No registrar en los logs del proxy las rutas `/invitacion/*` ni `/restablecer/*` (llevan el token).
+- [ ] Quitar `RADAR_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` del `.env` tras el primer arranque; al menos dos admins.
+- [ ] Valorar una vida máxima absoluta de la sesión (hoy: 30 días desde el último uso, sin tope absoluto).
+- [ ] Copias de seguridad de Postgres (ver riesgos).
+
 ## Riesgos conocidos
 
 | Riesgo | Salvaguarda |
 |---|---|
 | Sin copias de seguridad automáticas de Postgres | Pendiente: `pg_dump` periódico del volumen `radar-pgdata`. |
-| Equipo apagado o dormido a las 9:00 | `ingest-scheduler` comprueba cada 5 min e ingesta al despertar si no hubo ninguna ingesta correcta desde las 9:00. |
+| Equipo apagado o dormido a las 9:00 | `ingest-scheduler` comprueba cada 30 s e ingesta al despertar si no hubo ninguna ingesta correcta desde las 9:00. |
 | Una fuente cambia su HTML | Se registra en `source_runs`; sus filas anteriores siguen visibles y la fuente sale como parcial o error. |
+| IP del cliente poco fiable | Next reenvía el `X-Forwarded-For` que manda el navegador y no añade el suyo, así que la API no se lo cree (`FORWARDED_ALLOW_IPS=127.0.0.1` por defecto): todos los navegadores comparten la IP del contenedor `web`. Por eso una contraseña correcta nunca se rechaza por fallos ajenos (solo el tope de 50 fallos por cuenta bloquea a todos). Con un proxy inverso delante que sobrescriba `X-Forwarded-For`, poner en `FORWARDED_ALLOW_IPS` la red de compose (p. ej. `172.16.0.0/12`). |
 
 ## Siguiente tramo
 
-- Tablero de seguimiento compartido (estado, responsable, notas por oportunidad) con autenticación.
-- Perfil de equipo guardado en la base de datos.
 - «Nuevo desde tu última visita» (usa `first_seen_at` y `opportunity_changes`).
 - Alertas (correo) para oportunidades nuevas de encaje alto o plazos que cierran.

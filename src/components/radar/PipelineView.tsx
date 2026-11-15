@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, CalendarDays, GripVertical, ListChecks } from "lucide-react";
+import { ArrowRight, CalendarDays, GripVertical, ListChecks, MessageSquare } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Opportunity } from "@/lib/opportunity";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { daysLeft, fmtDate, tidy, TRIAGE_LABELS, type Triage } from "./model";
-import { useRadar, type TriageEntry } from "./store";
-import { Deadline, ScoreChip, TriageSelect } from "./ui";
+import type { BoardItem } from "@/lib/team";
+import { stub, useRadar } from "./store";
+import { Deadline, GoneNote, PersonAvatar, ScoreChip, TriageSelect } from "./ui";
 
 /* ---------- Seguimiento ---------- */
 
@@ -21,20 +22,13 @@ const COLUMNS: { key: Triage; hint: string }[] = [
   { key: "descartada", hint: "No encaja o no llegamos" },
 ];
 
-type Row = { id: string; entry: TriageEntry; o: Opportunity | undefined };
-
-function stub(id: string, e: TriageEntry): Opportunity {
-  return {
-    id,
-    titulo: e.titulo,
-    organismo: e.organismo,
-    deadline: e.deadline,
-  } as Opportunity;
-}
+type Row = { id: string; entry: BoardItem; o: Opportunity | undefined };
 
 export function PipelineView() {
-  const { triage, byId } = useRadar();
-  const rows: Row[] = Object.entries(triage).map(([id, entry]) => ({ id, entry, o: byId.get(id) }));
+  const { board, boardLoaded, byId } = useRadar();
+  const rows: Row[] = Object.values(board)
+    .filter((e) => e.status !== "nueva")
+    .map((entry) => ({ id: entry.opportunityId, entry, o: entry.gone ? undefined : byId.get(entry.opportunityId) }));
   const dl = (r: Row) => {
     const d = r.o ? daysLeft(r.o) : null;
     return d == null || d < 0 ? Infinity : d;
@@ -48,13 +42,17 @@ export function PipelineView() {
     <div className="flex flex-col gap-8">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Seguimiento</h1>
-        <p className="text-muted-foreground">Lo que estáis mirando, por fecha de cierre. Arrastra una tarjeta o cambia su estado. Se guarda en este navegador.</p>
+        <p className="text-muted-foreground">Lo que estáis mirando, por fecha de cierre. Arrastra una tarjeta o cambia su estado. Lo ve todo el equipo.</p>
       </div>
 
-      {rows.length === 0 ? (
+      {!boardLoaded ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          Cargando el tablero del equipo…
+        </p>
+      ) : rows.length === 0 ? (
         <Card className="items-center gap-3 border-dashed px-6 py-16 text-center shadow-none">
           <ListChecks className="size-6 text-muted-foreground" aria-hidden />
-          <p className="font-medium">Todavía no seguís ninguna convocatoria</p>
+          <p className="font-medium">El equipo todavía no sigue ninguna convocatoria</p>
           <p className="max-w-md text-muted-foreground">En Inicio, cambia el estado de una convocatoria a «En estudio» o «A presentar» y aparecerá aquí.</p>
           <Button asChild size="sm" className="mt-2">
             <Link href="/">
@@ -165,7 +163,7 @@ function Board({ rows }: { rows: Row[] }) {
       suppressClick.current = true;
       const to = columnAt(e.clientX, e.clientY);
       const row = rows.find((r) => r.id === drag.id);
-      if (to && to !== drag.from && row) setTriage(row.o ?? stub(row.id, row.entry), to);
+      if (to && to !== drag.from && row) setTriage(row.o ?? stub(row.entry), to);
     }
     setDrag(null);
     setOver(null);
@@ -257,7 +255,8 @@ function TrackCard({
   onPointerDown?: (e: React.PointerEvent<HTMLElement>) => void;
 }) {
   const { openDetail } = useRadar();
-  const o = row.o ?? stub(row.id, row.entry);
+  const o = row.o ?? stub(row.entry);
+  const notes = row.entry.notes.length;
   return (
     <Card
       onPointerDown={onPointerDown}
@@ -271,27 +270,33 @@ function TrackCard({
     >
       <div className="space-y-1">
         <h3 className="leading-snug font-medium">
-          {row.o ? (
-            <button
-              type="button"
-              onClick={() => openDetail(o.id)}
-              className="cursor-pointer text-left outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50"
-            >
-              <span className="line-clamp-2">{tidy(o.titulo)}</span>
-            </button>
-          ) : (
+          <button
+            type="button"
+            onClick={() => openDetail(o.id)}
+            className="cursor-pointer text-left outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50"
+          >
             <span className="line-clamp-2">{tidy(o.titulo)}</span>
-          )}
+          </button>
         </h3>
         <p className="truncate text-xs text-muted-foreground">{tidy(o.organismo)}</p>
       </div>
       <div className="flex flex-wrap items-start gap-1.5">
-        {row.o ? <Deadline o={row.o} /> : <span className="text-xs text-muted-foreground">Ya no aparece en las fuentes</span>}
+        {row.o ? <Deadline o={row.o} /> : <GoneNote />}
         {row.o && <ScoreChip fit={row.o.fit} size="sm" />}
       </div>
       <div className="flex items-center justify-between gap-2">
         <div className="relative z-10">
           <TriageSelect o={o} />
+        </div>
+        <div className="ml-auto flex items-center gap-2.5">
+          {notes > 0 && (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums" title={notes === 1 ? "1 nota" : `${notes} notas`}>
+              <MessageSquare className="size-3.5" aria-hidden />
+              {notes}
+              <span className="sr-only">{notes === 1 ? " nota" : " notas"}</span>
+            </span>
+          )}
+          {row.entry.assignee && <PersonAvatar name={row.entry.assignee.name} label="Responsable" />}
         </div>
         <span
           data-handle

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { AlarmClock, Building2, ChevronRight, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, SlidersHorizontal, Sprout, Target } from "lucide-react";
+import { AlarmClock, Building2, ChevronRight, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, SlidersHorizontal, Sprout, Target, UsersRound } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
@@ -25,9 +25,13 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AccountMenu } from "@/components/auth/AccountMenu";
+import { SessionGate, useSession } from "@/components/auth/session";
+import { isPublicPath } from "@/lib/api";
 import { DEFAULT_FILTERS, EMPTY_DIMS, fmtFreshness, isClosed, plazoValues, type Filters } from "./model";
 import { RadarProvider, useRadar } from "./store";
 import { DetailDrawer } from "./Drawer";
+import { Notices } from "./Notices";
 
 const RADAR = [
   { href: "/", label: "Inicio", icon: House },
@@ -39,6 +43,8 @@ const TOOLS = [
   { href: "/fuentes", label: "Fuentes", icon: Database },
   { href: "/perfil", label: "Perfil", icon: SlidersHorizontal },
 ];
+/** Only for admins (the page itself also refuses members). */
+const ADMIN_TOOLS = [{ href: "/equipo", label: "Equipo", icon: UsersRound }];
 
 type QuickKey = "abierta" | "30d" | "alto";
 const QUICK: { key: QuickKey; label: string; icon: typeof House }[] = [
@@ -59,20 +65,24 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Sidebar state persists in shadcn's `sidebar_state` cookie; read it on the client only.
   const cookieOpen = useSyncExternalStore(noop, () => !document.cookie.includes("sidebar_state=false"), () => true);
   const [open, setOpen] = useState<boolean | null>(null);
-  if (path.startsWith("/landing")) return <RadarProvider>{children}</RadarProvider>;
+  // Public pages (landing, login, links with a token) never load team data.
+  if (isPublicPath(path)) return children;
   return (
-    <RadarProvider>
-      <TooltipProvider delayDuration={300}>
-        <SidebarProvider open={open ?? cookieOpen} onOpenChange={setOpen}>
-          <AppSidebar />
-          <SidebarInset className="min-w-0">
-            <MobileBar />
-            <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">{children}</main>
-          </SidebarInset>
-          <DetailDrawer />
-        </SidebarProvider>
-      </TooltipProvider>
-    </RadarProvider>
+    <SessionGate>
+      <RadarProvider>
+        <TooltipProvider delayDuration={300}>
+          <SidebarProvider open={open ?? cookieOpen} onOpenChange={setOpen}>
+            <AppSidebar />
+            <SidebarInset className="min-w-0">
+              <MobileBar />
+              <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">{children}</main>
+            </SidebarInset>
+            <DetailDrawer />
+            <Notices />
+          </SidebarProvider>
+        </TooltipProvider>
+      </RadarProvider>
+    </SessionGate>
   );
 }
 
@@ -80,7 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 function MobileBar() {
   const path = usePathname();
   const { refreshing } = useRadar();
-  const item = [...TOOLS, ...RADAR].find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)));
+  const item = [...TOOLS, ...ADMIN_TOOLS, ...RADAR].find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)));
   return (
     <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-sm md:hidden">
       <SidebarTrigger className="-ml-1" />
@@ -102,9 +112,10 @@ function MobileBar() {
 function AppSidebar() {
   const path = usePathname();
   const router = useRouter();
-  const { triage, data, filters, setFilters, loading } = useRadar();
+  const { board, data, filters, setFilters, loading } = useRadar();
+  const { isAdmin } = useSession();
   const { isMobile, setOpenMobile } = useSidebar();
-  const tracking = Object.values(triage).filter((t) => t.status === "estudio" || t.status === "presentar").length;
+  const tracking = Object.values(board).filter((t) => t.status === "estudio" || t.status === "presentar").length;
 
   const counts = useMemo(() => {
     const c: Record<QuickKey, number> = { abierta: 0, "30d": 0, alto: 0 };
@@ -181,7 +192,7 @@ function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Herramientas</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>{TOOLS.map(navItem)}</SidebarMenu>
+            <SidebarMenu>{(isAdmin ? [...TOOLS, ...ADMIN_TOOLS] : TOOLS).map(navItem)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         <Collapsible defaultOpen className="group/collapsible">
@@ -228,6 +239,7 @@ function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <AccountMenu />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

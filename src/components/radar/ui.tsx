@@ -7,6 +7,7 @@ import {
   CalendarDays,
   CircleSlash,
   Clock,
+  EyeOff,
   RotateCw,
   SearchX,
   TriangleAlert,
@@ -15,9 +16,11 @@ import type { ReactNode } from "react";
 import type { Opportunity } from "@/lib/opportunity";
 import type { FitAnalysis } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { initials } from "@/lib/team";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { daysLeft, fmtDate, fmtDayShort, fmtEuros, isClosed, isNextEdition, joinEs, openingNote, parseDay, reforestaWins, todayUTC, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel, type Triage } from "./model";
 import { useRadar } from "./store";
@@ -159,6 +162,80 @@ export function TriageSelect({ o, className }: { o: Pick<Opportunity, "id" | "ti
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+/** Initials in a small circle; the full name on hover and for screen readers. */
+export function PersonAvatar({ name, label, className }: { name: string; label?: string; className?: string }) {
+  const full = label ? `${label}: ${name}` : name;
+  return (
+    <span
+      title={full}
+      className={cn("inline-grid size-6 shrink-0 place-items-center rounded-full bg-secondary text-[10px] font-semibold text-foreground/80 ring-1 ring-border", className)}
+    >
+      <span aria-hidden>{initials(name)}</span>
+      <span className="sr-only">{full}</span>
+    </span>
+  );
+}
+
+/** Same look as <Input>, for multi-line text. */
+export const textareaClass =
+  "w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 md:text-sm";
+
+/** "Are you sure?" for actions that are hard to undo. */
+export function ConfirmDialog({
+  open,
+  onOpenChange,
+  title,
+  body,
+  confirm,
+  onConfirm,
+  destructive = false,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  title: string;
+  body: ReactNode;
+  confirm: string;
+  onConfirm: () => void;
+  destructive?: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription asChild>
+            <div>{body}</div>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancelar</Button>
+          </DialogClose>
+          <Button
+            variant={destructive ? "destructive" : "default"}
+            onClick={() => {
+              onOpenChange(false);
+              onConfirm();
+            }}
+          >
+            {confirm}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** For board rows whose call is no longer in the latest ingest. */
+export function GoneNote() {
+  return (
+    <Badge variant="outline" className={cn(badge, CHIP_TONE.muted)} title="La convocatoria no salió en la última consulta a las fuentes; se muestra lo que se guardó.">
+      <EyeOff aria-hidden />
+      Ya no aparece en las fuentes
+    </Badge>
   );
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowUpRight, Award, CircleAlert, CircleCheck, FileText, Loader2, ScanSearch } from "lucide-react";
-import { Fragment, useState } from "react";
+import { ArrowUpRight, Award, CircleAlert, CircleCheck, FileText, Loader2, ScanSearch, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
+import { Fragment, useState, type FormEvent } from "react";
 import type { AwardsSummary, History, Opportunity, OpportunityDocument } from "@/lib/opportunity";
 import type { PdfAnalysisResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -9,21 +9,67 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { daysLeft, fmtDate, fmtDayShort, fmtEuros, joinEs, KIND_LABELS, parseDay, tidy, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel } from "./model";
-import { useRadar } from "./store";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSession } from "@/components/auth/session";
+import { fmtWhenShort, type BoardItem, type VoteValue } from "@/lib/team";
+import { Input } from "@/components/ui/input";
+import { stub, useRadar } from "./store";
 import { analyzePdf, PdfResult } from "./PdfView";
-import { DeadlineChip, ScoreChip } from "./ui";
+import { ConfirmDialog, DeadlineChip, GoneNote, PersonAvatar, ScoreChip, textareaClass } from "./ui";
+
+type Shown = { o: Opportunity; gone: BoardItem | null };
 
 export function DetailDrawer() {
-  const { selectedId, byId, closeDetail } = useRadar();
-  const o = selectedId ? byId.get(selectedId) : undefined;
+  const { selectedId, byId, board, closeDetail } = useRadar();
+  // Calls gone from the sources only live on the board: draw them from its snapshot.
+  const live = selectedId ? byId.get(selectedId) : undefined;
+  const item = selectedId ? board[selectedId] : undefined;
+  const cur: Shown | undefined = live ? { o: live, gone: null } : item ? { o: stub(item), gone: item } : undefined;
   // Keep the last opportunity rendered while the sheet animates out.
-  const [shown, setShown] = useState(o);
-  if (o && o !== shown) setShown(o);
+  const [shown, setShown] = useState(cur);
+  if (cur && (cur.o !== shown?.o || cur.gone !== shown?.gone)) setShown(cur);
 
   return (
-    <Sheet open={!!o} onOpenChange={(v) => !v && closeDetail()}>
-      <SheetContent className="w-full gap-0 p-0 sm:max-w-[520px]">{shown && <DrawerBody key={shown.id} o={shown} />}</SheetContent>
+    <Sheet open={!!cur} onOpenChange={(v) => !v && closeDetail()}>
+      <SheetContent className="w-full gap-0 p-0 sm:max-w-[520px]">
+        {shown && (shown.gone ? <GoneBody key={shown.o.id} o={shown.o} item={shown.gone} /> : <DrawerBody key={shown.o.id} o={shown.o} />)}
+      </SheetContent>
     </Sheet>
+  );
+}
+
+/** A board call that is no longer in the sources: what was saved, plus the team's decision, owner and notes. */
+function GoneBody({ o, item }: { o: Opportunity; item: BoardItem }) {
+  return (
+    <>
+      <SheetHeader className="gap-1.5 border-b px-6 py-5 pr-12">
+        <SheetDescription className="text-xs">Guardada en el tablero del equipo</SheetDescription>
+        <SheetTitle className="text-base leading-snug">{tidy(item.titulo)}</SheetTitle>
+        <p className="text-sm text-muted-foreground">{tidy(item.organismo)}</p>
+      </SheetHeader>
+      <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
+        <div className="space-y-2">
+          <GoneNote />
+          <p className="text-sm text-muted-foreground">
+            No salió en la última consulta a las fuentes: puede que la hayan retirado o que la fuente no responda. Se muestra lo que se guardó
+            {item.deadline ? `; el plazo era el ${fmtDate(item.deadline)}` : ""}.
+          </p>
+        </div>
+        <Separator />
+        <TriagePicker o={o} />
+        <Separator />
+        <TeamSection o={o} />
+      </div>
+      {item.url && (
+        <div className="flex flex-wrap gap-2 border-t px-6 py-4">
+          <Button asChild variant="outline">
+            <a href={item.url} target="_blank" rel="noreferrer">
+              Ver la última ficha oficial <ArrowUpRight aria-hidden />
+            </a>
+          </Button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -73,6 +119,8 @@ function DrawerBody({ o }: { o: Opportunity }) {
       </ul>
     </section>,
     <TriagePicker key="triage" o={o} />,
+    <VoteSection key="vote" o={o} />,
+    <TeamSection key="team" o={o} />,
     <section key="facts" className="space-y-3">
       <SectionTitle>Lo esencial</SectionTitle>
       <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
@@ -257,6 +305,8 @@ function WinnersBlock({ a }: { a: AwardsSummary }) {
   );
 }
 
+const BDNS_AWARDS = "https://www.infosubvenciones.es/bdnstrans/GE/es/concesiones/consulta";
+
 function HistorySection({ h }: { h: History }) {
   const wins = h.awards?.wonByReforesta ?? [];
   const wonYears = new Set(wins.map((w) => w.year));
@@ -307,9 +357,22 @@ function HistorySection({ h }: { h: History }) {
                   <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground tabular-nums">
                     {awText}
                     {wonYears.has(e.year) && (
-                      <span className="inline-flex items-center gap-1 font-medium text-primary">
-                        <Award className="size-3" aria-hidden /> La ganasteis
-                      </span>
+                      <>
+                        <span className="inline-flex items-center gap-1 font-medium text-primary">
+                          <Award className="size-3" aria-hidden /> La ganasteis
+                        </span>
+                        {/* BDNS reads the call number from the URL (the NIF filter is not), so this opens that edition's awards, Reforesta's among them. */}
+                        <a
+                          href={`${BDNS_AWARDS}?numeroConvocatoria=${encodeURIComponent(e.numero)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Abre las concesiones de esta edición en BDNS; la de Reforesta (NIF G80428204) está entre ellas"
+                          className="inline-flex items-center gap-0.5 rounded-sm underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                        >
+                          Ver concesión en BDNS <ArrowUpRight className="size-3" aria-hidden />
+                          <span className="sr-only"> (se abre en otra pestaña)</span>
+                        </a>
+                      </>
                     )}
                   </p>
                 </div>
@@ -347,6 +410,226 @@ function TriagePicker({ o }: { o: Opportunity }) {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+/* ---------- "¿Os sirve?" votes (they tune the scoring rules over time) ---------- */
+
+const VOTE_LABEL: Record<VoteValue, string> = { sirve: "Nos sirve", no_sirve: "No nos sirve" };
+
+function VoteSection({ o }: { o: Opportunity }) {
+  const { votes, setVote, clearVote } = useRadar();
+  const { me } = useSession();
+  const all = votes.filter((v) => v.opportunityId === o.id);
+  const my = all.find((v) => v.user.id === me.id);
+  const others = all.filter((v) => v.user.id !== me.id);
+  const [reason, setReason] = useState(my?.reason ?? "");
+  const yes = all.filter((v) => v.vote === "sirve").length;
+  const no = all.length - yes;
+
+  const choose = (v: VoteValue) => setVote(o.id, v, reason.trim());
+
+  return (
+    <section aria-labelledby="vote-h" className="space-y-3">
+      <div className="space-y-0.5">
+        <SectionTitle id="vote-h">¿Os sirve esta convocatoria?</SectionTitle>
+        <p className="text-xs text-muted-foreground">Vuestros votos ayudan a ajustar cómo puntúa el radar.</p>
+      </div>
+      <div role="group" aria-labelledby="vote-h" className="flex flex-wrap gap-1.5">
+        {(["sirve", "no_sirve"] as const).map((v) => {
+          const on = my?.vote === v;
+          const Icon = v === "sirve" ? ThumbsUp : ThumbsDown;
+          return (
+            <Button key={v} size="sm" variant={on ? "default" : "outline"} aria-pressed={on} onClick={() => choose(v)}>
+              <Icon aria-hidden /> {VOTE_LABEL[v]}
+            </Button>
+          );
+        })}
+        {my && (
+          <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => clearVote(o.id)}>
+            Quitar mi voto
+          </Button>
+        )}
+      </div>
+      {my && (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (reason.trim() !== my.reason) choose(my.vote);
+          }}
+        >
+          <label htmlFor={`reason-${o.id}`} className="sr-only">
+            Por qué (opcional)
+          </label>
+          <Input
+            id={`reason-${o.id}`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            maxLength={500}
+            placeholder="Por qué (opcional): p. ej. «solo para ayuntamientos»"
+            className="h-8 flex-1"
+          />
+          <Button type="submit" size="sm" variant="outline" disabled={reason.trim() === my.reason}>
+            Guardar
+          </Button>
+        </form>
+      )}
+      {all.length > 0 && (
+        <div className="space-y-2 rounded-lg bg-muted/50 px-3.5 py-3">
+          <p className="text-xs text-muted-foreground tabular-nums">
+            Votos del equipo · Nos sirve: {yes} · No nos sirve: {no}
+          </p>
+          {others.length > 0 && (
+            <ul className="space-y-1.5">
+              {others.map((v) => (
+                <li key={v.user.id} className="flex items-start gap-2 text-sm">
+                  {v.vote === "sirve" ? <ThumbsUp className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden /> : <ThumbsDown className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />}
+                  <span className="min-w-0">
+                    <span className="font-medium">{v.user.name || "Alguien"}</span>
+                    <span className="text-muted-foreground">: {VOTE_LABEL[v.vote].toLowerCase()}</span>
+                    {v.reason && <span className="break-words text-muted-foreground"> · «{v.reason}»</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ---------- Responsable and notes (shared with the team) ---------- */
+
+const NONE = "none";
+
+function TeamSection({ o }: { o: Opportunity }) {
+  return (
+    <div className="space-y-6">
+      <AssigneePicker o={o} />
+      <NotesSection o={o} />
+    </div>
+  );
+}
+
+function AssigneePicker({ o }: { o: Opportunity }) {
+  const { board, people, setAssignee } = useRadar();
+  const cur = board[o.id]?.assignee ?? null;
+  const active = people.filter((p) => p.active);
+  // An assignee who was deactivated stays visible (and only replaceable).
+  const options = cur && !active.some((p) => p.id === cur.id) ? [...active, { ...cur, active: false }] : active;
+  return (
+    <section className="space-y-2">
+      <SectionTitle id="assignee-h">Responsable</SectionTitle>
+      <Select
+        value={cur ? String(cur.id) : NONE}
+        onValueChange={(v) => {
+          const p = v === NONE ? null : options.find((x) => String(x.id) === v);
+          setAssignee(o, p ? { id: p.id, name: p.name } : null);
+        }}
+      >
+        <SelectTrigger className="w-full sm:w-64" aria-labelledby="assignee-h">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>Sin asignar</SelectItem>
+          {options.map((p) => (
+            <SelectItem key={p.id} value={String(p.id)} disabled={!p.active}>
+              {p.name || "Sin nombre"}
+              {!p.active && " (desactivada)"}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </section>
+  );
+}
+
+function NotesSection({ o }: { o: Opportunity }) {
+  const { board, addNote, deleteNote } = useRadar();
+  const { me, isAdmin } = useSession();
+  const notes = board[o.id]?.notes ?? [];
+  const [text, setText] = useState("");
+  const [pending, setPending] = useState(false);
+  const [toDelete, setToDelete] = useState<number | null>(null);
+
+  async function submit(e?: FormEvent) {
+    e?.preventDefault();
+    const body = text.trim();
+    if (!body || pending) return;
+    setPending(true);
+    if (await addNote(o, body)) setText("");
+    setPending(false);
+  }
+
+  return (
+    <section aria-labelledby="notes-h" className="space-y-3">
+      <SectionTitle id="notes-h">Notas{notes.length > 0 && ` · ${notes.length}`}</SectionTitle>
+      {notes.length > 0 ? (
+        <ol className="space-y-3">
+          {notes.map((n) => (
+            <li key={n.id} className="flex gap-2.5">
+              <PersonAvatar name={n.author?.name || "?"} className="mt-0.5" />
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">{n.author?.name || "Persona eliminada"}</span>
+                  <time dateTime={n.createdAt}>{fmtWhenShort(n.createdAt)}</time>
+                  {(isAdmin || n.author?.id === me.id) && (
+                    <button
+                      type="button"
+                      onClick={() => setToDelete(n.id)}
+                      aria-label="Borrar esta nota"
+                      title="Borrar nota"
+                      className="ml-auto grid size-6 place-items-center rounded-md text-muted-foreground/70 outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    >
+                      <Trash2 className="size-3.5" aria-hidden />
+                    </button>
+                  )}
+                </p>
+                {/* Plain text: React escapes it; line breaks are kept by CSS. */}
+                <p className="leading-relaxed break-words whitespace-pre-wrap">{n.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-sm text-muted-foreground">Nadie ha escrito nada todavía.</p>
+      )}
+      <form onSubmit={submit} className="space-y-2">
+        <label htmlFor={`note-${o.id}`} className="sr-only">
+          Nueva nota
+        </label>
+        <textarea
+          id={`note-${o.id}`}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submit();
+          }}
+          maxLength={4000}
+          rows={2}
+          placeholder="Escribe una nota para el equipo…"
+          className={cn(textareaClass, "min-h-16 resize-y")}
+        />
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">La verá todo el equipo.</span>
+          <Button type="submit" size="sm" variant="outline" disabled={!text.trim() || pending}>
+            {pending && <Loader2 className="animate-spin" aria-hidden />}
+            Añadir nota
+          </Button>
+        </div>
+      </form>
+      <ConfirmDialog
+        open={toDelete != null}
+        onOpenChange={(v) => !v && setToDelete(null)}
+        title="¿Borrar la nota?"
+        body="Desaparece para todo el equipo y no se puede recuperar."
+        confirm="Borrar nota"
+        destructive
+        onConfirm={() => toDelete != null && deleteNote(o.id, toDelete)}
+      />
     </section>
   );
 }

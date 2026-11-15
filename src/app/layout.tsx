@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/radar/AppShell";
@@ -23,7 +24,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="es" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full font-sans">
-        <AppShell>{children}</AppShell>
+        {/* The shell reads the pathname; on the token routes (/invitacion/[token], /restablecer/[token]) that is
+            request data, which cacheComponents wants behind a boundary. Static routes still prerender whole. */}
+        <Suspense>
+          <AppShell>{children}</AppShell>
+        </Suspense>
       </body>
     </html>
   );

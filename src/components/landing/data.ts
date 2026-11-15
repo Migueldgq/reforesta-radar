@@ -71,7 +71,7 @@ function summarize(items: Opportunity[], sources: SourceHealth[], fetchedAt: str
 }
 
 /**
- * Live figures for the landing, read from the API's `/api/oportunidades`. Cached for a few
+ * Live figures for the landing, read from the API's public `/api/public/oportunidades` (no session). Cached for a few
  * minutes with `use cache`, so the figures are part of the server HTML (no client fetch, works
  * without JS). Returns `null` when the API is down or empty (e.g. during `next build` without a
  * running backend), so every section falls back to copy without numbers; that miss is cached briefly.
@@ -80,7 +80,7 @@ export async function getLandingData(): Promise<LandingData | null> {
   "use cache";
   let result: LandingData | null = null;
   try {
-    const res = await fetch(`${API_URL}/api/oportunidades`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const res = await fetch(`${API_URL}/api/public/oportunidades`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
     const data = res.ok ? ((await res.json()) as OpportunitiesResponse) : null;
     if (data && data.items.length > 0) result = summarize(data.items, data.sources, data.fetchedAt);
   } catch {

@@ -1,6 +1,6 @@
 /**
  * The team's own adjustments on top of the server's fit score ("Perfil").
- * Stored per browser in localStorage. `applyProfile` is pure: it always starts from the
+ * One per team, saved through the API (`/api/settings`). `applyProfile` is pure: it always starts from the
  * untouched server item, so applying it twice from the raw item gives the same result.
  */
 import type { Opportunity, OpportunityKind } from "@/lib/opportunity";
@@ -104,48 +104,8 @@ export function parseProfile(input: unknown): UserProfile {
   };
 }
 
-/* ---------- Persistence (localStorage) + tiny external store ---------- */
-
+/** Where this browser kept the profile before it became the team's (read once by the first-login import). */
 export const PROFILE_KEY = "reforesta-radar:perfil:v1";
-let cache: UserProfile | null = null;
-const listeners = new Set<() => void>();
-
-export function loadProfile(): UserProfile {
-  if (cache) return cache;
-  try {
-    const raw = window.localStorage.getItem(PROFILE_KEY);
-    cache = raw ? parseProfile(JSON.parse(raw)) : DEFAULT_USER_PROFILE;
-  } catch {
-    cache = DEFAULT_USER_PROFILE;
-  }
-  return cache;
-}
-
-export function saveProfile(p: UserProfile) {
-  cache = p;
-  try {
-    if (isNeutral(p)) window.localStorage.removeItem(PROFILE_KEY);
-    else window.localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
-  } catch {
-    /* storage unavailable: keep in memory */
-  }
-  listeners.forEach((l) => l());
-}
-
-export function subscribeProfile(l: () => void) {
-  listeners.add(l);
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === PROFILE_KEY) {
-      cache = null;
-      l();
-    }
-  };
-  window.addEventListener("storage", onStorage);
-  return () => {
-    listeners.delete(l);
-    window.removeEventListener("storage", onStorage);
-  };
-}
 
 /* ---------- Applying the profile ---------- */
 

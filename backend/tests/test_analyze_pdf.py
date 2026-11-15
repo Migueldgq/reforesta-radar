@@ -1,6 +1,7 @@
 """POST /api/analyze-pdf and GET /api/perfil against the TS route's recorded output (tests/golden/)."""
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import httpx
@@ -8,12 +9,22 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import analyze_pdf as route
+from app.auth.deps import CurrentUser, current_user
 from app.main import app
 from app.pdf import download
 from app.pdf.download import MAX_PDF_BYTES, BlockedUrl, download_pdf, resolve_public
 
 GOLDEN = Path(__file__).parent / "golden"
-client = TestClient(app)
+client = TestClient(app, headers={"X-Radar-CSRF": "1"})
+
+
+@pytest.fixture(autouse=True)
+def signed_in() -> Iterator[None]:
+    """These routes need a session (tested in test_auth.py); here a fake member is enough."""
+    app.dependency_overrides[current_user] = lambda: CurrentUser(1, "ana@example.org", "Ana", "member", 1)
+    yield
+    app.dependency_overrides.pop(current_user, None)
+
 
 # Text extraction differs from pdf.js in one spot of the MITECO sample: pypdf joins "ES - ESPAÑA" and the next
 # line without a break, so the text is one character shorter. Nothing else in the result changes.
