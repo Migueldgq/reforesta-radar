@@ -8,7 +8,7 @@ Los ids y textos son los de `scenes.mjs`. La duración de cada momento de pantal
 |---|---|---|---|
 | 0,0 | `intro` | Salta la marca (cuadrado verde con el brote) y se escribe «Reforesta Radar», centrados. | — |
 | 1,9 | `statement` | Dos líneas centradas; la segunda en verde. | «Cada convocatoria que se escapa / *es monte que no se planta.*» |
-| 4,6 | `fuentes` | `/fuentes`: «11 fuentes · 542 convocatorias» y la tabla con su estado; la cámara baja por las fuentes. | «*11 fuentes*, una sola lista» |
+| 4,6 | `fuentes` | `/fuentes`: «7 fuentes · 528 convocatorias» y la tabla con su estado; la cámara baja por las fuentes. | «*7 fuentes*, una sola lista» |
 | 8,9 | `inicio` | `/`: las cuatro tarjetas (Abiertas ahora, Cierran en ≤30 días, Encaje alto, Fuera de tus 4 fuentes). | «Lo importante, *de un vistazo*» |
 | 12,0 | `semana` | Gráfico «Cuándo cierran»: clic en una semana; la cámara baja a la tabla, ya filtrada («Cierran la semana del …»). | «Pulsa una *semana*…» → «…y la lista *responde*» |
 | 17,0 | `mapa` | Mapa «Territorio»: zoom a Madrid, clic; la tabla queda en «Territorio: Comunidad de Madrid». | «O pulsa *Madrid*» → «Solo lo de *vuestro territorio*» |
@@ -21,13 +21,13 @@ Los ids y textos son los de `scenes.mjs`. La duración de cada momento de pantal
 
 ## Locución opcional (≈95 palabras, si se graba)
 
-«Reforesta Radar. Cada convocatoria que se escapa es monte que no se planta. Once fuentes, en una sola lista. Lo importante, de un vistazo: pulsa una semana o pulsa Madrid, y la lista responde. ¿Encaja? Un 85, y el porqué. La marcamos en estudio y pasa al tablero de seguimiento. El criterio es vuestro: subid el peso de una línea y la lista se reordena. ¿Unas bases en PDF? Una ficha para decidir. Y el canal de empresas, también. Menos horas leyendo bases, más horas en el monte.»
+«Reforesta Radar. Cada convocatoria que se escapa es monte que no se planta. Siete fuentes, en una sola lista. Lo importante, de un vistazo: pulsa una semana o pulsa Madrid, y la lista responde. ¿Encaja? Un 85, y el porqué. La marcamos en estudio y pasa al tablero de seguimiento. El criterio es vuestro: subid el peso de una línea y la lista se reordena. ¿Unas bases en PDF? Una ficha para decidir. Y el canal de empresas, también. Menos horas leyendo bases, más horas en el monte.»
 
 Si se añade, la voz manda: alarga las pausas (`sleep`) de `capture.mjs` y baja `MUSIC_LUFS` en `compose.mjs` unos dB.
 
 ## Notas
 
-- Las cifras que se ven (11 fuentes, 542 convocatorias, 85, 84/100, Encaje alto 0 → 8…) son las de la app el día de la grabación; los titulares no citan cifras salvo «11 fuentes».
+- Las cifras que se ven (7 fuentes, 528 convocatorias, 30 abiertas, 85, 84/100, Encaje alto 0 → 8…) son las de la app el día de la grabación; los titulares no citan cifras salvo «7 fuentes»: si cambia el número de fuentes de la app, cámbialo en `scenes.mjs` y vuelve a capturar `fuentes`.
 - La app no redacta solicitudes: el vídeo enseña encontrar, priorizar, explicar el encaje, hacer seguimiento y leer bases. Nada más.
 - Se usa el PDF de Madrid (12 páginas): el de MITECO es un extracto de 3 páginas y su ficha sale casi vacía.
 - Sin página de aterrizaje (`/landing`): todo es la app.

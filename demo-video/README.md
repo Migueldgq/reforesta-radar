@@ -26,7 +26,7 @@ scenes.mjs ─► capture.mjs ─► composition/assets/scenes/<id>.mp4   (2880�
 
 ```bash
 cd demo-video
-npm run capture      # record all screen beats (~2.5 min)
+npm run capture      # record all screen beats in one pass (~2.5 min; numbers on screen are whatever the app shows then)
 npm run render       # compose + render → out/demo-final.mp4 (~1.5 min)
 # or both:
 npm run all
