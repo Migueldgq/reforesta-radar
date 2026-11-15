@@ -12,6 +12,8 @@ dependencies = [
     "asyncpg>=0.30",
     "alembic>=1.14",
     "tzdata>=2024.2",
+    "pypdf>=7.1.0",
+    "python-multipart>=0.0.33",
 ]
 
 [dependency-groups]

@@ -65,6 +65,8 @@ backend/
       notices.py         decode_html, is_call_notice, is_open_tender, extract_notice_details,
                          parse_deadline, deadline_from_days, es_date_to_iso (BOE, BOCM, DOG, BDNS)
       boe.py, rsc.py     ported connectors
+      eu.py, fb.py, bocm.py, dog.py  ports of src/lib/sources/multi-source.ts
+      bdns.py            BDNS connector (68 searches + up to 230 memoised details; retries 429 up to 3 times)
     ingest/
       __main__.py        CLI (python -m app.ingest), per-source run, summary table
       store.py           one-transaction write: upsert, change log, gone, run records, fetch_cache
@@ -94,6 +96,7 @@ Regenerate after changing the TS scoring (from the repo root, with the Next.js d
 ```bash
 curl -s localhost:3000/api/oportunidades > backend/tests/golden/oportunidades.json
 TZ=Europe/Madrid npx tsx backend/tools/dump_ts_golden.ts
+TZ=Europe/Madrid npx tsx backend/tools/dump_ts_multisource.ts   # eu/fb/bocm/dog fixtures -> expected.json
 cd backend && uv run python -m tools.capture_bdns_inputs && uv run python -m tools.capture_eu_inputs
 ```
 
@@ -145,22 +148,30 @@ Details that matter when porting more code:
 
 | id | TS | notes |
 |---|---|---|
-| `bdns` | `src/lib/bdns.ts` (`getBdnsOpportunities`, `detailToOpportunity`, `rawToOpportunity`, `preScore`, `searchPaged`, `RADAR_QUERIES`, `PRE_DROP_TERMS`) | 68 paged searches + up to `MAX_ENRICH` details; memo `bdns:detail:N` (TTL 24 h with end date, 3 h without); needs `infer_comunidad_autonoma`, `parse_deadline`, `deadline_from_days`; adjustments: conflict (`sin_fecha`, −12, cap 60), estimated-deadline warning, lite (−5 + warning); `keep()` uses isCompetitive / score ≥ 25 / workLines / priority. The TS `fetchJsonShared` dedupes identical concurrent GETs: add that to `Http` if needed. |
-| `eu` | `src/lib/sources/multi-source.ts` (`scrapeEu`, `sediaSearch`, `EN_TOPIC`, `EU_OFFTOPIC`, `nextFutureDeadline`) | SEDIA search is a multipart POST (see `tools/capture_eu_inputs.py`); scoring titulo/extraText are Spanish terms; Horizon (−12, cap 58, warning), LIFE (prepend reason), municipalities warning. |
-| `bocm` | `multi-source.ts` (`scrapeBocm`, `bocmXmlUrl`, `parseBocmXml`) | XML summaries; notice details via `extract_notice_details`; tipo depends on body text. |
-| `dog` | `multi-source.ts` (`scrapeDog`) | Pre-score then details like BOE. |
-| `fb` | `multi-source.ts` (`scrapeFundacionBiodiversidad`, `parseAmount`) | HTML list + detail; closed-status adjustment (`deadline_state="cerrada"`, cap 50); drops becas. |
+| `bdns` | `src/lib/bdns.ts` (`getBdnsOpportunities`, `detailToOpportunity`, `rawToOpportunity`, `preScore`, `searchPaged`, `RADAR_QUERIES`, `PRE_DROP_TERMS`) | 68 paged searches + up to `MAX_ENRICH` details; memo `bdns:detail:N` (TTL 24 h with end date, 3 h without); needs `infer_comunidad_autonoma`, `parse_deadline`, `deadline_from_days`; adjustments: conflict (`sin_fecha`, −12, cap 60), estimated-deadline warning, lite (−5 + warning); `keep()` uses isCompetitive / score ≥ 25 / workLines / priority. The TS `fetchJsonShared` dedupes identical concurrent GETs: add that to `Http` if needed. **Ported** (`app/sources/bdns.py`, `tests/test_bdns.py`): 481/481 ids and fields identical to the live TS route; no in-flight dedupe needed (every BDNS URL is unique per run). |
+| `eu` | `src/lib/sources/multi-source.ts` (`scrapeEu`, `sediaSearch`, `EN_TOPIC`, `EU_OFFTOPIC`, `nextFutureDeadline`) | SEDIA search is a multipart POST (see `tools/capture_eu_inputs.py`); scoring titulo/extraText are Spanish terms; Horizon (−12, cap 58, warning), LIFE (prepend reason), municipalities warning. **Ported** (`app/sources/eu.py`, `EN_TOPIC` now lives there). |
+| `bocm` | `multi-source.ts` (`scrapeBocm`, `bocmXmlUrl`, `parseBocmXml`) | XML summaries; notice details via `extract_notice_details`; tipo depends on body text. **Ported** (`app/sources/bocm.py`). |
+| `dog` | `multi-source.ts` (`scrapeDog`) | Pre-score then details like BOE. **Ported** (`app/sources/dog.py`). |
+| `fb` | `multi-source.ts` (`scrapeFundacionBiodiversidad`, `parseAmount`) | HTML list + detail; closed-status adjustment (`deadline_state="cerrada"`, cap 50); drops becas. **Ported** (`app/sources/fb.py`). |
 
 Final source set: bdns, boe, eu, bocm, dog, fb, rsc. `ted`, `bocyl`, `boja` and `montemadrid` were removed from
 the product and are not to be ported.
 
+### PDF analyzer and `/api/perfil` (ported)
+
+- `POST /api/analyze-pdf` (`app/api/analyze_pdf.py`, `app/pdf/`): same request shapes (`sample`, `docId`, `pdfUrl`,
+  multipart `file`), JSON and Spanish errors as the TS route; 15 MB cap (uploads too), 415 on non-PDF, LRU cache
+  (50) for remote PDFs. Text extraction uses `pypdf` (BSD) with unpdf's page-merge normalisation; on both samples
+  every field matches the TS except `charCount`/`excerpt` of the MITECO sample (pypdf drops one line break).
+  `pdfUrl` keeps the TS host allow-list and adds SSRF guards (see `app/pdf/download.py`). The sample PDFs are read
+  from the repo's `data/samples` (`RADAR_SAMPLES_DIR` overrides); compose mounts them at `/data/samples` read-only.
+- `GET /api/perfil` (`app/api/perfil.py`): byte-identical to the TS route (`tests/golden/perfil.json`).
+- Regenerate the goldens with the Next.js dev server running: `curl -s localhost:3000/api/perfil >
+  backend/tests/golden/perfil.json`, and `curl -s -X POST localhost:3000/api/analyze-pdf -H 'content-type:
+  application/json' -d '{"sample":"madrid"}' > backend/tests/golden/analyze_pdf_madrid.json` (same for `miteco`).
+
 Other TS backend pieces not ported yet:
 
-- **PDF analyzer**: `src/lib/pdf-analyzer.ts`, `src/lib/pdf-cache.ts`, route `src/app/api/analyze-pdf/route.ts`
-  (POST: upload or URL, 15 MB cap, sample files, LRU cache; text extraction with `unpdf`, then
-  `scoreConvocatoria`). Needs a PDF text library (e.g. `pypdf`) and an upload endpoint.
-- **`/api/perfil`** (`src/app/api/perfil/route.ts`): read-only dump of the profile tables; trivial from
-  `app/scoring/profile.py`.
 - Legacy routes `/api/boe` and `/api/convocatorias` and the legacy shape of the TS `/api/fuentes`
   (`getAllExternalSources`); the frontend does not call them. The Python `/api/fuentes` returns
   `{sources, lastIngestAt}` instead.

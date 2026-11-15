@@ -14,6 +14,7 @@ from typing import Any
 from app.config import settings
 from app.scoring.score import FitAdjust, ScoreInput
 from app.sources.base import RawOpportunity
+from app.sources.eu import EN_TOPIC
 from app.sources.rsc import RSC_PROGRAMMES, to_raw
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -41,33 +42,6 @@ GAPS = {
     "bocm": 'tipoConvocatoria for non-tenders depends on the notice body ("Concurrencia competitiva" or '
     '"Convocatoria (BOCM)"), not in the API (tipo says "Convocatoria / extracto").',
 }
-
-# English topic terms -> Spanish equivalents understood by the scorer (EN_TOPIC in multi-source.ts).
-# TODO(eu connector): move to app/sources/eu.py and import it from there.
-EN_TOPIC: tuple[tuple[re.Pattern[str], str], ...] = tuple(
-    (re.compile(p), es)
-    for p, es in (
-        (r"\bbiodiversit", "biodiversidad"),
-        (r"\bforest", "forestal bosque"),
-        (r"\b(re|af)forest", "reforestacion"),
-        (
-            r"\bnature restoration|\becosystem restoration|\brestor(e|ation) (of )?(ecosystems|habitats|nature)",
-            "restauracion ecologica",
-        ),
-        (r"\bnature\b|\bnatural capital", "medio natural"),
-        (r"\becosystem", "ecosistema"),
-        (r"\bhabitat", "habitat"),
-        (r"\binvasive (alien )?species", "especies invasoras"),
-        (r"\bwetland", "humedal"),
-        (r"\bpollinat", "polinizador"),
-        (r"\bagroforest", "agroforestal"),
-        (r"\bbirds?\b", "avifauna"),
-        (r"\bclimate (change )?adaptation", "cambio climatico"),
-        (r"\bnature-based solution", "soluciones basadas en la naturaleza"),
-        (r"\benvironmental education|\bcitizen science", "educacion ambiental"),
-        (r"\bnatura 2000", "red natura"),
-    )  # fmt: skip
-)
 
 
 def scoring_day(item: dict[str, Any], fetched_at: str) -> date:

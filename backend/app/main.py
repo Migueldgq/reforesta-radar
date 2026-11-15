@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.api import analyze_pdf, perfil
 from app.api.state import last_ingest, read_sources, read_state
 from app.config import settings
 from app.db.session import make_engine
@@ -30,7 +31,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Reforesta Radar API", version="0.1.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["GET"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["GET", "POST"], allow_headers=["*"]
+)
+app.include_router(analyze_pdf.router)
+app.include_router(perfil.router)
 
 
 def _engine(request: Request) -> AsyncEngine:

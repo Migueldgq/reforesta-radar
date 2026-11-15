@@ -1,0 +1,29 @@
+{
+ "content": [
+  {
+   "id": 1143377,
+   "mrr": false,
+   "numeroConvocatoria": "941816",
+   "descripcion": "CONVENIO ENTRE LA FUNDACIÓN BIODIVERSIDAD F.S.P. Y EL DEPARTAMENT DE TERRITORI, HABITATGE I TRANSICIO ECOLOGICA DE LA GENERALITAT DE CATALUÑA PARA LA EJECUCIÓN DE LAS ACCIONES INCLUIDAS EN EL PROYECTO LIFE HUMEDALES (LIFE24-IPN-ES-LIFE HUMEDALES)",
+   "descripcionLeng": null,
+   "fechaRecepcion": "2026-11-12",
+   "nivel1": "ESTADO",
+   "nivel2": "MINISTERIO PARA LA TRANSICIÓN ECOLÓGICA Y EL RETO DEMOGRÁFICO",
+   "nivel3": "FUNDACIÓN BIODIVERSIDAD",
+   "codigoInvente": null
+  },
+  {
+   "id": 1133212,
+   "mrr": false,
+   "numeroConvocatoria": "931651",
+   "descripcion": "FEADER.AYUD.MANT.VIÑEDO SECANO PRESERVA BIODIVERSIDAD C.M.PRG.26_30",
+   "descripcionLeng": null,
+   "fechaRecepcion": "2026-09-25",
+   "nivel1": "AUTONOMICA",
+   "nivel2": "COMUNIDAD DE MADRID",
+   "nivel3": "CONSEJERÍA DE MEDIO AMBIENTE, AGRICULTURA E INTERIOR",
+   "codigoInvente": null
+  }
+ ],
+ "totalElements": 60
+}

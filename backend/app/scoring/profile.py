@@ -12,6 +12,28 @@ WORK_LINE_LABELS: dict[WorkLine, str] = {
 }
 
 
+class ProfileIdentity(NamedTuple):
+    """Who Reforesta is (REFORESTA_PROFILE in the TS, minus manualSources: see MANUAL_SOURCES)."""
+
+    name: str
+    years_active: int
+    team_size: str
+    legal_form: str
+    core_mission: str
+
+
+REFORESTA_IDENTITY = ProfileIdentity(
+    name="Asociación Reforesta",
+    years_active=30,
+    team_size="6-7 personas",
+    legal_form="ONG / Entidad sin ánimo de lucro (ESAL)",
+    core_mission=(
+        "Restauración de ecosistemas forestales, conservación de hábitats y educación ambiental mediante acuerdos "
+        "de custodia del territorio con ayuntamientos, parques regionales y propietarios privados."
+    ),
+)
+
+
 class ManualSource(NamedTuple):
     label: str
     patterns: tuple[str, ...]

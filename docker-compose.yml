@@ -40,6 +40,8 @@ services:
     <<: *backend
     ports:
       - "127.0.0.1:${RADAR_API_PORT:-8010}:8000"
+    volumes:
+      - ./data/samples:/data/samples:ro # sample PDFs for POST /api/analyze-pdf {"sample": ...}
     restart: unless-stopped
 
   ingest:
