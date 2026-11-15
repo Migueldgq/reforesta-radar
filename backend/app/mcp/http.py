@@ -10,7 +10,7 @@ Order of checks on every request (all before any MCP parsing):
    - a header that is not a valid, active token: always 401 with `WWW-Authenticate: Bearer … error="invalid_token"`
      (never a silent downgrade to public); 30 of those per IP in 15 min, then 429 for that IP;
    - a valid token: team view (the tools read the person from the scope state).
-The SDK runs stateless with plain JSON responses: no MCP sessions to keep, nothing to resume.
+The SDK runs stateless with plain JSON responses: no MCP sessions to keep, nothing to resume, POST only.
 """
 
 import json
@@ -80,6 +80,11 @@ class McpEndpoint:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if self._manager is None or scope["type"] != "http":
             await _reply(send, 503, "El servidor MCP no está en marcha.")
+            return
+        if scope["method"] != "POST":
+            # Only POST: no standalone GET stream (it would hold an open connection per anonymous caller) and no
+            # sessions to DELETE (stateless). The 2026-07-28 spec answers both with 405.
+            await _reply(send, 405, "Usa POST.", {"Allow": "POST"})
             return
         request = Request(scope)
         if (refused := await TransportSecurityMiddleware(self._security).validate_request(request)) is not None:

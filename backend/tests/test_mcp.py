@@ -247,6 +247,8 @@ async def test_host_origin_body_and_rate_limits(engine: AsyncEngine, running: No
     assert (await _status(engine, None, Origin="https://evil.example")).status_code == 403
     assert (await _status(engine, None, Origin="http://localhost:3010")).status_code == 200
     async with _http(engine) as c:
+        assert (await c.get("/mcp")).status_code == 405  # no standalone stream to hold open
+        assert (await c.delete("/mcp")).status_code == 405
         big = b"x" * (1024 * 1024 + 1)
         res = await c.post("/mcp", content=big, headers={"Content-Type": "application/json"})
         assert res.status_code == 413
@@ -295,7 +297,7 @@ async def test_public_tools_expose_no_team_data(engine: AsyncEngine, running: No
     for private in (SECRET_NOTE, "Encaja", "@example.org", "Luis", "anfibio (+10)"):
         assert private not in dumped, private
     search = outputs[0]
-    assert search["vista"] == "publica" and "token personal" in search["nota"]
+    assert search["vista"] == "publica" and "token personal" in search["vistaPublica"]
     # public view = the server score, hidden calls included (the team's profile hides humedales)
     assert next(r for r in search["convocatorias"] if r["id"] == "bdns:1")["nota"] == 70 + 12  # + Madrid geo
     assert any(r["id"] == "bdns:2" for r in search["convocatorias"])

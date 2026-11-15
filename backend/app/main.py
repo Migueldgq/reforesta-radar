@@ -59,7 +59,7 @@ signed_in = [Depends(current_user)]
 no_session: dict[int | str, dict[str, Any]] = {401: {"description": "No valid session (`radar_session` cookie)"}}
 for r in (analyze_pdf, perfil, team, tokens, board, ingest_requests):
     app.include_router(r.router, dependencies=signed_in, responses=no_session)
-# Read-only MCP server (Streamable HTTP): its own auth, see app/mcp/http.py. Any method; the SDK answers 405 to GET.
+# Read-only MCP server (Streamable HTTP): its own auth, see app/mcp/http.py. POST only (405 otherwise).
 app.router.routes.append(Route("/mcp", endpoint=mcp_endpoint))
 
 

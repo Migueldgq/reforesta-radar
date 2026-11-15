@@ -306,7 +306,7 @@ async def buscar_convocatorias(
     if who:
         data["ocultasPorPerfilDelEquipo"] = len(hidden)
     else:
-        data["nota"] = SERVER_SCORE_NOTE
+        data["vistaPublica"] = SERVER_SCORE_NOTE
     return _result(data)
 
 
@@ -421,7 +421,7 @@ async def ver_convocatoria(
                 data["ocultaPorPerfilDelEquipo"] = hidden[id]
             data["equipo"] = await _team_part(conn, id)
         else:
-            data["nota"] = SERVER_SCORE_NOTE
+            data["vistaPublica"] = SERVER_SCORE_NOTE
     return _result(data)
 
 
@@ -458,7 +458,7 @@ async def programas_empresas(ctx: Context) -> CallToolResult:
     ]
     data: dict[str, Any] = {"datosDe": last, "total": len(out), "programas": out}
     if not who:
-        data["nota"] = SERVER_SCORE_NOTE
+        data["vistaPublica"] = SERVER_SCORE_NOTE
     return _result(data)
 
 
@@ -605,5 +605,5 @@ async def perfil_reforesta(ctx: Context) -> CallToolResult:
                 "editadoEl": row.updated_at.isoformat()[:10] if row and row.updated_at else None,
             }
         else:
-            data["nota"] = "Perfil por defecto. " + NEEDS_TOKEN
+            data["vistaPublica"] = "Perfil por defecto. " + NEEDS_TOKEN
     return _result(data)
