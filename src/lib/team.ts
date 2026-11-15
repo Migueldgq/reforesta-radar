@@ -9,6 +9,7 @@ export type TeamPerson = { id: number; name: string; active: boolean };
 
 export type TeamUser = Me & { active: boolean; createdAt: string; lastLoginAt: string | null };
 export type PendingInvitation = { id: number; email: string; name: string; role: Role; createdAt: string; expiresAt: string; createdBy: number | null };
+export type PendingReset = { id: number; userId: number; userName: string; createdBy: number | null; createdAt: string; expiresAt: string };
 export type OneTimeLink = { link: string; expiresAt: string; emailed: boolean };
 
 export type Note = { id: number; author: PersonRef | null; body: string; createdAt: string };

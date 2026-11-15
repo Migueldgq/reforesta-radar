@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api, errorText } from "@/lib/api";
-import { fmtDayLong, type Disagreement, type OneTimeLink, type PendingInvitation, type Role, type TeamUser } from "@/lib/team";
+import { fmtDayLong, fmtWhenShort, type Disagreement, type OneTimeLink, type PendingInvitation, type PendingReset, type Role, type TeamUser } from "@/lib/team";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,7 +91,7 @@ export function EquipoView() {
 
 /* ---------- People and invitations ---------- */
 
-type Team = { users: TeamUser[]; invitations: PendingInvitation[] };
+type Team = { users: TeamUser[]; invitations: PendingInvitation[]; resets: PendingReset[] };
 type Confirm = { title: string; body: ReactNode; confirm: string; destructive?: boolean; run: () => void };
 type Shown = { kind: "invitation" | "reset"; who: string } & OneTimeLink;
 
@@ -124,6 +124,8 @@ function People() {
       const saved = await api<TeamUser>(`/api/team/users/${u.id}`, { method: "PATCH", json: body });
       setTeam((t) => (t ? { ...t, users: t.users.map((x) => (x.id === saved.id ? saved : x)) } : t));
       notify(done);
+      // Losing admin or being deactivated also cancels the links that person created: show what is left.
+      void load();
     } catch (e) {
       // e.g. 409 "Tiene que quedar al menos un administrador activo."
       notify(errorText(e), "error");
@@ -137,6 +139,7 @@ function People() {
     try {
       const r = await api<OneTimeLink>(`/api/team/users/${u.id}/reset-link`, { method: "POST" });
       setShown({ kind: "reset", who: u.name || u.email, ...r });
+      void load();
     } catch (e) {
       notify(errorText(e), "error");
     } finally {
@@ -144,11 +147,30 @@ function People() {
     }
   }
 
+  async function revokeReset(r: PendingReset) {
+    try {
+      await api(`/api/team/resets/${r.id}`, { method: "DELETE" });
+      setTeam((t) => (t ? { ...t, resets: t.resets.filter((x) => x.id !== r.id) } : t));
+      notify(`Enlace para restablecer la contraseña de ${r.userName || "esa persona"} revocado.`);
+    } catch (e) {
+      notify(errorText(e), "error");
+      void load();
+    }
+  }
+
+  /** "Creado por Ana", "Creado por ti", or the self-service case for reset links. */
+  const createdBy = (id: number | null, selfService = false) => {
+    if (id == null) return selfService ? "Pedido por la propia persona (correo)" : "Creador desconocido";
+    if (id === me.id) return "Creado por ti";
+    const u = team?.users.find((x) => x.id === id);
+    return `Creado por ${u?.name || u?.email || "otra persona"}`;
+  };
+
   async function revoke(inv: PendingInvitation) {
     try {
       await api(`/api/team/invitations/${inv.id}`, { method: "DELETE" });
       setTeam((t) => (t ? { ...t, invitations: t.invitations.filter((x) => x.id !== inv.id) } : t));
-      notify(`Invitación para ${inv.email} anulada. El enlace ya no sirve.`);
+      notify(`Invitación para ${inv.email} revocada. El enlace ya no sirve.`);
     } catch (e) {
       notify(errorText(e), "error");
       void load();
@@ -286,38 +308,70 @@ function People() {
       <section aria-labelledby="inv-h" className="space-y-3">
         <div>
           <h2 id="inv-h" className="text-base font-semibold">
-            Invitaciones pendientes
+            Enlaces pendientes
           </h2>
-          <p className="text-sm text-muted-foreground">Enlaces enviados que nadie ha usado todavía. Caducan a los 7 días.</p>
+          <p className="text-sm text-muted-foreground">
+            Invitaciones y enlaces para restablecer contraseña que nadie ha usado todavía. Si uno se ha enviado a quien no era, revócalo.
+          </p>
         </div>
-        {team && team.invitations.length === 0 && <p className="text-sm text-muted-foreground">No hay ninguna pendiente.</p>}
-        {team && team.invitations.length > 0 && (
+        {team && team.invitations.length + team.resets.length === 0 && <p className="text-sm text-muted-foreground">No hay ninguno pendiente.</p>}
+        {team && team.invitations.length + team.resets.length > 0 && (
           <ul className="divide-y rounded-lg border">
             {team.invitations.map((inv) => (
               <li key={inv.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-                <Mail className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                 <div className="min-w-0 flex-1 basis-48">
                   <p className="truncate font-medium">{inv.name || inv.email}</p>
                   {inv.name && <p className="truncate text-xs text-muted-foreground">{inv.email}</p>}
                 </div>
                 <Badge variant="outline" className="font-normal">
-                  {ROLE_LABEL[inv.role]}
+                  <Mail aria-hidden /> Invitación · {ROLE_LABEL[inv.role]}
                 </Badge>
-                <p className="text-xs text-muted-foreground">Caduca el {fmtDayLong(inv.expiresAt)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {createdBy(inv.createdBy)} · caduca el {fmtDayLong(inv.expiresAt)}
+                </p>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() =>
                     setConfirm({
-                      title: "¿Anular la invitación?",
+                      title: "¿Revocar la invitación?",
                       body: `El enlace enviado a ${inv.email} dejará de funcionar. Puedes invitar de nuevo cuando quieras.`,
-                      confirm: "Anular invitación",
+                      confirm: "Revocar invitación",
                       destructive: true,
                       run: () => void revoke(inv),
                     })
                   }
                 >
-                  Anular
+                  Revocar
+                </Button>
+              </li>
+            ))}
+            {team.resets.map((r) => (
+              <li key={`r${r.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+                <div className="min-w-0 flex-1 basis-48">
+                  <p className="truncate font-medium">{r.userName || "Sin nombre"}</p>
+                  <p className="truncate text-xs text-muted-foreground">Nueva contraseña</p>
+                </div>
+                <Badge variant="outline" className="font-normal">
+                  <KeyRound aria-hidden /> Restablecer
+                </Badge>
+                <p className="text-xs text-muted-foreground">
+                  {createdBy(r.createdBy, true)} · caduca el {fmtWhenShort(r.expiresAt)}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setConfirm({
+                      title: "¿Revocar el enlace?",
+                      body: `El enlace para que ${r.userName || "esa persona"} elija una contraseña nueva dejará de funcionar. Su contraseña actual no cambia.`,
+                      confirm: "Revocar enlace",
+                      destructive: true,
+                      run: () => void revokeReset(r),
+                    })
+                  }
+                >
+                  Revocar
                 </Button>
               </li>
             ))}
