@@ -115,8 +115,14 @@ type AssistantsInfo = { assistants: ConnectedAssistant[]; teamUrl: string; publi
   browser that started it. The page sits behind the normal login (`/login?next=/autorizar?solicitud=…`), sends the id
   in the JSON body, and must never be framed (`next.config.ts` sets `frame-ancestors 'none'`, `X-Frame-Options:
   DENY`, `Referrer-Policy: no-referrer`).
-- Always show `assistant` next to `redirectHost`, and the warning for `desconocido`: the name is whatever the
-  assistant registered.
+- Always show `assistant` (clamped to two lines) next to `redirectHost`, the warning for `desconocido` (the name is
+  whatever the assistant registered) and, for every kind, «continue only if you just pressed Connect in your own
+  assistant; if someone sent you this link, press No permitir».
+- `/oauth/authorize` errors found before the person decides (unknown client or redirect URI, PKCE, `resource`, …) are
+  an HTML page from the API (400, or 429 after 30 failures per IP in 10 minutes), never a redirect to the client,
+  except to a loopback redirect URI. Valid requests are never limited. `/oauth/token` and `/oauth/revoke` count only
+  failures (60 per minute per IP; after that, failures other than `invalid_grant` get 429); `/oauth/register` has a
+  global budget of 60 per 10 minutes (plus 10 per IP with `FORWARDED_ALLOW_IPS` set to a trusted proxy).
 - `signIn: false` when OAuth is off (`RADAR_MCP_OAUTH=false`, or an http `RADAR_PUBLIC_URL` with
   `RADAR_COOKIE_SECURE=true`): show the personal-token option only.
 - Every grant of a person is revoked with their sessions (password change or reset, role change, deactivation).

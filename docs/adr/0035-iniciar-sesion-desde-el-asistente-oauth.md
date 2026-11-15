@@ -28,7 +28,8 @@ protecciones) salvo «OAuth, fuera». 0027 (tokens personales) no cambia.
   `OAuthAuthorizationServerProvider` (implementada en `app/oauth/provider.py`, con la base de datos) y sus
   manejadores de `/authorize`, `/token` y `/register`, que ya validan PKCE S256, la URI de vuelta y los tipos de
   concesión. Se escribe a mano solo lo que el SDK deja al servidor o hace distinto de lo que queremos: las URL salen de
-  `RADAR_PUBLIC_URL` / `RADAR_MCP_URL` (nunca del `Host`), los límites por IP, la cookie que ata la solicitud al
+  `RADAR_PUBLIC_URL` / `RADAR_MCP_URL` (nunca del `Host`), los límites (solo frenan fallos), la página de error de
+  `/oauth/authorize`, la cookie que ata la solicitud al
   navegador, la comprobación de `resource` en `/oauth/token`, la comparación del secreto de cliente contra su hash,
   `/oauth/revoke` (el del SDK exige `client_secret` también a clientes públicos) y la página de permiso.
 - **Rutas:** `/.well-known/oauth-protected-resource/mcp/equipo` (y la raíz), `/.well-known/oauth-authorization-server`
@@ -39,23 +40,48 @@ protecciones) salvo «OAuth, fuera». 0027 (tokens personales) no cambia.
   `radar_oauth` (HttpOnly, SameSite=Lax, ruta `/api/oauth/`) y manda el navegador a la página `/autorizar` de la web,
   detrás del login normal (`?next=` conserva la solicitud). La página dice, en castellano llano, «<asistente> quiere
   leer el radar de Reforesta con tu cuenta…», con el nombre que se dio el asistente, a qué dirección se envía el
-  permiso y un aviso claro si no lo reconocemos; «Permitir» / «Cancelar» son `POST /api/oauth/consent/decision` con
+  permiso y un aviso claro si no lo reconocemos; «Permitir» / «No permitir» son `POST /api/oauth/consent/decision` con
   sesión, regla CSRF de 0016 y la cookie del navegador que empezó. La página no se deja enmarcar
-  (`frame-ancestors 'none'`, `X-Frame-Options: DENY`).
+  (`frame-ancestors 'none'`, `X-Frame-Options: DENY`). Sea cual sea el cliente, avisa: continúa solo si tú mismo
+  acabas de pulsar «Conectar» en tu propio asistente; si alguien te ha enviado el enlace, «No permitir».
+- **Errores antes de decidir** (cliente o URI de vuelta desconocidos, falta PKCE, `resource` ajeno…): una página de
+  error en el radar, nunca una redirección a la URI de vuelta del cliente (RFC 9700 §4.11.2: quien registra el cliente
+  elige esa URI, y redirigir convertiría `/oauth/authorize` en un redirector abierto). Solo se redirige con error tras
+  una decisión de la persona («No permitir») o si la URI es loopback (un programa de su propio ordenador).
 - **Reconocido** = la URI de vuelta es la de Claude (`https://claude.ai/api/mcp/auth_callback`, también en claude.com):
-  el permiso solo puede llegar a Claude. **En tu ordenador** = loopback (Claude Code). Cualquier otra, **No
-  reconocido**, con aviso.
+  el permiso solo puede llegar a Claude, pero no dice a la cuenta de Claude de quién (por eso el aviso de arriba va
+  en todas). **En tu ordenador** = loopback (Claude Code). Cualquier otra, **No reconocido**, con aviso.
 - **Secretos opacos y solo su sha256 en la base** (como sesiones y tokens personales; no hacen falta JWT firmados
   porque el mismo proceso emite y comprueba): código de un solo uso de 60 s atado a cliente, URI de vuelta, reto PKCE,
   persona y recurso (reusarlo revoca lo que produjo); token de acceso de 1 hora con audiencia = la dirección del
   equipo, comprobada en cada llamada; token de refresco rotado en cada uso, y presentar uno ya rotado revoca toda la
-  concesión. La concesión caduca a los 30 días sin uso.
-- **Registro dinámico (RFC 7591)**, sin autenticar como manda el estándar: 10 por hora y por IP, como mucho 500
-  clientes guardados, los que nadie autoriza se borran a las 24 h y los inactivos sin concesión viva a los 90 días;
+  concesión. Un reintento o un duplicado en paralelo en los 10 s siguientes al primer uso (código o refresco) se
+  rechaza con `invalid_grant` sin revocar nada: así un cliente que reintenta no pierde los tokens que acaba de
+  recibir, y nunca hay dos pares válidos (el cambio de estado es atómico). La concesión caduca a los 30 días sin uso.
+- **Registro dinámico (RFC 7591)**, sin autenticar como manda el estándar: 60 registros cada 10 minutos en total
+  (y 10 por IP solo si hay un proxy de confianza, ver «Límites»), como mucho 500 clientes guardados, los que nadie
+  autoriza se borran a las 24 h (a los 10 minutos cuando la tabla pasa del 80 %) y los inactivos sin concesión viva a
+  los 90 días;
   URI de vuelta solo `https://` o `http://` en loopback (cualquier puerto en loopback, RFC 8252 §7.3), sin fragmento ni
-  credenciales, como mucho 5 de 512 caracteres; el nombre se limpia (sin caracteres de control ni de dirección,
-  60 caracteres). No se ofrecen los documentos de metadatos de cliente (CIMD): claude.ai vuelve al registro dinámico
+  credenciales, como mucho 5 de 512 caracteres; el nombre se limpia (NFC, sin caracteres de control ni de
+  dirección, como mucho una marca combinante por letra, 60 caracteres) y la página lo recorta a dos líneas. No se ofrecen los documentos de metadatos de cliente (CIMD): claude.ai vuelve al registro dinámico
   si el servidor no los anuncia.
+- **Límites: nunca se rechaza una petición que saldría bien.** Detrás del proxy de la web (la reescritura de Next)
+  todas las peticiones llegan con la misma IP, así que un límite por IP es un límite para todo el equipo y lo agota
+  cualquiera. Por eso:
+  - `/oauth/token` y `/oauth/revoke` procesan primero y solo cuentan los fallos (60 por minuto y por IP); pasado el
+    límite, los fallos reciben 429, salvo `invalid_grant` (el cliente lo necesita para volver a conectar). Una
+    petición correcta pasa siempre.
+  - `/oauth/authorize`: una solicitud válida no se limita nunca; los errores cuentan (30 cada 10 minutos por IP) y
+    después reciben 429.
+  - `/mcp/equipo` responde siempre 401 con `WWW-Authenticate` a un token desconocido o caducado, nunca 429: el cliente
+    necesita ese 401 para refrescar. Los tokens son aleatorios de 256 bits: no hay nada que adivinar.
+  - `/oauth/register`: el presupuesto global de arriba. **Riesgo que queda:** quien lo agote retrasa como mucho
+    10 minutos el *primer* registro de un asistente nuevo; los asistentes ya registrados (Claude guarda su
+    `client_id`) siguen conectando y refrescando. Llenar la tabla no sirve: a partir del 80 % los registros sin usar
+    se borran a los 10 minutos, y a 60 cada 10 minutos no se llega a 500.
+  - Con un proxy de confianza que da la IP real (`FORWARDED_ALLOW_IPS` distinto de `127.0.0.1`), además 10 registros
+    por IP cada 10 minutos.
 - **Revocación:** «Desconectar» en Mi cuenta, `/oauth/revoke`, y todas las concesiones de una persona con
   `revoke_sessions` (cambio o restablecimiento de contraseña, cambio de rol, desactivación); una cuenta desactivada no
   pasa ninguna comprobación.
@@ -73,8 +99,10 @@ protecciones) salvo «OAuth, fuera». 0027 (tokens personales) no cambia.
   Lo que protege es la página de permiso (nombre, dirección de vuelta, aviso). Una persona engañada para pulsar
   «Permitir» en una solicitud ajena daría lectura del tablero a un tercero: la cookie de navegador obliga a que la
   solicitud empiece en su propio navegador, pero no impide que se le envíe el enlace de `/oauth/authorize`.
-- La detección de reutilización del refresco es estricta: si un cliente refresca dos veces en paralelo, pierde la
-  concesión y hay que volver a conectar.
+- La detección de reutilización tiene 10 s de gracia: un ladrón que use un código o refresco robado dentro de esos
+  10 s tras el uso legítimo no provoca la revocación (sí recibe `invalid_grant`); pasado ese margen, sí.
+- Los límites por IP solo frenan fallos; un flujo de basura desde la misma IP que el equipo no le cierra el paso,
+  pero el presupuesto de registro sí puede retrasar 10 minutos el primer registro de un asistente (ver «Límites»).
 - Más superficie que revisar antes de publicar (lista en docs/backend.md y docs/mcp.md).
 
 ## Alternativas consideradas

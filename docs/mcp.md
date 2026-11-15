@@ -47,6 +47,10 @@ Qué pasa por debajo (OAuth 2.1, revisión 2026-07-28 de la especificación MCP;
 | Código → token de acceso (1 h, solo para `/mcp/equipo`) + refresco (rotado) | `POST /oauth/token` |
 | Revocar (toda la concesión) | `POST /oauth/revoke` |
 
+Los errores de `/oauth/authorize` antes de que decidas se muestran en una página del radar; nunca se redirige con un
+error a la dirección del cliente salvo si es de tu ordenador (loopback). Los límites solo frenan peticiones que
+fallan: una petición correcta pasa siempre, y `/mcp/equipo` responde 401 (nunca 429) a un token caducado.
+
 Los asistentes conectados se ven y se desconectan en **Mi cuenta → Conectar un asistente**. Se desconectan solos al
 cambiar o restablecer la contraseña, al cambiar de rol o al desactivar la cuenta.
 
@@ -165,5 +169,10 @@ las bases), cualquier escritura y el filtro de organismos del equipo en las bús
       consulta de `/autorizar` (lleva el id de la solicitud) ni los cuerpos de `/oauth/token` (códigos, refrescos).
 - [ ] claude.ai llega desde la red de Anthropic (`160.79.104.0/21` según su documentación): no bloquearla si hay
       cortafuegos.
-- [ ] Con varias réplicas de la API, los límites por IP (registro, autorización, fallos en `/oauth/token`) son por
+- [ ] Detrás del proxy de la web todas las peticiones llegan con la misma IP: los límites de OAuth solo frenan fallos
+      y nunca una petición correcta, y el registro tiene un presupuesto global (60 cada 10 minutos; quien lo agote
+      retrasa como mucho 10 minutos el primer registro de un asistente nuevo, ADR 0035 «Límites»). Si un proxy de
+      confianza da la IP real, poned `FORWARDED_ALLOW_IPS` con su dirección y se añade un límite de 10 registros por
+      IP.
+- [ ] Con varias réplicas de la API, los límites (registro, autorización, fallos en `/oauth/token`) son por
       proceso: con una sola instancia, como hoy, no hace falta nada.
