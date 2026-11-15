@@ -12,6 +12,7 @@
     "preview": "HYPERFRAMES_NO_TELEMETRY=1 hyperframes preview composition",
     "render": "node compose.mjs && HYPERFRAMES_NO_TELEMETRY=1 hyperframes render composition --output out/demo-final.mp4",
     "render:draft": "node compose.mjs && HYPERFRAMES_NO_TELEMETRY=1 hyperframes render composition --quality draft --output out/demo-draft.mp4",
+    "render:x": "CUT=x node compose.mjs && HYPERFRAMES_NO_TELEMETRY=1 hyperframes render composition --composition cut-x.html --output out/demo-x-2min.mp4",
     "all": "npm run capture && npm run render",
     "render:nomusic": "MUSIC=0 node compose.mjs && HYPERFRAMES_NO_TELEMETRY=1 hyperframes render composition --output out/demo-final-nomusic.mp4"
   },

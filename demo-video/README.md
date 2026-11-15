@@ -66,9 +66,12 @@ Variants:
 node capture.mjs ganasteis motivos # re-record some beats only
 HEADFUL=1 node capture.mjs equipo  # watch Chrome while it records
 npm run render:draft               # faster, lower-quality check → out/demo-draft.mp4
+npm run render:x                   # ~2 min cut for X (cuts.mjs) → out/demo-x-2min.mp4 + .es.srt
 npm run preview                    # HyperFrames browser editor
 npm run lint                       # "nested_structure" warnings are expected: the film is one generated file
 ```
+
+Shorter cuts (`cuts.mjs`) reuse the same takes and recordings: each lists the voice lines it keeps per beat; a recorded beat keeps its first lines and its recording ends where the first dropped line would start, so timing still follows the voice. `CUT=<name> node compose.mjs` writes `composition/cut-<name>.html` (git-ignored), its own mix (`assets/audio/*-<name>.wav`) and `out/<output>.es.srt`; the full film's files are not touched.
 
 To change wording: `scenes.mjs`, then `npm run render` (no re-capture). To change pacing or framing: the `sleep(...)` holds and `cam(...)` regions inside each beat in `capture.mjs` (`ACTIONS`), then re-capture that beat. Ramp speeds: `CONFIG.travelSpeed` / `CONFIG.scrollSpeed`. Canvas layout, typing speed, max zoom and overlap: constants at the top of `compose.mjs`.
 

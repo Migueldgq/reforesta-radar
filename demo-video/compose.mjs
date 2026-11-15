@@ -8,6 +8,8 @@
 //   composition/assets/audio/mix.wav  one stereo mix: music bed + typing ticks, clicks, whooshes, pops
 //
 // Env: MUSIC=0 leaves the music bed out (sound effects only). MUSIC_FILE=<path> swaps the track.
+//      CUT=<name> builds a shorter cut from cuts.mjs instead (composition/cut-<name>.html, its own mix and subtitles);
+//      the full film's files are left alone.
 //
 //   node compose.mjs && npx hyperframes render composition --output out/demo-final.mp4
 
@@ -15,11 +17,32 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FPS, SCENES } from "./scenes.mjs";
+import { CUTS } from "./cuts.mjs";
+import { FPS, SCENES as ALL_SCENES } from "./scenes.mjs";
 import { TIMING, lines, measure } from "./voice-lines.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const COMP = path.join(HERE, "composition");
+
+/* ---------- which film: the full one, or a cut from cuts.mjs ---------- */
+const CUT_NAME = process.env.CUT || null;
+const CUT = CUT_NAME ? CUTS[CUT_NAME] : null;
+if (CUT_NAME && !CUT) throw new Error(`no cut "${CUT_NAME}" in cuts.mjs`);
+const SCENES = CUT ? ALL_SCENES.filter((s) => CUT.keep[s.id]?.length) : ALL_SCENES;
+const kept = (l) => !CUT || CUT.keep[l.beat]?.includes(l.k);
+const OUT = CUT
+  ? { html: `cut-${CUT_NAME}.html`, audio: `-${CUT_NAME}`, srt: `out/${CUT.output}.es.srt`, timeline: `voice/timeline.${CUT_NAME}.json` }
+  : { html: "index.html", audio: "", srt: "out/demo-final.es.srt", timeline: "voice/timeline.json" };
+/** Recorded beat in a cut: the recording ends where its first dropped line would start (kept lines are its first ones). */
+function cutLog(s, raw) {
+  const all = ALL_SCENES.find((x) => x.id === s.id).voice.length;
+  const keep = CUT?.keep[s.id] ?? [];
+  if (!CUT || keep.length === all) return raw;
+  if (keep.some((k, i) => k !== i)) throw new Error(`cut ${CUT_NAME}: ${s.id} must keep its first lines`);
+  const at = raw.events.find((e) => e.type === "say" && e.k === keep.length)?.t;
+  if (at == null) throw new Error(`cut ${CUT_NAME}: ${s.id} has no say mark for line ${keep.length}`);
+  return { ...raw, duration: at, events: raw.events.filter((e) => e.t < at - 1e-3) };
+}
 
 /* ---------- canvas geometry ---------- */
 const W = 1920;
@@ -99,7 +122,7 @@ function typed(text) {
 
 /* ---------- narration ---------- */
 // One audio file per voice line (voice-lines.mjs): trimmed copies in assets/voice, their lengths time the film.
-const VLINES = lines();
+const VLINES = lines().filter(kept);
 const VMEAS = measure();
 const vdur = (name) => VMEAS[name]?.duration ?? Math.round((VLINES.find((l) => l.name === name).text.length / 14) * 100) / 100;
 const beatLines = (id) => VLINES.filter((l) => l.beat === id);
@@ -151,13 +174,13 @@ function retime(s, log) {
 }
 
 /** The recording with its freezes (frames held at those marks): assets/scenes/<id>.rt.mp4, rebuilt only when they change. */
-function retimedClip(id, log, freezes) {
+function retimedClip(id, log, freezes, tag = "") {
   if (!freezes.length) return `assets/scenes/${id}.mp4`;
   const src = path.join(COMP, "assets/scenes", `${id}.mp4`);
-  const out = path.join(COMP, "assets/scenes", `${id}.rt.mp4`);
+  const out = path.join(COMP, "assets/scenes", `${id}${tag}.rt.mp4`);
   const keyFile = out + ".json";
   const key = JSON.stringify({ freezes, src: statSync(src).mtimeMs });
-  if (existsSync(out) && existsSync(keyFile) && readFileSync(keyFile, "utf8") === key) return `assets/scenes/${id}.rt.mp4`;
+  if (existsSync(out) && existsSync(keyFile) && readFileSync(keyFile, "utf8") === key) return `assets/scenes/${id}${tag}.rt.mp4`;
   const pts = [...new Set([0, ...freezes.map((f) => f.at), log.duration])].sort((a, b) => a - b);
   const segs = pts.slice(0, -1).map((a, i) => ({ a, b: pts[i + 1] }));
   const parts = segs.map((g, i) => {
@@ -169,7 +192,7 @@ function retimedClip(id, log, freezes) {
   const filter = [`[0:v]split=${segs.length}${segs.map((_, i) => `[v${i}]`).join("")}`, ...parts, `${segs.map((_, i) => `[s${i}]`).join("")}concat=n=${segs.length}:v=1:a=0,fps=${FPS},format=yuv420p[out]`].join(";");
   execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", src, "-filter_complex", filter, "-map", "[out]", "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-movflags", "+faststart", out]);
   writeFileSync(keyFile, key);
-  return `assets/scenes/${id}.rt.mp4`;
+  return `assets/scenes/${id}${tag}.rt.mp4`;
 }
 
 /* ---------- timeline ---------- */
@@ -186,12 +209,12 @@ const timed = SCENES.map((s) => {
     const f = path.join(HERE, "captures", `${s.id}.json`);
     const src = path.join(COMP, "assets/scenes", `${s.id}.mp4`);
     if (existsSync(f) && existsSync(src)) {
-      const raw = JSON.parse(readFileSync(f, "utf8"));
+      const raw = cutLog(s, JSON.parse(readFileSync(f, "utf8")));
       const rt = retime(s, raw);
       log = { ...raw, events: raw.events.map((e) => ({ ...e, t: r3(rt.shift(e.t)) })), freezes: rt.freezes };
       voice = rt.voice;
       duration = rt.duration;
-      clip = retimedClip(s.id, raw, rt.freezes);
+      clip = retimedClip(s.id, raw, rt.freezes, OUT.audio);
     } else {
       voice = chain(ls, TIMING.first);
       duration = Math.max(2.5, (voice.at(-1)?.end ?? 0) + TIMING.tail); // placeholder
@@ -203,7 +226,9 @@ const timed = SCENES.map((s) => {
     const v1 = chain(ls.filter((l) => l.phase === 1), connectHold + 0.75);
     voice = [...v0, ...v1];
     const chatEnd = connectHold + 0.65 + (ASSIST?.question.length ?? 60) * QCPS + 0.5 + 2 * 0.4 + 5 * 0.22 + 2.2;
-    duration = Math.max(s.duration, chatEnd, (v1.at(-1)?.end ?? 0) + TIMING.tail);
+    // a cut without the chat lines ends on the connector card
+    if (!v1.length) connectHold = Math.max(CONNECT_HOLD, (v0.at(-1)?.end ?? 0) + TIMING.tail + 0.25);
+    duration = v1.length ? Math.max(s.duration, chatEnd, (v1.at(-1)?.end ?? 0) + TIMING.tail) : connectHold;
   } else if (s.kind === "outro") {
     voice = chain(ls, 1.0);
     duration = Math.max(s.duration, (voice.at(-1)?.end ?? 0) + 1.3);
@@ -317,12 +342,15 @@ timed.forEach((s, idx) => {
     const L = a + s.connectHold; // the connector card gives way to the chat
 
     // Two headlines like the screen beats: one over the connector, one over the chat.
+    const chat = s.voice.some((v) => v.phase === 1); // a cut can end on the connector card
     const [h0, h1] = s.headlines.map(typed);
     html.push(`<div id="h-${s.id}-0" class="clip headline on-green" ${win(a + 0.35, L - a - 0.35)} style="z-index:150"><p class="typed">${h0.html}<span class="caret"></span></p></div>`);
     typeLine(`h-${s.id}-0`, a + 0.35, h0.n);
     anim.push(`tl.to("#h-${s.id}-0 p", { opacity: 0, filter: "blur(10px)", duration: 0.2, ease: "power2.in" }, ${r3(L - 0.2)});`);
-    html.push(`<div id="h-${s.id}-1" class="clip headline on-green" ${win(L, s.end - L + 0.35)} style="z-index:150"><p class="typed">${h1.html}<span class="caret"></span></p></div>`);
-    typeLine(`h-${s.id}-1`, L, h1.n);
+    if (chat) {
+      html.push(`<div id="h-${s.id}-1" class="clip headline on-green" ${win(L, s.end - L + 0.35)} style="z-index:150"><p class="typed">${h1.html}<span class="caret"></span></p></div>`);
+      typeLine(`h-${s.id}-1`, L, h1.n);
+    }
 
     // Lead-in: the radar as an MCP connector of an AI agent (unbranded; the address host is a neutral stand-in).
     const c = s.connector;
@@ -342,6 +370,7 @@ timed.forEach((s, idx) => {
     anim.push(`tl.fromTo("#cn-${s.id} .cn-state", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2.2)" }, ${r3(a + 1.5)});`);
     sounds.push({ t: a + 1.5, kind: "pop", g: -3 });
     anim.push(`tl.to("#cn-${s.id}", { opacity: 0, filter: "blur(14px)", scale: 1.035, duration: 0.3, ease: "power2.in" }, ${r3(L - 0.3)});`);
+    if (!chat) return;
     sounds.push({ t: L - 0.15, kind: "swish" });
 
     // The chat: the question, the radar's MCP tool calls, the answer.
@@ -511,8 +540,9 @@ timed.forEach((s, idx) => {
 function buildAudio() {
   const dir = path.join(COMP, "assets/audio");
   mkdirSync(dir, { recursive: true });
-  const sfxOut = path.join(dir, "sfx.wav");
-  const out = path.join(dir, "mix.wav");
+  const at = (name) => path.join(dir, name.replace(/(\.\w+)$/, `${OUT.audio}$1`)); // a cut keeps its own files
+  const sfxOut = at("sfx.wav");
+  const out = at("mix.wav");
   const kinds = Object.keys(SFX).filter((k) => existsSync(SFX[k].file));
   const used = sounds.filter((s) => s.t >= 0 && s.t < total && kinds.includes(s.kind)).sort((a, b) => a.t - b.t);
   const inputs = ["-f", "lavfi", "-t", String(total), "-i", "anullsrc=r=48000:cl=stereo", ...kinds.flatMap((k) => ["-i", SFX[k].file])];
@@ -530,20 +560,20 @@ function buildAudio() {
   });
   chains.push(`[0:a]${labels.join("")}amix=inputs=${labels.length + 1}:duration=first:normalize=0:dropout_transition=0[mix]`);
   // The filter graph is long (one branch per typed character): pass it through a script file.
-  writeFileSync(path.join(dir, "cues.json"), JSON.stringify(used.map((s) => ({ t: r3(s.t), kind: s.kind })), null, 0));
-  const script = path.join(dir, "sfx-graph.txt");
+  writeFileSync(at("cues.json"), JSON.stringify(used.map((s) => ({ t: r3(s.t), kind: s.kind })), null, 0));
+  const script = at("sfx-graph.txt");
   writeFileSync(script, chains.join(";\n"));
   execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...inputs, "-/filter_complex", script, "-map", "[mix]", "-c:a", "pcm_s24le", sfxOut]);
 
   // Voice stem: every line at its place, one level for all (loudness of the speech, silences gated out).
-  const voiceRaw = path.join(dir, "voice-raw.wav");
-  const voiceOut = path.join(dir, "voice.wav");
+  const voiceRaw = at("voice-raw.wav");
+  const voiceOut = at("voice.wav");
   const vin = VOICE.flatMap((v) => ["-i", path.join(COMP, `assets/voice/${v.name}.wav`)]);
   if (VOICE.length && VOICE.every((v) => existsSync(path.join(COMP, `assets/voice/${v.name}.wav`)))) {
     const vg = VOICE.map((v, i) => `[${i + 1}:a]aformat=sample_rates=48000:channel_layouts=stereo,adelay=${Math.round(v.at * 1000)}|${Math.round(v.at * 1000)}[v${i}]`);
     vg.push(`[0:a]${VOICE.map((_, i) => `[v${i}]`).join("")}amix=inputs=${VOICE.length + 1}:duration=first:normalize=0:dropout_transition=0[v]`);
-    writeFileSync(path.join(dir, "voice-graph.txt"), vg.join(";\n"));
-    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-t", String(total), "-i", "anullsrc=r=48000:cl=stereo", ...vin, "-/filter_complex", path.join(dir, "voice-graph.txt"), "-map", "[v]", "-c:a", "pcm_s24le", voiceRaw]);
+    writeFileSync(at("voice-graph.txt"), vg.join(";\n"));
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-t", String(total), "-i", "anullsrc=r=48000:cl=stereo", ...vin, "-/filter_complex", at("voice-graph.txt"), "-map", "[v]", "-c:a", "pcm_s24le", voiceRaw]);
     const vgain = r3(VOICE_LUFS - lufsOf(voiceRaw));
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", voiceRaw, "-af", `volume=${vgain}dB`, "-c:a", "pcm_s24le", voiceOut]);
   } else {
@@ -554,9 +584,9 @@ function buildAudio() {
   const stems = [voiceOut, sfxOut];
   if (MUSIC_ON && existsSync(MUSIC_FILE)) {
     // Music bed: loudness-normalised, faded in and out, ending with the film, and ducked under every voice line.
-    const music = path.join(dir, "music.wav");
+    const music = at("music.wav");
     const fadeOut = 2.2;
-    const env = path.join(dir, "duck.f32");
+    const env = at("duck.f32");
     writeFileSync(env, Buffer.from(duckEnvelope().buffer));
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", MUSIC_FILE, "-f", "f32le", "-ar", "48000", "-ac", "1", "-i", env, "-filter_complex",
       `[0:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=0:${total},loudnorm=I=${MUSIC_LUFS}:TP=-3:LRA=11,aresample=48000,afade=t=in:d=0.8,afade=t=out:st=${r3(total - fadeOut)}:d=${fadeOut},apad=whole_dur=${total}[m];` +
@@ -564,7 +594,7 @@ function buildAudio() {
       "-map", "[out]", "-ar", "48000", "-c:a", "pcm_s24le", music]);
     stems.push(music);
   }
-  const premix = path.join(dir, "premix.wav");
+  const premix = at("premix.wav");
   execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...stems.flatMap((f) => ["-i", f]), "-filter_complex",
     `${stems.map((_, i) => `[${i}:a]`).join("")}amix=inputs=${stems.length}:duration=longest:normalize=0[m]`, "-map", "[m]", "-c:a", "pcm_s24le", premix]);
   // Bring the whole mix to the target loudness, then a limiter (true peak stays under −1 dBTP).
@@ -572,7 +602,7 @@ function buildAudio() {
   const gain = r3(TARGET_LUFS - measured);
   execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", premix, "-af",
     `volume=${gain}dB,alimiter=limit=0.79:level=false:attack=1:release=60,aresample=48000`, "-c:a", "pcm_s16le", out]);
-  return { file: "assets/audio/mix.wav", cues: used.length, gain, music: MUSIC_ON && existsSync(MUSIC_FILE) };
+  return { file: `assets/audio/mix${OUT.audio}.wav`, cues: used.length, gain, music: MUSIC_ON && existsSync(MUSIC_FILE) };
 }
 
 /** Music gain over time (48 kHz): 1, dipping DUCK_DB under each voice line (in before it starts, out after it ends). */
@@ -730,7 +760,7 @@ const page = `<!doctype html>
 </html>
 `;
 
-writeFileSync(path.join(COMP, "index.html"), page);
+writeFileSync(path.join(COMP, OUT.html), page);
 
 /* ---------- subtitles (not burned in) + the voice timeline ---------- */
 // One cue per sentence (long ones split at a comma), at most two rows of ~42 characters; time shared by length.
@@ -760,9 +790,9 @@ const srtTime = (t) => {
 };
 const srt = VOICE.flatMap(cues).map((c, i) => `${i + 1}\n${srtTime(c.a)} --> ${srtTime(c.b)}\n${c.text}\n`).join("\n");
 mkdirSync(path.join(HERE, "out"), { recursive: true });
-writeFileSync(path.join(HERE, "out/demo-final.es.srt"), srt);
+writeFileSync(path.join(HERE, OUT.srt), srt);
 mkdirSync(path.join(HERE, "voice"), { recursive: true });
-writeFileSync(path.join(HERE, "voice/timeline.json"), JSON.stringify({
+writeFileSync(path.join(HERE, OUT.timeline), JSON.stringify({
   total,
   beats: timed.map((s) => ({ id: s.id, start: s.start, end: s.end, freezes: s.log?.freezes ?? [] })),
   lines: VOICE.map((v) => ({ name: v.name, scene: v.scene, at: v.at, until: v.until, sceneStart: v.sceneStart, sceneEnd: v.sceneEnd, text: v.text })),
@@ -771,7 +801,7 @@ const tight = VOICE.filter((v) => v.at - v.sceneStart < 0.25 || v.sceneEnd - OVE
 if (tight.length) console.warn(`  ⚠ voice line(s) within 250 ms of a scene change: ${tight.map((v) => v.name).join(", ")}`);
 const missing = timed.filter((s) => s.kind === "screen" && !s.log).map((s) => s.id);
 console.log(
-  `composition/index.html: ${timed.length} beats, ${total}s, ${audio.cues} sound cues, music ${audio.music ? "on" : "off"} (mix gain ${audio.gain} dB)` +
+  `composition/${OUT.html}: ${timed.length} beats, ${total}s, ${audio.cues} sound cues, music ${audio.music ? "on" : "off"} (mix gain ${audio.gain} dB)` +
     (missing.length ? ` (placeholders: ${missing.join(", ")})` : ""),
 );
 console.log(timed.map((s) => `  ${s.start.toFixed(2).padStart(6)}s  ${s.id}${s.log?.freezes?.length ? `  (held ${s.log.freezes.map((f) => f.d).join(" + ")} s for the voice)` : ""}`).join("\n"));
