@@ -230,9 +230,9 @@ function AppSidebar() {
       <SidebarFooter>
         <div className="flex items-center gap-2 px-2 py-1 group-data-[collapsible=icon]:hidden">
           <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-            {busy ? "Consultando fuentes…" : data ? `Datos de ${fmtAgo(data.fetchedAt)}` : "Sin datos"}
+            {busy ? "Cargando…" : data ? `Datos de ${fmtAgo(data.lastIngestAt ?? data.fetchedAt)}` : "Sin datos"}
           </p>
-          <Button variant="ghost" size="icon" className="size-7" disabled={busy} onClick={() => reload(true)} aria-label="Volver a consultar las fuentes">
+          <Button variant="ghost" size="icon" className="size-7" disabled={busy} onClick={() => reload()} aria-label="Volver a cargar los datos">
             {busy ? <Loader2 className="animate-spin" aria-hidden /> : <RotateCw aria-hidden />}
           </Button>
         </div>
@@ -248,9 +248,9 @@ function AppSidebar() {
         </SidebarMenu>
         <SidebarMenu className="hidden group-data-[collapsible=icon]:flex">
           <SidebarMenuItem>
-            <SidebarMenuButton tooltip={data ? `Datos de ${fmtAgo(data.fetchedAt)} · actualizar` : "Actualizar"} disabled={busy} onClick={() => reload(true)}>
+            <SidebarMenuButton tooltip={data ? `Datos de ${fmtAgo(data.lastIngestAt ?? data.fetchedAt)} · volver a cargar` : "Volver a cargar"} disabled={busy} onClick={() => reload()}>
               {busy ? <Loader2 className="animate-spin" aria-hidden /> : <RotateCw aria-hidden />}
-              <span>Actualizar</span>
+              <span>Volver a cargar</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

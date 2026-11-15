@@ -325,32 +325,13 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
 
 /* ---------- Loading (first visit only; later visits paint the saved copy instantly) ---------- */
 
-const SOURCES_LOADING = [
-  "Base de Datos Nacional de Subvenciones",
-  "Boletín Oficial del Estado",
-  "Boletín de la Comunidad de Madrid",
-  "Diario Oficial de Galicia",
-  "Fundación Biodiversidad",
-  "programa LIFE de la UE",
-  "fundaciones y programas de RSC",
-];
-
 function LoadingHome() {
-  const [t, setT] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setT((x) => x + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const src = SOURCES_LOADING[Math.floor(t / 2) % SOURCES_LOADING.length];
   return (
     <div className="flex flex-col gap-8" aria-busy="true">
       <PageHeader title="Convocatorias" />
       <div className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm" role="status">
         <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
-        <span>
-          Consultando <span className="font-medium">{src}</span>…{" "}
-          <span className="text-muted-foreground">La primera carga tarda unos 20–30 segundos ({t} s).</span>
-        </span>
+        <span>Cargando las convocatorias…</span>
       </div>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
