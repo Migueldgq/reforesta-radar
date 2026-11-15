@@ -47,6 +47,7 @@ x-backend: &backend
     RADAR_MCP_URL: ${RADAR_MCP_URL:-}
     RADAR_MCP_ALLOWED_HOSTS: ${RADAR_MCP_ALLOWED_HOSTS:-}
     RADAR_MCP_ALLOWED_ORIGINS: ${RADAR_MCP_ALLOWED_ORIGINS:-}
+    RADAR_MCP_OAUTH: ${RADAR_MCP_OAUTH:-true} # sign-in from the assistant at <RADAR_MCP_URL>/equipo (ADR 0035)
     RADAR_MCP_USER: ${RADAR_MCP_USER:-} # stdio mode only (`docker compose run --rm -T api python -m app.mcp`)
   depends_on:
     postgres:

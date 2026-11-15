@@ -1,9 +1,11 @@
 "use client";
 
-import { Check, Copy, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { Check, ChevronDown, Copy, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api, errorText } from "@/lib/api";
-import { fmtDayLong, fmtWhenShort, type PersonalToken, type TokenCreated, type TokensInfo } from "@/lib/team";
+import { fmtDayLong, fmtWhenShort, type AssistantsInfo, type ConnectedAssistant, type PersonalToken, type TokenCreated, type TokensInfo } from "@/lib/team";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { AssistantKindChip } from "./assistant-kind";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -57,15 +59,22 @@ function Snippet({ label, text }: { label: string; text: string }) {
   );
 }
 
-/** "Conectar un asistente (MCP)" in Mi cuenta: the no-token command, and optional personal tokens for the team's board. */
+/**
+ * "Conectar un agente de IA" in Mi cuenta. Leads with the simple path (paste the team address in the assistant, sign in,
+ * Permitir; ADR 0035) and the assistants connected that way; personal tokens and the public address are the
+ * technical option underneath.
+ */
 export function McpConnect() {
-  const [info, setInfo] = useState<TokensInfo | null>(null);
+  const [info, setInfo] = useState<AssistantsInfo | null>(null);
+  const [tokens, setTokens] = useState<TokensInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<TokenCreated | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setInfo(await api<TokensInfo>("/api/me/tokens"));
+      const [a, t] = await Promise.all([api<AssistantsInfo>("/api/me/assistants"), api<TokensInfo>("/api/me/tokens")]);
+      setInfo(a);
+      setTokens(t);
     } catch (e) {
       setError(errorText(e));
     }
@@ -74,38 +83,161 @@ export function McpConnect() {
     void Promise.resolve().then(load);
   }, [load]);
 
+  const published = info?.teamUrl.startsWith("https://") ?? false;
+
   return (
-    <section className="space-y-3" aria-labelledby="mcp-title">
-      <h3 id="mcp-title" className="text-sm font-semibold">
-        Conectar un asistente (MCP)
-      </h3>
-      <p className="text-sm text-muted-foreground">
-        Tu asistente de IA (Claude u otro compatible con MCP) puede consultar el radar por ti: buscar convocatorias, ver fichas e historial. Solo lee, nunca cambia nada.
-      </p>
+    <section className="space-y-4" aria-labelledby="mcp-title">
+      <div className="space-y-1.5">
+        <h3 id="mcp-title" className="text-sm font-semibold">
+          Conectar un agente de IA
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Tu agente (por ejemplo, Claude) puede consultar el radar por ti: buscar convocatorias y ver el tablero del equipo. Solo lee; nunca cambia nada.
+        </p>
+      </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {info && (
+      {info && tokens && (
         <>
-          {info.publicTools && <Snippet label="Claude Code, sin token" text={claudeCommand(info.mcpUrl)} />}
-          <p className="text-sm text-muted-foreground">
-            {info.publicTools
-              ? "Opcional: con un token personal tu asistente ve también el tablero del equipo (estado, notas, votos) y las notas con vuestro perfil."
-              : "En este radar el asistente necesita un token personal."}{" "}
-            Lo que devuelva el radar lo verá el proveedor de tu asistente.
-          </p>
-          {created ? (
-            <CreatedToken created={created} url={info.mcpUrl} onDone={() => setCreated(null)} />
+          {info.signIn ? (
+            <ol className="space-y-3 text-sm">
+              <Step n={1}>
+                {published ? (
+                  <>
+                    En Claude (web o escritorio): <span className="font-medium">Ajustes → Conectores → Añadir conector personalizado</span>.
+                  </>
+                ) : (
+                  <>En Claude Code, en este ordenador (este radar no está publicado en internet, así que claude.ai y Claude Desktop no pueden llegar a él).</>
+                )}
+              </Step>
+              <Step n={2}>
+                {published ? "Pega esta dirección y pulsa Añadir:" : "Ejecuta esto en una terminal:"}
+                <div className="mt-2">
+                  <Snippet label={published ? "Dirección del radar" : "Claude Code"} text={published ? info.teamUrl : claudeCommand(info.teamUrl)} />
+                </div>
+              </Step>
+              <Step n={3}>
+                {published ? "Pulsa Conectar." : "En Claude Code escribe /mcp, elige reforesta-radar y Autenticar."} Se abrirá el radar: entra con tu cuenta y pulsa <span className="font-medium">Permitir</span>.
+              </Step>
+            </ol>
           ) : (
-            <CreateForm
-              onCreated={(c) => {
-                setCreated(c);
-                void load();
-              }}
-            />
+            <p className="text-sm text-muted-foreground">
+              En este radar no se puede iniciar sesión desde el agente (falta publicarlo con https). Usa un token personal, en «Para uso técnico».
+            </p>
           )}
-          <TokenList tokens={info.tokens} onChange={() => void load()} />
+
+          <ConnectedList assistants={info.assistants} onChange={() => void load()} />
+          <p className="text-xs text-muted-foreground">Lo que lea tu agente lo verá también la empresa que lo ofrece.</p>
+
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              Para uso técnico: dirección pública y tokens personales
+              <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" aria-hidden />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 border-t p-3">
+              {tokens.publicTools && (
+                <>
+                  <p className="text-sm text-muted-foreground">Sin iniciar sesión, solo datos públicos (lo mismo que la portada):</p>
+                  <Snippet label="Claude Code, solo datos públicos" text={claudeCommand(tokens.mcpUrl)} />
+                </>
+              )}
+              <p className="text-sm text-muted-foreground">
+                Un token personal sirve para clientes que no pueden iniciar sesión: se pega como cabecera y da la misma vista de equipo.
+              </p>
+              {created ? (
+                <CreatedToken created={created} url={tokens.mcpUrl} onDone={() => setCreated(null)} />
+              ) : (
+                <CreateForm
+                  onCreated={(c) => {
+                    setCreated(c);
+                    void load();
+                  }}
+                />
+              )}
+              <TokenList tokens={tokens.tokens} onChange={() => void load()} />
+            </CollapsibleContent>
+          </Collapsible>
         </>
       )}
     </section>
+  );
+}
+
+function Step({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <li className="flex gap-3">
+      <span className="grid size-6 shrink-0 place-items-center rounded-full border text-xs font-medium tabular-nums text-muted-foreground" aria-hidden>
+        {n}
+      </span>
+      <div className="min-w-0 flex-1 pt-0.5">{children}</div>
+    </li>
+  );
+}
+
+function ConnectedList({ assistants, onChange }: { assistants: ConnectedAssistant[]; onChange: () => void }) {
+  return (
+    <div className="space-y-2">
+      <h4 className="text-sm font-medium">Agentes de IA conectados</h4>
+      {assistants.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Todavía no has conectado ninguno.</p>
+      ) : (
+        <ul className="divide-y rounded-lg border" aria-label="Agentes de IA conectados">
+          {assistants.map((a) => (
+            <AssistantRow key={a.id} assistant={a} onChange={onChange} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function AssistantRow({ assistant: a, onChange }: { assistant: ConnectedAssistant; onChange: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function disconnect() {
+    setPending(true);
+    try {
+      await api(`/api/me/assistants/${a.id}`, { method: "DELETE" });
+      onChange();
+    } catch (e) {
+      setError(errorText(e));
+      setPending(false);
+    }
+  }
+
+  return (
+    <li className="space-y-2 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="truncate text-sm font-medium">{a.name}</span>
+            <AssistantKindChip kind={a.kind} />
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Conectado {fmtWhenShort(a.createdAt)} · {a.lastUsedAt ? `usado ${fmtWhenShort(a.lastUsedAt)}` : "sin usar"} · <span className="font-mono break-words">{a.redirectHost}</span>
+          </p>
+        </div>
+        {!confirming && (
+          <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => setConfirming(true)} aria-label={`Desconectar ${a.name}`}>
+            Desconectar
+          </Button>
+        )}
+      </div>
+      {confirming && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm">Dejará de leer el radar al momento.</span>
+          <Button type="button" variant="destructive" size="sm" disabled={pending} onClick={() => void disconnect()}>
+            {pending && <Loader2 className="animate-spin" aria-hidden />}
+            Desconectar
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setConfirming(false)}>
+            Cancelar
+          </Button>
+        </div>
+      )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </li>
   );
 }
 
@@ -220,7 +352,7 @@ function TokenRow({ token, onChange }: { token: PersonalToken; onChange: () => v
       </div>
       {confirming && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm">El asistente que lo use dejará de ver el tablero.</span>
+          <span className="text-sm">El agente que lo use dejará de ver el tablero.</span>
           <Button type="button" variant="destructive" size="sm" disabled={pending} onClick={() => void revoke()}>
             {pending && <Loader2 className="animate-spin" aria-hidden />}
             Revocar

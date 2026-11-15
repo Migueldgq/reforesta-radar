@@ -25,6 +25,7 @@ API_URL = os.getenv("TEST_API_DATABASE_URL", "postgresql+asyncpg://radar:radar@l
 BACKEND = Path(__file__).resolve().parents[1]
 PASSWORD = "correct horse battery"
 TABLES = (
+    "oauth_tokens, oauth_codes, oauth_grants, oauth_requests, oauth_clients, "
     "ingest_requests, votes, org_settings, tracking_notes, tracking, password_resets, invitations, sessions, users, "
     "opportunity_changes, opportunities, source_runs, ingest_runs, fetch_cache, bdns_editions"
 )

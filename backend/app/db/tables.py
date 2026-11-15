@@ -1,5 +1,5 @@
 """Table definitions (SQLAlchemy Core). Schema owner: alembic/versions/ (0001 init, 0002 + 0003 bdns_editions,
-0004 accounts and team state, 0005 personal tokens).
+0004 accounts and team state, 0005 personal tokens, 0008 OAuth for assistants).
 
 Same tables and columns as supabase/migrations/0001_init.sql, so data and semantics carry over:
 rows hold the BASE opportunity (connector output + base fit); geographic and kind fit are applied at read time.
@@ -202,6 +202,83 @@ personal_tokens = Table(
     Column("expires_at", TSTZ, nullable=False),
     Column("last_used_at", TSTZ),
     Column("revoked_at", TSTZ),
+)
+
+# ---------- Assistants signed in with OAuth (0008; app/oauth, ADR 0035) ----------
+# Every secret (client secret, pending-request id and its browser nonce, code, access and refresh token) is stored
+# only as its sha256, like sessions and personal tokens.
+
+# Clients that registered themselves (RFC 7591). Only what the consent screen and the checks use is kept.
+oauth_clients = Table(
+    "oauth_clients",
+    metadata,
+    Column("client_id", Text, primary_key=True),
+    Column("secret_hash", Text),  # None: public client (token_endpoint_auth_method "none")
+    Column("auth_method", Text, nullable=False),
+    Column("name", Text, nullable=False),  # sanitised client_name (self-declared)
+    Column("redirect_uris", JSONB, nullable=False),
+    Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("last_used_at", TSTZ),  # last authorisation granted to it
+)
+
+# An authorisation request waiting for the person to sign in and decide (10 minutes). Bound to the browser that
+# opened /oauth/authorize by a cookie nonce. `user_id`: the signed-in person who opened it or its consent page (null:
+# anonymous so far; anonymous requests are capped, ADR 0035).
+oauth_requests = Table(
+    "oauth_requests",
+    metadata,
+    Column("id_hash", Text, primary_key=True),
+    Column("browser_hash", Text, nullable=False),
+    Column("client_id", Text, ForeignKey("oauth_clients.client_id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("user_id", BigInteger, ForeignKey("users.id", ondelete="CASCADE")),
+    Column("redirect_uri", Text, nullable=False),
+    Column("redirect_explicit", Boolean, nullable=False),
+    Column("state", Text),
+    Column("code_challenge", Text, nullable=False),
+    Column("scopes", Text, nullable=False),
+    Column("resource", Text, nullable=False),
+    Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("expires_at", TSTZ, nullable=False, index=True),
+)
+
+# A person's permission for one assistant ("connected assistant" in Mi cuenta). Its codes and tokens die with it.
+oauth_grants = Table(
+    "oauth_grants",
+    metadata,
+    Column("id", BigInteger, Identity(always=True), primary_key=True),
+    Column("user_id", BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("client_id", Text, ForeignKey("oauth_clients.client_id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("scopes", Text, nullable=False),
+    Column("resource", Text, nullable=False),  # audience: the MCP URL its tokens are good for
+    Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("last_used_at", TSTZ),
+    Column("expires_at", TSTZ, nullable=False),  # pushed forward on every refresh
+    Column("revoked_at", TSTZ),
+)
+
+oauth_codes = Table(
+    "oauth_codes",
+    metadata,
+    Column("code_hash", Text, primary_key=True),
+    Column("grant_id", BigInteger, ForeignKey("oauth_grants.id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("redirect_uri", Text, nullable=False),
+    Column("redirect_explicit", Boolean, nullable=False),
+    Column("code_challenge", Text, nullable=False),
+    Column("expires_at", TSTZ, nullable=False),
+    Column("used_at", TSTZ),
+)
+
+# Access ("access", 1 hour) and refresh ("refresh", rotated on use) tokens of a grant.
+oauth_tokens = Table(
+    "oauth_tokens",
+    metadata,
+    Column("token_hash", Text, primary_key=True),
+    Column("grant_id", BigInteger, ForeignKey("oauth_grants.id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("kind", Text, nullable=False),
+    Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("expires_at", TSTZ, nullable=False),
+    Column("used_at", TSTZ),  # refresh tokens: set when rotated; presenting it again revokes the grant
+    CheckConstraint("kind in ('access', 'refresh')", name="oauth_tokens_kind"),
 )
 
 # ---------- Team state (0004) ----------

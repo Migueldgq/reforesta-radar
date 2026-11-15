@@ -1,6 +1,6 @@
 # 0026. Servidor MCP de solo lectura en `/mcp`, con acceso público y de equipo
 
-- Estado: Aceptada
+- Estado: Sustituida por 0035
 - Fecha: 2026-11-15 (df1af9d, 5ad24f6, 8334f14, 17fcbc5; rama `feat/fase-3-mcp`)
 
 ## Contexto
