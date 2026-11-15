@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { McpConnect } from "./McpConnect";
-import { useSession } from "./session";
+import { forgetSession, useSession } from "./session";
 
 /** The signed-in person in the sidebar footer, with "Mi cuenta" and "Cerrar sesión". Works in the collapsed rail too. */
 export function AccountMenu() {
@@ -34,6 +34,7 @@ export function AccountMenu() {
     } catch {
       /* the cookie may already be gone; go to the login page anyway */
     }
+    forgetSession();
     hardNavigate("/login");
   }
 
@@ -43,7 +44,8 @@ export function AccountMenu() {
         <SidebarMenuItem>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <SidebarMenuButton size="lg" tooltip={me.name || me.email} className="data-[state=open]:bg-sidebar-accent" aria-label={`Tu cuenta: ${me.name || me.email}`}>
+              <SidebarMenuButton size="lg" tooltip={me.name || me.email} className="data-[state=open]:bg-sidebar-accent">
+                <span className="sr-only">Tu cuenta: </span>
                 <span className="grid size-8 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold text-foreground/80 ring-1 ring-border" aria-hidden>
                   {initials(me.name || me.email)}
                 </span>

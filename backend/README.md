@@ -77,7 +77,8 @@ backend/
       __init__.py        registry (SOURCES) and SOURCE_ORDER
       memo.py            fetch_cache-backed TTL memo (same keys/values as the TS)
       notices.py         decode_html, is_call_notice, is_open_tender, extract_notice_details,
-                         parse_deadline, deadline_from_days, es_date_to_iso (BOE, BOCM, DOG, BDNS)
+                         parse_deadline, deadline_from_days, es_date_to_iso, excerpt (BOE, BOCM, DOG, BDNS)
+      names.py           organism display names: Spanish title case, accents, aliases (ADR 0030)
       boe.py             ported connectors
       rsc.py             hand-checked private programmes (the only copy; the web reads them from the API)
       eu.py, fb.py, bocm.py, dog.py  ports of src/lib/sources/multi-source.ts
@@ -99,7 +100,8 @@ backend/
                        auth, __main__.py stdio (python -m app.mcp)
     db/                tables (SQLAlchemy Core) and async engine
   alembic/             migrations (0001 = supabase/migrations/0001_init.sql, 0002-0003 = bdns_editions,
-                       0004 = accounts and team state, 0005 = personal tokens)
+                       0004 = accounts and team state, 0005 = personal tokens, 0006 = per-field saved-by/at
+                       in org_settings, 0007 = organism display names on stored rows)
   tests/               parity, connectors on recorded fixtures, store semantics
 ```
 
@@ -235,8 +237,10 @@ the product and are not to be ported.
 
 - `POST /api/analyze-pdf` (`app/api/analyze_pdf.py`, `app/pdf/`): same request shapes (`sample`, `docId`, `pdfUrl`,
   multipart `file`), JSON and Spanish errors as the TS route; 15 MB cap (uploads too), 415 on non-PDF, LRU cache
-  (50) for remote PDFs. Text extraction uses `pypdf` (BSD) with unpdf's page-merge normalisation; on both samples
-  every field matches the TS except `charCount`/`excerpt` of the MITECO sample (pypdf drops one line break).
+  (50, extracted text) for remote PDFs. Text extraction uses `pypdf` (BSD) with unpdf's page-merge normalisation.
+  Summary, beneficiaries, budget and requirements still match the TS on both samples; title, organism, deadlines and
+  fit changed on purpose: a PDF of a call in the radar carries the list's fit, a PDF with under 3,000 characters is
+  not scored (ADR 0033).
   `pdfUrl` keeps the TS host allow-list and adds SSRF guards (see `app/pdf/download.py`). The sample PDFs are read
   from the repo's `data/samples` (`RADAR_SAMPLES_DIR` overrides); compose mounts them at `/data/samples` read-only.
 - `GET /api/perfil` (`app/api/perfil.py`): byte-identical to the TS route (`tests/golden/perfil.json`).

@@ -5,12 +5,18 @@ No network: the list lives here and is edited by hand. Every fact was checked on
 deadline state comes from them, like any call). This is the only copy of the list: the web app reads it from the API.
 """
 
+from datetime import date
 from typing import Literal, NamedTuple
 
+from app.config import local_today
 from app.models import RscInfo, SourceHealth, WorkLine
+from app.scoring.score import short_date
 from app.sources.base import FetchResult, RawOpportunity, RscScoreInput, Source, SourceContext
 
-VERIFIED_ON = "2026-11-15"
+VERIFIED_ON = "2026-11-15"  # the one place to change after a review (docs/mantenimiento.md)
+# After this long without a review the list is stale: Fuentes shows a warning and every programme carries one.
+STALE_AFTER_DAYS = 180
+SOURCE_LABEL = "Programa de empresa/fundación"
 
 
 class Limit(NamedTuple):
@@ -34,7 +40,7 @@ class RscProgramme(NamedTuple):
     about: str  # what it funds, from the source
     beneficiarios: list[str]
     requirements: list[str]
-    territory: str | None
+    territory: str | None  # where the project must take place; None = anywhere in Spain
     why_reforesta: str
     limits: list[Limit]
     unverified: str | None = None
@@ -224,27 +230,43 @@ RSC_PROGRAMMES: tuple[RscProgramme, ...] = (
     ),
 )
 
-RSC_HEALTH = SourceHealth(
-    id="rsc",
-    name="RSC · Fundaciones y empresas",
-    category="RSC Privado",
-    status="ok",
-    count=0,
-    url="",
-    note="Lista hecha a mano de programas privados que financian proyectos ambientales de ONG en España, "
-    "comprobada en la web de cada entidad el 15 nov 2026.",
-)
+RSC_NAME = "RSC · Fundaciones y empresas"
 
 
-def to_raw(r: RscProgramme) -> RawOpportunity:
+def months_since_check(today: date | None = None) -> int | None:
+    """Whole months since VERIFIED_ON when the list is stale (more than STALE_AFTER_DAYS), else None."""
+    age = ((today or local_today()) - date.fromisoformat(VERIFIED_ON)).days
+    return age // 30 if age > STALE_AFTER_DAYS else None
+
+
+def rsc_health(today: date | None = None) -> SourceHealth:
+    checked = short_date(date.fromisoformat(VERIFIED_ON))
+    note = (
+        "Lista hecha a mano de programas privados que financian proyectos ambientales de ONG en España, "
+        f"comprobada en la web de cada entidad el {checked}."
+    )
+    stale = months_since_check(today)
+    return SourceHealth(
+        id="rsc",
+        name=RSC_NAME,
+        category="RSC Privado",
+        status="partial" if stale else "ok",
+        count=0,
+        url="",
+        note=f"Lista comprobada hace {stale} meses: toca revisarla. {note}" if stale else note,
+    )
+
+
+def to_raw(r: RscProgramme, today: date | None = None) -> RawOpportunity:
+    stale = months_since_check(today)
     return RawOpportunity(
         id=f"rsc:{r.id}",
         source="rsc",
-        source_label="RSC · Privado",
+        source_label=SOURCE_LABEL,
         kind="empresa",
         titulo=f"{r.entity} — {r.program}",
         organismo=r.entity,
-        region="Estatal",
+        region=r.territory or "Estatal",  # "Estatal" only when the programme takes projects anywhere in Spain
         nivel_admin="Privada",
         opens_at=r.opens_at,
         deadline=r.deadline,
@@ -274,13 +296,18 @@ def to_raw(r: RscProgramme) -> RawOpportunity:
             deadline=r.deadline,
             limits=[(lim.text, lim.penalty) for lim in r.limits],
             verified_on=VERIFIED_ON,
+            extra_warnings=[
+                f"Datos comprobados hace {stale} meses: pueden haber cambiado; revisa la web de la entidad."
+            ]
+            if stale
+            else [],
         ),
     )
 
 
 class RscSource(Source):
     id = "rsc"
-    name = RSC_HEALTH.name
+    name = RSC_NAME
 
     async def fetch(self, ctx: SourceContext) -> FetchResult:
-        return FetchResult(items=[to_raw(r) for r in RSC_PROGRAMMES], health=RSC_HEALTH.model_copy())
+        return FetchResult(items=[to_raw(r) for r in RSC_PROGRAMMES], health=rsc_health())

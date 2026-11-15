@@ -40,7 +40,7 @@ function Label({ children }: { children: ReactNode }) {
   return <h4 className="text-xs font-medium text-muted-foreground">{children}</h4>;
 }
 
-function ProgrammeCard({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
+function ProgrammeCard({ o, onOpen }: { o: Opportunity; onOpen: (opener: HTMLElement) => void }) {
   const r = o.rsc;
   const amount = o.amountText ?? fmtEuros(o.budget) ?? "Importe variable";
   const title = o.titulo.startsWith(`${o.organismo} — `) ? o.titulo.slice(o.organismo.length + 3) : o.titulo;
@@ -50,7 +50,7 @@ function ProgrammeCard({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
         <div className="min-w-0 flex-1 basis-64 space-y-1">
           <p className="text-xs text-muted-foreground">{o.organismo}</p>
           <h3 className="text-base leading-snug font-medium">
-            <button type="button" onClick={onOpen} className="cursor-pointer text-left hover:underline">
+            <button type="button" data-opener={o.id} onClick={(e) => onOpen(e.currentTarget)} className="cursor-pointer text-left hover:underline">
               {title}
             </button>
           </h3>
@@ -211,7 +211,7 @@ export function EmpresasView() {
           <ul className="space-y-3">
             {items.map((o) => (
               <li key={o.id}>
-                <ProgrammeCard o={o} onOpen={() => openDetail(o.id)} />
+                <ProgrammeCard o={o} onOpen={(el) => openDetail(o.id, el)} />
               </li>
             ))}
           </ul>

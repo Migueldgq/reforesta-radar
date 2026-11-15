@@ -62,7 +62,9 @@ async def test_connector_matches_ts_on_fixture(source: Source, module: object, m
     got = [o.to_json() for o in items]
     assert [o["id"] for o in got] == [o["id"] for o in want["items"]]
     for g, w in zip(got, want["items"], strict=True):
-        assert g == w, g["id"]
+        # deadlineEstimated (ADR 0029) is newer than the fixtures: true exactly when the fixture warns of an estimate
+        estimated = any(x.startswith("Fecha límite estimada") for x in w["fit"]["warnings"])
+        assert g == {**w, "deadlineEstimated": estimated}, g["id"]
     health = result.health.model_copy(
         update={"count": len(items), "note": result.health.note.replace("{count}", str(len(items)))}
     )

@@ -1,38 +1,51 @@
 "use client";
 
-import { ArrowUpRight, Award, CircleAlert, CircleCheck, FileText, Loader2, ScanSearch, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
-import { Fragment, useState, type FormEvent } from "react";
+import { ArrowUpRight, Award, Check, CircleAlert, CircleCheck, FileText, Link2, Loader2, ScanSearch, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
+import { Fragment, useMemo, useState, type FormEvent } from "react";
 import type { AwardsSummary, History, Opportunity, OpportunityDocument } from "@/lib/opportunity";
 import type { PdfAnalysisResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { daysLeft, fmtDate, fmtDayShort, fmtEuros, joinEs, KIND_LABELS, parseDay, tidy, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel } from "./model";
+import { daysLeft, ESTIMATE_TIP, fmtDate, fmtDayShort, fmtEuros, joinEs, KIND_LABELS, parseDay, sourceLabelOf, territoryOf, tidy, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel } from "./model";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSession } from "@/components/auth/session";
 import { fmtWhenShort, type BoardItem, type VoteValue } from "@/lib/team";
 import { Input } from "@/components/ui/input";
 import { stub, useRadar } from "./store";
 import { analyzePdf, PdfResult } from "./PdfView";
-import { ConfirmDialog, DeadlineChip, GoneNote, PersonAvatar, ScoreChip, textareaClass } from "./ui";
+import { ConfirmDialog, DeadlineChip, GoneNote, OFFLINE_TIP, PersonAvatar, ScoreChip, textareaClass } from "./ui";
 
-type Shown = { o: Opportunity; gone: BoardItem | null };
+/** What the drawer draws: the live call, or (when it is gone from the sources) the board row. Compared by reference. */
+type Shown = { live: Opportunity | undefined; item: BoardItem | undefined };
 
 export function DetailDrawer() {
-  const { selectedId, byId, board, closeDetail } = useRadar();
+  const { selectedId, byId, board, closeDetail, detailOpener } = useRadar();
   // Calls gone from the sources only live on the board: draw them from its snapshot.
   const live = selectedId ? byId.get(selectedId) : undefined;
-  const item = selectedId ? board[selectedId] : undefined;
-  const cur: Shown | undefined = live ? { o: live, gone: null } : item ? { o: stub(item), gone: item } : undefined;
-  // Keep the last opportunity rendered while the sheet animates out.
-  const [shown, setShown] = useState(cur);
-  if (cur && (cur.o !== shown?.o || cur.gone !== shown?.gone)) setShown(cur);
+  const item = selectedId && !live ? board[selectedId] : undefined;
+  const open = !!(live || item);
+  // Keep the last opportunity rendered while the sheet animates out. Only stable references are stored here
+  // (never a stub built during render), so this settles after one extra render.
+  const [shown, setShown] = useState<Shown>({ live, item });
+  if (open && (live !== shown.live || item !== shown.item)) setShown({ live, item });
+  const goneStub = useMemo(() => (shown.item ? stub(shown.item) : null), [shown.item]);
 
   return (
-    <Sheet open={!!cur} onOpenChange={(v) => !v && closeDetail()}>
-      <SheetContent className="w-full gap-0 p-0 sm:max-w-[520px]">
-        {shown && (shown.gone ? <GoneBody key={shown.o.id} o={shown.o} item={shown.gone} /> : <DrawerBody key={shown.o.id} o={shown.o} />)}
+    <Sheet open={open} onOpenChange={(v) => !v && closeDetail()}>
+      <SheetContent
+        className="w-full gap-0 p-0 sm:max-w-[520px]"
+        onCloseAutoFocus={(e) => {
+          // Back to the row, card or button that opened it (it may have been re-rendered since).
+          const el = detailOpener();
+          if (el) {
+            e.preventDefault();
+            el.focus();
+          }
+        }}
+      >
+        {shown.live ? <DrawerBody key={shown.live.id} o={shown.live} /> : shown.item && goneStub ? <GoneBody key={shown.item.opportunityId} o={goneStub} item={shown.item} /> : null}
       </SheetContent>
     </Sheet>
   );
@@ -45,7 +58,7 @@ function GoneBody({ o, item }: { o: Opportunity; item: BoardItem }) {
       <SheetHeader className="gap-1.5 border-b px-6 py-5 pr-12">
         <SheetDescription className="text-xs">Guardada en el tablero del equipo</SheetDescription>
         <SheetTitle className="text-base leading-snug">{tidy(item.titulo)}</SheetTitle>
-        <p className="text-sm text-muted-foreground">{tidy(item.organismo)}</p>
+        <p className="text-sm text-muted-foreground">{item.organismo}</p>
       </SheetHeader>
       <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
         <div className="space-y-2">
@@ -60,15 +73,16 @@ function GoneBody({ o, item }: { o: Opportunity; item: BoardItem }) {
         <Separator />
         <TeamSection o={o} />
       </div>
-      {item.url && (
-        <div className="flex flex-wrap gap-2 border-t px-6 py-4">
+      <div className="flex flex-wrap gap-2 border-t px-6 py-4">
+        {item.url && (
           <Button asChild variant="outline">
             <a href={item.url} target="_blank" rel="noreferrer">
               Ver la última ficha oficial <ArrowUpRight aria-hidden />
             </a>
           </Button>
-        </div>
-      )}
+        )}
+        <CopyLink id={o.id} />
+      </div>
     </>
   );
 }
@@ -124,15 +138,29 @@ function DrawerBody({ o }: { o: Opportunity }) {
     <section key="facts" className="space-y-3">
       <SectionTitle>Lo esencial</SectionTitle>
       <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-        <Fact label="Plazo" wide={!o.deadline}>
+        <Fact label="Plazo" wide={!o.deadline || o.deadlineEstimated}>
           <span className="flex flex-wrap items-center gap-2">
-            {o.deadline ? fmtDate(o.deadline) : (o.deadlineText ?? "Sin fecha publicada")}
+            {o.deadline ? (
+              o.deadlineEstimated ? (
+                <span title={ESTIMATE_TIP}>≈ {fmtDate(o.deadline)} (estimada)</span>
+              ) : (
+                fmtDate(o.deadline)
+              )
+            ) : (
+              (o.deadlineText ?? "Sin fecha publicada")
+            )}
             {d != null && <DeadlineChip o={o} />}
           </span>
+          {o.deadlineEstimated && (
+            <span className="mt-1 block text-xs text-muted-foreground">
+              {o.deadlineText ? `Publicado: «${o.deadlineText}». ` : ""}
+              {ESTIMATE_TIP}.
+            </span>
+          )}
         </Fact>
         {o.opensAt && <Fact label="Abre">{fmtDate(o.opensAt)}</Fact>}
         <Fact label="Importe">{amount ?? <span className="text-muted-foreground">No publicado</span>}</Fact>
-        <Fact label="Territorio">{o.region}</Fact>
+        <Fact label="Territorio">{territoryOf(o)}</Fact>
         {o.tipo && <Fact label="Tipo">{o.tipo}</Fact>}
         {o.publishedAt && <Fact label="Publicada">{fmtDate(o.publishedAt)}</Fact>}
         {o.beneficiarios.length > 0 && (
@@ -182,10 +210,10 @@ function DrawerBody({ o }: { o: Opportunity }) {
     <>
       <SheetHeader className="gap-1.5 border-b px-6 py-5 pr-12">
         <SheetDescription className="text-xs">
-          {o.sourceLabel} · {KIND_LABELS[o.kind]} · {o.region}
+          {sourceLabelOf(o)} · {KIND_LABELS[o.kind]} · {territoryOf(o)}
         </SheetDescription>
         <SheetTitle className="text-base leading-snug">{tidy(o.titulo)}</SheetTitle>
-        <p className="text-sm text-muted-foreground">{tidy(o.organismo)}</p>
+        <p className="text-sm text-muted-foreground">{o.organismo}</p>
       </SheetHeader>
 
       <div className="flex-1 overflow-y-auto px-6 py-6">
@@ -210,8 +238,31 @@ function DrawerBody({ o }: { o: Opportunity }) {
             </a>
           </Button>
         )}
+        <CopyLink id={o.id} />
       </div>
     </>
+  );
+}
+
+/** Copies a link that opens this call (same page, `?c=<id>`), for sending to someone in the team. */
+function CopyLink({ id }: { id: string }) {
+  const { notify } = useRadar();
+  const [done, setDone] = useState(false);
+  async function copy() {
+    const url = `${window.location.origin}${window.location.pathname}?c=${encodeURIComponent(id)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setDone(true);
+      setTimeout(() => setDone(false), 2500);
+    } catch {
+      notify(`No se ha podido copiar. Este es el enlace: ${url}`);
+    }
+  }
+  return (
+    <Button variant="ghost" onClick={() => void copy()} className="ml-auto">
+      {done ? <Check aria-hidden /> : <Link2 aria-hidden />}
+      {done ? "Enlace copiado" : "Copiar enlace"}
+    </Button>
   );
 }
 
@@ -395,7 +446,7 @@ function HistorySection({ h }: { h: History }) {
 }
 
 function TriagePicker({ o }: { o: Opportunity }) {
-  const { triageOf, setTriage } = useRadar();
+  const { triageOf, setTriage, offline } = useRadar();
   const cur = triageOf(o.id);
   return (
     <section className="space-y-2">
@@ -404,7 +455,7 @@ function TriagePicker({ o }: { o: Opportunity }) {
         {TRIAGE_ORDER.map((t) => {
           const on = t === cur;
           return (
-            <Button key={t} size="sm" variant={on ? "default" : "outline"} role="radio" aria-checked={on} onClick={() => setTriage(o, t)}>
+            <Button key={t} size="sm" variant={on ? "default" : "outline"} role="radio" aria-checked={on} disabled={offline} title={offline ? OFFLINE_TIP : undefined} onClick={() => setTriage(o, t)}>
               {TRIAGE_LABELS[t]}
             </Button>
           );
@@ -419,7 +470,7 @@ function TriagePicker({ o }: { o: Opportunity }) {
 const VOTE_LABEL: Record<VoteValue, string> = { sirve: "Nos sirve", no_sirve: "No nos sirve" };
 
 function VoteSection({ o }: { o: Opportunity }) {
-  const { votes, setVote, clearVote } = useRadar();
+  const { votes, setVote, clearVote, offline } = useRadar();
   const { me } = useSession();
   const all = votes.filter((v) => v.opportunityId === o.id);
   const my = all.find((v) => v.user.id === me.id);
@@ -441,7 +492,7 @@ function VoteSection({ o }: { o: Opportunity }) {
           const on = my?.vote === v;
           const Icon = v === "sirve" ? ThumbsUp : ThumbsDown;
           return (
-            <Button key={v} size="sm" variant={on ? "default" : "outline"} aria-pressed={on} onClick={() => choose(v)}>
+            <Button key={v} size="sm" variant={on ? "default" : "outline"} aria-pressed={on} disabled={offline} title={offline ? OFFLINE_TIP : undefined} onClick={() => choose(v)}>
               <Icon aria-hidden /> {VOTE_LABEL[v]}
             </Button>
           );
@@ -515,7 +566,7 @@ function TeamSection({ o }: { o: Opportunity }) {
 }
 
 function AssigneePicker({ o }: { o: Opportunity }) {
-  const { board, people, setAssignee } = useRadar();
+  const { board, people, setAssignee, offline } = useRadar();
   const cur = board[o.id]?.assignee ?? null;
   const active = people.filter((p) => p.active);
   // An assignee who was deactivated stays visible (and only replaceable).
@@ -530,7 +581,7 @@ function AssigneePicker({ o }: { o: Opportunity }) {
           setAssignee(o, p ? { id: p.id, name: p.name } : null);
         }}
       >
-        <SelectTrigger className="w-full sm:w-64" aria-labelledby="assignee-h">
+        <SelectTrigger className="w-full sm:w-64" aria-labelledby="assignee-h" disabled={offline} title={offline ? OFFLINE_TIP : undefined}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -548,7 +599,7 @@ function AssigneePicker({ o }: { o: Opportunity }) {
 }
 
 function NotesSection({ o }: { o: Opportunity }) {
-  const { board, addNote, deleteNote } = useRadar();
+  const { board, addNote, deleteNote, offline } = useRadar();
   const { me, isAdmin } = useSession();
   const notes = board[o.id]?.notes ?? [];
   const [text, setText] = useState("");
@@ -614,8 +665,8 @@ function NotesSection({ o }: { o: Opportunity }) {
           className={cn(textareaClass, "min-h-16 resize-y")}
         />
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">La verá todo el equipo.</span>
-          <Button type="submit" size="sm" variant="outline" disabled={!text.trim() || pending}>
+          <span className="text-xs text-muted-foreground">{offline ? "Sin conexión: no se puede guardar ahora." : "La verá todo el equipo."}</span>
+          <Button type="submit" size="sm" variant="outline" disabled={!text.trim() || pending || offline}>
             {pending && <Loader2 className="animate-spin" aria-hidden />}
             Añadir nota
           </Button>

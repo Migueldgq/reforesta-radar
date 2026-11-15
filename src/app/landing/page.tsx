@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { AppScreenshot, Eyebrow, GithubMark, LandingNav, LogoMark, REPO_URL, Section } from "@/components/landing/chrome";
 import { FindScene, RankScene, TrackScene } from "@/components/landing/how-demo";
 import { MotionRoot } from "@/components/landing/motion";
-import { HeroFigures, Live } from "@/components/landing/live";
+import { FirstRunNotice, HeroFigures, Live } from "@/components/landing/live";
+import type { LandingData } from "@/components/landing/data";
 import {
   BoardPreview,
   CompaniesPreview,
@@ -46,6 +47,9 @@ const HEADLINE = "Cada convocatoria que se escapa es monte que no se planta.";
 
 const enter = (i: number) => ({ "--lp-i": i }) as CSSProperties;
 
+const WORDS = ["cero", "una", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez"];
+const numberWord = (n: number) => WORDS[n] ?? String(n);
+
 const PROBLEMS = [
   {
     k: "4–5",
@@ -74,19 +78,21 @@ const STEPS = [
     n: "01",
     Scene: FindScene,
     title: "Encuentra.",
-    body: "Consulta la BDNS, el BOE, cuatro boletines autonómicos, los portales de la UE, licitaciones y programas de empresa. Junta todo en una lista y quita duplicados.",
+    // Counted from the live source list, so it says the same number as the hero.
+    body: (d: LandingData | null) =>
+      `Consulta ${d ? `${numberWord(d.sources.filter((s) => s.status !== "disabled").length)} fuentes` : "las fuentes"}: la BDNS, el BOE, dos boletines autonómicos (BOCM y DOG), los portales de la UE, la Fundación Biodiversidad y programas de empresa revisados a mano. Junta todo en una lista y quita duplicados.`,
   },
   {
     n: "02",
     Scene: RankScene,
     title: "Prioriza.",
-    body: "Puntúa cada convocatoria de 0 a 100 frente al perfil de Reforesta con reglas fijas, y deja escrito cada motivo y cada aviso.",
+    body: () => "Puntúa cada convocatoria de 0 a 100 frente al perfil de Reforesta con reglas fijas, y deja escrito cada motivo y cada aviso.",
   },
   {
     n: "03",
     Scene: TrackScene,
     title: "Sigue.",
-    body: "Marca lo que interesa y muévelo por un tablero: En estudio, A presentar, Presentada o Descartada.",
+    body: () => "Marca lo que interesa y muévelo por el tablero del equipo: En estudio, A presentar, Presentada o Descartada, con responsable y notas.",
   },
 ];
 
@@ -112,6 +118,10 @@ const NOT_DOING = [
   {
     title: "No está abierto a cualquiera.",
     body: "Esta página es pública; el radar, no. Las cuentas solo se crean con una invitación de alguien del equipo.",
+  },
+  {
+    title: "Tu asistente de IA solo puede leer.",
+    body: "Si usáis un asistente compatible con MCP (como Claude), podéis conectarlo al radar desde «Mi cuenta» para que busque convocatorias por vosotros. Solo consulta: nunca cambia nada.",
   },
   {
     title: "Las reglas se pueden equivocar.",
@@ -220,6 +230,7 @@ export default function LandingPage() {
             </div>
             <div className="lp-enter mt-10" style={enter(4)}>
               <Live render={(d) => <HeroFigures data={d} />} />
+              <FirstRunNotice />
             </div>
           </div>
 
@@ -283,7 +294,9 @@ export default function LandingPage() {
                 </div>
                 <span className="font-mono text-sm text-muted-foreground">{s.n}</span>
                 <h3 className="mt-6 text-xl font-semibold tracking-tight sm:text-2xl">{s.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{s.body}</p>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  <Live render={(d) => s.body(d)} />
+                </p>
               </li>
             ))}
           </ol>
@@ -319,7 +332,7 @@ export default function LandingPage() {
               Subvenciones, licitaciones, anuncios en boletines, fondos europeos y programas de empresa, en el mismo
               formato. Los filtros se guardan en el enlace, así que una vista se comparte copiando la dirección.
             </p>
-            <p>Se puede elegir qué organismos convocantes ver, y el radar recuerda esa elección.</p>
+            <p>Se puede elegir qué organismos convocantes ver; esa elección se guarda para todo el equipo y Inicio avisa cuando está activa.</p>
             <p>Si una fuente falla, se siguen mostrando sus últimos datos buenos y la vista Fuentes lo indica.</p>
           </FeatureRow>
 
@@ -363,7 +376,7 @@ export default function LandingPage() {
             <SmallFeature
               icon={<ListChecks />}
               title="Seguimiento."
-              body="Un tablero con cuatro columnas para mover cada convocatoria hasta «Presentada» y contar las solicitudes del año."
+              body="Un tablero compartido por el equipo, con cuatro columnas, responsable y notas, para llevar cada convocatoria hasta «Presentada»."
             >
               <Live render={(d) => <BoardPreview data={d} />} />
             </SmallFeature>
@@ -377,7 +390,7 @@ export default function LandingPage() {
             <SmallFeature
               icon={<FileSearch />}
               title="Analizar PDF."
-              body="Sube unas bases y recibe una ficha con la misma puntuación que el resto del radar."
+              body="Sube unas bases y recibe una ficha. Las de una convocatoria del radar llevan su misma nota; las demás se puntúan por su texto, si se lee lo suficiente."
             >
               <PdfPreview />
             </SmallFeature>
@@ -393,8 +406,9 @@ export default function LandingPage() {
                 De dónde salen los datos.
               </h2>
               <p className="mt-4 leading-relaxed text-muted-foreground">
-                Todo sale de fuentes oficiales y webs públicas, que el radar vuelve a consultar cada mañana. No hace
-                falta cuenta ni clave. Las cifras cambian cada día.
+                Todo sale de fuentes oficiales y webs públicas, que el radar vuelve a consultar cada día a las 9:00 (hora
+                de Madrid). Las cifras cambian cada día. Esta página es pública; para usar el radar hace falta una cuenta
+                del equipo.
               </p>
             </div>
             <div data-reveal className="lg:col-span-8">
@@ -412,7 +426,7 @@ export default function LandingPage() {
                               <span className="block text-xs font-normal text-muted-foreground">{n.how}</span>
                             </span>
                             <span className="text-right text-sm tabular-nums text-muted-foreground sm:order-3">
-                              {s ? `${s.count}${s.status === "partial" ? " · parcial" : s.status === "error" ? " · sin respuesta" : ""}` : ""}
+                              {s ? `${s.count}${s.status === "disabled" ? " · desactivada" : s.status === "partial" ? " · parcial" : s.status === "error" ? " · sin respuesta" : ""}` : ""}
                             </span>
                             <span className="col-span-2 text-sm text-muted-foreground sm:col-span-1">
                               {n.what}

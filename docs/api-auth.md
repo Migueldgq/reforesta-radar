@@ -146,8 +146,8 @@ type BoardItem = {
 
 - A call absent from `/api/board` is `"nueva"` (what `triageOf` returns today). Setting `"nueva"` keeps the row
   (and its notes and assignee); it is not deleted.
-- Use the board item's snapshot to draw cards of calls missing from `/api/oportunidades` (replaces today's `stub()`
-  built from the localStorage entry). The snapshot is refreshed on every write while the call is still known.
+- Use the board item's snapshot to draw cards of calls missing from `/api/oportunidades` (`stub()` in
+  `src/components/radar/store.tsx`). The snapshot is refreshed on every write while the call is still known.
 - `opportunityId` goes in the path as is (`bdns:923290`); `encodeURIComponent` is safe too.
 - Concurrency: last write wins per field. Re-fetch `GET /api/board` on focus or every minute to see colleagues'
   changes.
@@ -156,7 +156,7 @@ type BoardItem = {
 
 | Method + path | Body | 2xx |
 |---|---|---|
-| `GET /api/settings` | – | `200 {profile: UserProfile \| null, organisms: string[] \| null, updatedBy: PersonRef \| null, updatedAt: string \| null}` |
+| `GET /api/settings` | – | `200 TeamSettings` (below) |
 | `PUT /api/settings` | `{profile?: UserProfile \| null, organisms?: string[] \| null}` (partial: omitted fields are kept) | `200` same shape |
 
 - `profile` is exactly `UserProfile` of `src/components/radar/profile.ts` (`extraKeywords`, `excludedTerms`,
@@ -165,7 +165,20 @@ type BoardItem = {
   `DEFAULT_USER_PROFILE`. `minBudget` comes back as a float (`5000.0`).
 - `organisms` replaces `reforesta-radar:organismos:v1`; `null` or `[]` = no organism filter. The URL still wins
   over it on load, as today.
-- One profile for the whole team; last write wins. Show "Editado por {updatedBy.name}, {fecha}".
+- One profile for the whole team; last write wins.
+
+```ts
+type TeamSettings = {
+  profile: UserProfile | null; organisms: string[] | null;
+  profileUpdatedBy: PersonRef | null; profileUpdatedAt: string | null;     // last save of `profile`
+  organismsUpdatedBy: PersonRef | null; organismsUpdatedAt: string | null; // last save of `organisms`
+  updatedBy: PersonRef | null; updatedAt: string | null;                   // last save of either (kept for compatibility)
+};
+```
+
+- Perfil shows "Guardado por {profileUpdatedBy.name}, {fecha}" from the `profile*` pair, so a change to the organism
+  filter does not change it; the organism filter uses the `organisms*` pair. Values saved before the split carry the
+  old shared pair.
 
 ## Votes
 
@@ -235,3 +248,40 @@ when it is `done`, reload `/api/oportunidades`. Only one request can be open at 
 `GET /api/public/oportunidades` returns the same `OpportunitiesResponse` without a session (the landing's
 `getLandingData` summarises it server-side); it contains only the ingested public calls, never users, board, votes
 or the team profile.
+
+## Opportunities and sources: fields added for the web
+
+```ts
+// GET /api/oportunidades and GET /api/public/oportunidades
+type OpportunitiesResponse = { /* …as before… */ ingest: { running: boolean; startedAt: string | null } };
+type Opportunity = { /* …as before… */ deadlineEstimated: boolean };
+type FitAnalysis = { /* …as before… */ scoreCap?: number }; // absent when the kind has no cap
+// SourceHealth.status in both responses and in GET /api/fuentes
+type HealthStatus = "ok" | "partial" | "error" | "disabled";
+```
+
+- `ingest.running` is true while an ingest is loading the sources (an `ingest_runs` row in `running` started less
+  than an hour ago); `startedAt` is its start (ISO), `null` when nothing runs. On a fresh install `items` is empty
+  and `running` true until the first load finishes (a few minutes): show «Cargando las fuentes por primera vez…»
+  instead of an empty radar, and poll. `lastIngestAt` still means the last *finished* ingest.
+- `deadlineEstimated: true`: `deadline` was estimated from the term the source gives ("10 días hábiles desde la
+  publicación"), not stated by it ([ADR 0029](adr/0029-plazo-estimado-guardado-y-marcado.md)). Keep using it to sort
+  and count days, but never show it as exact: «hacia el 18 nov · fecha estimada», «quedan unos 3 días». The fit
+  reasons and warnings already say so.
+- Company programmes (`kind: "empresa"`): `sourceLabel` is «Programa de empresa/fundación»; `region` is the
+  programme's territory when the funder limits it (e.g. «Andalucía o provincia de Ciudad Real», same as
+  `rsc.territory`), «Estatal» only when it takes projects anywhere in Spain. That region may be free text, not an
+  autonomous community.
+- `fit.scoreCap`: the kind cap the server applied (tenders 57, or 30 when off topic or for running a building;
+  bulletin notices 45; Horizon topics 48; university calls 45; [ADR 0032](adr/0032-reglas-de-sector-leader-y-licitaciones-de-instalaciones.md)).
+  The Perfil step in `src/components/radar/profile.ts` must clamp any increase the same way `team_profile.py` does:
+  `if (score > fit.score && fit.scoreCap != null) score = Math.max(fit.score, Math.min(score, fit.scoreCap))`, or a
+  CENEAM security tender climbs from 30 to "alto" on an Educación bonus.
+- `POST /api/analyze-pdf` adds `scoreSource: "radar" | "pdf" | "none"`, `callId: string | null` and
+  `notice: string | null` ([ADR 0033](adr/0033-analizar-pdf-con-la-nota-del-radar.md)). `"radar"`: the PDF belongs
+  to the call `callId` (found by `docId` or by the BDNS code printed in the PDF) and `fit` is that call's fit exactly
+  as in the list, before the Perfil step (apply it as for list items). `"pdf"`: scored on the PDF text alone.
+  `"none"`: too little text to score; hide the score and show `notice` («No hemos podido leer lo suficiente de este
+  PDF para puntuarlo.»). `organism` may now be `null` with no reason about it.
+- `"disabled"`: the source is switched off with `RADAR_DISABLED_SOURCES` (show «Desactivada»; `count` is 0 and
+  `note` explains it). Its calls are left out of `items`.

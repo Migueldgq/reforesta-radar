@@ -12,7 +12,7 @@ import {
 import type { Opportunity } from "@/lib/opportunity";
 import type { FitAnalysis } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { fmtDate, fmtDayShort, parseDay, tidy } from "@/components/radar/model";
+import { ESTIMATE_TIP, fmtDate, fmtDayShort, parseDay, sourceLabelOf, tidy, WEEK_MS } from "@/components/radar/model";
 import { cn } from "@/lib/utils";
 import type { LandingData } from "./data";
 import { CountUp } from "./motion";
@@ -61,10 +61,19 @@ export function DeadlineBadge({ o, today }: { o: Opportunity; today: number }) {
         Sin fecha
       </Badge>
     );
+  const label = d === 0 ? "Cierra hoy" : d === 1 ? "Cierra mañana" : `${d} días`;
+  // An estimated deadline (worked out from "20 días hábiles…") never reads as an exact one.
+  if (o.deadlineEstimated)
+    return (
+      <Badge variant="outline" className={chip} title={`Hacia el ${fmtDate(o.deadline)} (fecha estimada). ${ESTIMATE_TIP}.`}>
+        <Clock aria-hidden />≈ {label}
+        <span className="sr-only"> (fecha estimada)</span>
+      </Badge>
+    );
   return (
     <Badge variant="outline" className={chip} title={fmtDate(o.deadline) ?? undefined}>
       <Clock aria-hidden />
-      {d === 0 ? "Cierra hoy" : d === 1 ? "Cierra mañana" : `${d} días`}
+      {label}
     </Badge>
   );
 }
@@ -136,12 +145,12 @@ export function TopTable({ data }: { data: LandingData | null }) {
             </td>
             <td className="px-4 py-3 align-top">
               <p className="line-clamp-2 font-medium text-foreground">{tidy(o.titulo)}</p>
-              <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{tidy(o.organismo)}</p>
+              <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{o.organismo}</p>
               <div className="mt-2 sm:hidden">
                 <DeadlineBadge o={o} today={data.today} />
               </div>
             </td>
-            <td className="hidden px-4 py-3 align-top text-muted-foreground md:table-cell">{o.sourceLabel}</td>
+            <td className="hidden px-4 py-3 align-top text-muted-foreground md:table-cell">{sourceLabelOf(o)}</td>
             <td className="hidden px-4 py-3 align-top sm:table-cell">
               <DeadlineBadge o={o} today={data.today} />
             </td>
@@ -163,12 +172,16 @@ export function WeekChart({ data }: { data: LandingData | null }) {
       <figcaption className="space-y-0.5">
         <span className="block text-sm font-medium">Cuándo cierran</span>
         <span className="block text-xs text-muted-foreground">
-          {total} en las próximas 12 semanas{data.weeksLater > 0 ? ` · ${data.weeksLater} más adelante` : ""}
+          {total} cierran en las próximas 12 semanas, desde hoy{data.weeksLater > 0 ? ` · ${data.weeksLater} más adelante` : ""}
         </span>
       </figcaption>
       <ol className="mt-5 grid h-32 grid-cols-12 items-end gap-1 sm:gap-2">
         {data.weeks.map((w, i) => (
-          <li key={w.start} className="flex h-full flex-col items-center justify-end gap-1.5" aria-label={`Semana del ${fmtDayShort(w.start)}: ${w.count}`}>
+          <li
+            key={w.start}
+            className="flex h-full flex-col items-center justify-end gap-1.5"
+            aria-label={`Del ${fmtDayShort(w.start)} al ${fmtDayShort(w.start + WEEK_MS - 86_400_000)}: ${w.count}`}
+          >
             <span className="text-[10px] tabular-nums text-muted-foreground" aria-hidden>
               {w.count || ""}
             </span>
@@ -181,7 +194,7 @@ export function WeekChart({ data }: { data: LandingData | null }) {
         ))}
       </ol>
       <div className="mt-2 flex justify-between text-[10px] text-muted-foreground" aria-hidden>
-        <span>{fmtDayShort(data.weeks[0].start)}</span>
+        <span>Hoy</span>
         <span>{fmtDayShort(data.weeks[11].start)}</span>
       </div>
     </figure>
@@ -223,10 +236,10 @@ export function FitCard({ data }: { data: LandingData | null }) {
       <div className="flex flex-wrap items-center gap-2">
         <ScoreChip fit={o.fit} animate />
         <DeadlineBadge o={o} today={data.today} />
-        <span className="text-xs text-muted-foreground">{o.sourceLabel}</span>
+        <span className="text-xs text-muted-foreground">{sourceLabelOf(o)}</span>
       </div>
       <p className="mt-3 line-clamp-2 font-medium">{tidy(o.titulo)}</p>
-      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{tidy(o.organismo)}</p>
+      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{o.organismo}</p>
       <div className="mt-5 grid gap-5 border-t pt-5">
         <div>
           <p className="text-xs font-medium text-muted-foreground">Por qué encaja</p>
@@ -281,7 +294,7 @@ export function NextEditionList({ data }: { data: LandingData | null }) {
           <div className="min-w-0">
             <p className="line-clamp-1 text-sm font-medium">{tidy(o.titulo)}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {o.sourceLabel} · {closedOn ? `cerró el ${closedOn}` : "cerrada"} · encaje {o.fit.score}
+              {sourceLabelOf(o)} · {closedOn ? `cerró el ${closedOn}` : "cerrada"} · encaje {o.fit.score}
             </p>
           </div>
         </li>

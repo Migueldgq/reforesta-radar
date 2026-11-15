@@ -32,6 +32,7 @@ class RscScoreInput(Contract):
     deadline: str | None
     limits: list[tuple[str, int]]  # (warning, score penalty)
     verified_on: str
+    extra_warnings: list[str] = []  # no penalty (e.g. "checked N months ago")
 
 
 class RawOpportunity(OpportunityBase):
@@ -46,6 +47,8 @@ def score_raw(raw: RawOpportunity, today: date | None = None) -> Opportunity:
         fit = score_rsc(
             inp.titulo, inp.focus, inp.about, inp.opens_at, inp.deadline, inp.limits, inp.verified_on, today
         )
+        if inp.extra_warnings:
+            fit = fit.model_copy(update={"warnings": [*fit.warnings, *inp.extra_warnings]})
     else:
         fit = apply_adjust(score_convocatoria(inp, today), raw.adjust)
     return Opportunity(**{k: getattr(raw, k) for k in OpportunityBase.model_fields}, fit=fit)

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
-from sqlalchemy import case, delete, insert, select, update
+from sqlalchemy import case, delete, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -96,8 +96,10 @@ async def write_ingest(
     runs: list[SourceRun],
     memo: list[PersistedMemo],
     dry_run: bool,
+    run_id: int | None = None,
 ) -> IngestResult:
-    """Without an engine (dry run, no database) everything is diffed against an empty database."""
+    """Without an engine (dry run, no database) everything is diffed against an empty database. With `run_id` (the
+    "running" row from start_run) that row is completed; otherwise a new one is inserted."""
     now = datetime.now(UTC)
     status = run_status(runs)
     live = [r for r in runs if r.health.status != "error"]
@@ -184,20 +186,14 @@ async def write_ingest(
             "items": len(rows),
             "duplicateGroups": len(duplicates),
         }
-        run_id = (
-            await conn.execute(
-                insert(ingest_runs)
-                .values(
-                    started_at=started_at,
-                    finished_at=now,
-                    status=status,
-                    trigger=trigger,
-                    scoring_version=scoring_version,
-                    totals=totals,
-                )
-                .returning(ingest_runs.c.id)
-            )
-        ).scalar_one()
+        values = {"started_at": started_at, "finished_at": now, "status": status, "trigger": trigger,
+                  "scoring_version": scoring_version, "totals": totals}  # fmt: skip
+        stmt = (
+            insert(ingest_runs).values(**values)
+            if run_id is None
+            else update(ingest_runs).where(ingest_runs.c.id == run_id).values(**values)
+        )
+        new_id = (await conn.execute(stmt.returning(ingest_runs.c.id))).scalar_one()
 
         for part in _chunks(rows):
             stmt = pg_insert(opportunities).values(part)
@@ -234,14 +230,14 @@ async def write_ingest(
                 )
             )
         for part in _chunks(changes):
-            await conn.execute(insert(opportunity_changes), [{**c, "run_id": run_id, "changed_at": now} for c in part])
+            await conn.execute(insert(opportunity_changes), [{**c, "run_id": new_id, "changed_at": now} for c in part])
         for part in _chunks([g[0] for g in gone], 2000):
             await conn.execute(update(opportunities).where(opportunities.c.id.in_(part)).values(gone_at=now))
         await conn.execute(
             insert(source_runs),
             [
                 {
-                    "run_id": run_id,
+                    "run_id": new_id,
                     "source_id": r.health.id,
                     "name": r.health.name,
                     "category": r.health.category,
@@ -259,7 +255,7 @@ async def write_ingest(
         await upsert_fetch_cache(conn, memo, now)
         # Keep the memo table bounded: drop entries expired for more than 30 days.
         await conn.execute(delete(fetch_cache).where(fetch_cache.c.expires_at < now - timedelta(days=30)))
-        result.run_id = run_id
+        result.run_id = new_id
         return result
 
     if engine is None:
@@ -308,18 +304,36 @@ async def write_history(
         await upsert_fetch_cache(conn, memo, now)
 
 
+async def start_run(engine: AsyncEngine, started_at: datetime, trigger: str, scoring_version: int) -> int:
+    """A "running" ingest_runs row while the sources load (the API reports it as `ingest.running`); write_ingest or
+    record_failed_run completes it."""
+    async with engine.begin() as conn:
+        stmt = insert(ingest_runs).values(
+            started_at=started_at, status="running", trigger=trigger, scoring_version=scoring_version
+        )
+        return (await conn.execute(stmt.returning(ingest_runs.c.id))).scalar_one()
+
+
 async def record_failed_run(
-    engine: AsyncEngine, started_at: datetime, trigger: str, scoring_version: int, error: str
+    engine: AsyncEngine,
+    started_at: datetime,
+    trigger: str,
+    scoring_version: int,
+    error: str,
+    run_id: int | None = None,
 ) -> None:
     """Best-effort record of a run whose main transaction failed, so the health view shows it."""
+    values = {"started_at": started_at, "finished_at": datetime.now(UTC), "status": "error", "trigger": trigger,
+              "scoring_version": scoring_version, "totals": {"error": error}}  # fmt: skip
     async with engine.begin() as conn:
-        await conn.execute(
-            insert(ingest_runs).values(
-                started_at=started_at,
-                finished_at=datetime.now(UTC),
-                status="error",
-                trigger=trigger,
-                scoring_version=scoring_version,
-                totals={"error": error},
-            )
-        )
+        if run_id is None:
+            await conn.execute(insert(ingest_runs).values(**values))
+        else:
+            await conn.execute(update(ingest_runs).where(ingest_runs.c.id == run_id).values(**values))
+
+
+INTERRUPTED_RUNS_SQL = text("""
+    update ingest_runs set status = 'error', finished_at = now(),
+           totals = totals || '{"error": "Interrumpida: el proceso terminó sin registrar el final"}'::jsonb
+    where status = 'running'
+""")

@@ -7,6 +7,7 @@ built from the search row only.
 """
 
 import math
+import time
 from datetime import UTC, datetime
 from typing import Any, NamedTuple
 from urllib.parse import quote
@@ -15,10 +16,10 @@ from app.config import local_now, settings
 from app.http import map_limit
 from app.models import NivelAdmin, Opportunity, OpportunityDocument, SourceHealth
 from app.scoring.regions import infer_comunidad_autonoma
-from app.scoring.score import FitAdjust, ScoreInput, score_convocatoria
+from app.scoring.score import FitAdjust, ScoreInput, estimated_end, score_convocatoria, short_date
 from app.scoring.text import has_term, normalize_text
 from app.sources.base import FetchResult, RawOpportunity, Source, SourceContext, score_raw
-from app.sources.notices import deadline_from_days, parse_deadline
+from app.sources.notices import excerpt, parse_deadline
 
 BDNS_BASE = "https://www.infosubvenciones.es/bdnstrans/api"
 # The TS read only the 230 best details: it fetched live inside a 35 s web request. The ingest is a background batch
@@ -32,6 +33,7 @@ DAY_S = 86400
 RETRIES = 3
 # Details in flight at once (the TS used 8): BDNS is a public service and already answers bursts with 429.
 DETAIL_CONCURRENCY = 4
+PROGRESS_EVERY_S = 15
 LITE_WARNING = "Ficha BDNS no cargada en este barrido: abre la convocatoria para ver plazo, tipo y beneficiarios."
 
 
@@ -240,17 +242,23 @@ def detail_to_raw(raw: dict[str, Any], d: dict[str, Any], now: datetime) -> RawO
     objetivos = ". ".join(o.get("descripcion") or "" for o in d.get("objetivos") or [])
     fecha_fin = d.get("fechaFinSolicitud")
     text_fin = d.get("textFin")
+    deadline_text = None if fecha_fin else " · ".join(x for x in (d.get("textInicio"), text_fin) if x) or None
+    # official publication: the first announcement in a journal, else the BDNS registration date
+    announced = sorted(a["datPublicacion"][:10] for a in d.get("anuncios") or [] if a.get("datPublicacion"))
+    publicado = _nn(announced[0] if announced else None, d.get("fechaRecepcion"), raw.get("fechaRecepcion"))
 
-    # BDNS often gives only a relative term ("20 Días hábiles", "01 Mesos", "Línea 2- 31.10.26"). Estimate the end
-    # from the start date, or from the BDNS registration date when the start is "día siguiente a la publicación".
-    estimated_end: str | None = None
-    if not fecha_fin and text_fin:
-        base = _nn(d.get("fechaInicioSolicitud"), d.get("fechaRecepcion"), raw.get("fechaRecepcion"))
-        estimated_end = _nn(parse_deadline(text_fin), deadline_from_days(base, text_fin) if base else None)
+    # No end date: BDNS often gives only the term as written ("20 Días hábiles", "Un mes desde la publicación") or a
+    # date inside the text ("Línea 2- 31.10.26"). A date in the text is taken as stated; a term is counted from the
+    # journal publication (or the start date) and the result is an ESTIMATE: kept as `deadline` (sorting, "cierra en
+    # N días") and flagged with `deadline_estimated` everywhere it is shown (ADR 0029).
+    stated = None if fecha_fin else parse_deadline(text_fin)
+    est = None if fecha_fin or stated else estimated_end(deadline_text, publicado, d.get("fechaInicioSolicitud"))
+    candidate = stated or (est[0].isoformat() if est else None)
     today_iso = now.astimezone(UTC).date().isoformat()  # TS: new Date().toISOString().slice(0, 10)
-    # BDNS says "abierto" but our estimate is already past: don't contradict the official flag, flag it.
-    conflict = bool(estimated_end) and estimated_end < today_iso and d.get("abierto") is True
-    deadline = _nn(fecha_fin, None if conflict else estimated_end)
+    # BDNS says "abierto" but our reading of the term is already past: don't contradict the official flag, flag it.
+    conflict = bool(candidate) and candidate < today_iso and d.get("abierto") is True
+    deadline = _nn(fecha_fin, None if conflict else candidate)
+    deadline_estimated = bool(est) and not conflict
 
     adjust: FitAdjust | None = None
     if conflict:
@@ -259,19 +267,18 @@ def detail_to_raw(raw: dict[str, Any], d: dict[str, Any], now: datetime) -> RawO
             delta=-12,
             cap=60,
             append_warnings=[
-                f"BDNS la marca abierta, pero el plazo («{text_fin}») contado desde la publicación ya habría "
-                "vencido: verificar."
+                f"BDNS la marca abierta, pero el plazo («{excerpt(text_fin or '')}») contado desde la publicación ya "
+                "habría vencido: verificar."
             ],
         )
-    elif estimated_end and not fecha_fin:
+    elif est:
         adjust = FitAdjust(
-            append_warnings=[f"Fecha límite estimada a partir de «{text_fin}»: confirmar en el extracto oficial."]
+            append_warnings=[
+                f"Fecha de cierre estimada: {est[1]}, hacia el {short_date(est[0])}. BDNS no da la fecha exacta: "
+                "confirmar en el extracto oficial."
+            ]
         )
 
-    deadline_text = None if fecha_fin else " · ".join(x for x in (d.get("textInicio"), text_fin) if x) or None
-    # official publication: the first announcement in a journal, else the BDNS registration date
-    announced = sorted(a["datPublicacion"][:10] for a in d.get("anuncios") or [] if a.get("datPublicacion"))
-    publicado = _nn(announced[0] if announced else None, d.get("fechaRecepcion"), raw.get("fechaRecepcion"))
     summary_parts = [p for p in (bases and f"Bases: {bases}", finalidad and f"Finalidad: {finalidad}.") if p]
     numero = raw["numeroConvocatoria"]
 
@@ -288,6 +295,7 @@ def detail_to_raw(raw: dict[str, Any], d: dict[str, Any], now: datetime) -> RawO
         opens_at=d.get("fechaInicioSolicitud"),
         deadline=deadline,
         deadline_text=deadline_text,
+        deadline_estimated=deadline_estimated,
         budget=d.get("presupuestoTotal"),
         amount_text=None,
         tipo=d.get("tipoConvocatoria"),
@@ -319,6 +327,7 @@ def detail_to_raw(raw: dict[str, Any], d: dict[str, Any], now: datetime) -> RawO
             kind="subvencion",
             fecha_publicacion=publicado,
             texto_plazo=deadline_text,
+            deadline_estimated=deadline_estimated,
         ),
         adjust=adjust,
     )
@@ -352,6 +361,19 @@ def raw_to_raw(raw: dict[str, Any]) -> RawOpportunity:
     )
 
 
+class _Progress:
+    """A log line every PROGRESS_EVERY_S while the details load, so the ingest log is not silent for minutes."""
+
+    def __init__(self, total: int) -> None:
+        self.total, self.done, self.last = total, 0, time.monotonic()
+
+    def tick(self) -> None:
+        self.done += 1
+        if time.monotonic() - self.last >= PROGRESS_EVERY_S and self.done < self.total:
+            self.last = time.monotonic()
+            print(f"[ingest] bdns: {self.done}/{self.total} fichas leídas…", flush=True)
+
+
 class BdnsSource(Source):
     id = "bdns"
     name = "BDNS"
@@ -382,7 +404,16 @@ class BdnsSource(Source):
         to_enrich = [raw for raw, _ in ranked[:MAX_ENRICH]]
         not_enriched = [raw for raw, _ in ranked[MAX_ENRICH:]]
 
-        details = await map_limit(to_enrich, DETAIL_CONCURRENCY, lambda r: fetch_detail(ctx, r["numeroConvocatoria"]))
+        print(f"[ingest] bdns: {ok_searches}/{len(searches)} búsquedas, {len(deduped)} convocatorias únicas; "
+              f"leyendo {len(to_enrich)} fichas…", flush=True)  # fmt: skip
+        progress = _Progress(len(to_enrich))
+
+        async def detail(r: dict[str, Any]) -> dict[str, Any] | None:
+            d = await fetch_detail(ctx, r["numeroConvocatoria"])
+            progress.tick()
+            return d
+
+        details = await map_limit(to_enrich, DETAIL_CONCURRENCY, detail)
 
         items: list[RawOpportunity] = []
         failed = 0

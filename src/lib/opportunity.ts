@@ -14,6 +14,7 @@ export interface Opportunity {
   publishedAt: string | null; // YYYY-MM-DD
   opensAt: string | null;     // YYYY-MM-DD
   deadline: string | null;    // YYYY-MM-DD
+  deadlineEstimated?: boolean; // true: `deadline` was worked out from a relative term ("20 días hábiles…"), not stated
   deadlineText: string | null; // free text when no exact date (e.g. "20 días hábiles desde publicación")
   budget: number | null;      // euros
   amountText: string | null;  // e.g. RSC "20.000 € – 40.000 € por proyecto"
@@ -72,4 +73,5 @@ export interface OpportunitiesResponse {
   storage?: "postgres" | "cache"; // where this response came from
   lastIngestAt?: string | null;   // Postgres: finish time of the last successful ingest run
   ingestStale?: boolean;          // Postgres: last successful ingest older than 36 h (or none yet)
+  ingest?: { running: boolean; startedAt: string | null }; // an ingest run in progress (first run: the list is still empty)
 }

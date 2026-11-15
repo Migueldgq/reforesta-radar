@@ -1,7 +1,7 @@
 import { cacheLife } from "next/cache";
 import type { OpportunitiesResponse, Opportunity } from "@/lib/opportunity";
 import type { SourceHealth } from "@/lib/types";
-import { daysLeft, isClosed, isOpenNow, mondayOf, todayUTC, WEEK_MS } from "@/components/radar/model";
+import { daysLeft, isClosed, isOpenNow, todayUTC, WEEK_MS } from "@/components/radar/model";
 
 const NEXT_EDITION = /Convocatoria periódica: la edición actual (?:cerró el ([\d/]+)|ya cerró)/;
 
@@ -32,8 +32,9 @@ function summarize(items: Opportunity[], sources: SourceHealth[], fetchedAt: str
   const openItems = byScore.filter(isOpenNow);
   const nextEd = byScore.filter((o) => isClosed(o) && o.fit.reasons.some((r) => NEXT_EDITION.test(r)));
 
+  // Same windows as the app's "Cuándo cierran": seven days at a time from today, so nothing already closed counts.
   const today = todayUTC();
-  const start = mondayOf(today);
+  const start = today;
   const weeks = Array.from({ length: 12 }, (_, i) => ({ start: start + i * WEEK_MS, count: 0 }));
   let weeksLater = 0;
   for (const o of items) {
@@ -73,19 +74,30 @@ function summarize(items: Opportunity[], sources: SourceHealth[], fetchedAt: str
 /**
  * Live figures for the landing, read from the API's public `/api/public/oportunidades` (no session). Cached for a few
  * minutes with `use cache`, so the figures are part of the server HTML (no client fetch, works
- * without JS). Returns `null` when the API is down or empty (e.g. during `next build` without a
+ * without JS). `data` is `null` when the API is down or empty (e.g. during `next build` without a
  * running backend), so every section falls back to copy without numbers; that miss is cached briefly.
+ * `firstRun`: the very first ingest is still running (nothing to show yet, but it is coming).
  */
-export async function getLandingData(): Promise<LandingData | null> {
+async function getLanding(): Promise<{ data: LandingData | null; firstRun: boolean }> {
   "use cache";
   let result: LandingData | null = null;
+  let firstRun = false;
   try {
     const res = await fetch(`${API_URL}/api/public/oportunidades`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
     const data = res.ok ? ((await res.json()) as OpportunitiesResponse) : null;
-    if (data && data.items.length > 0) result = summarize(data.items, data.sources, data.fetchedAt);
+    firstRun = !!data?.ingest?.running && (!data.items.length || !data.lastIngestAt);
+    if (data && data.items.length > 0 && !firstRun) result = summarize(data.items, data.sources, data.fetchedAt);
   } catch {
     result = null;
   }
-  cacheLife(result ? { stale: 60, revalidate: 300, expire: 3600 } : { stale: 30, revalidate: 30, expire: 120 });
-  return result;
+  cacheLife(result ? { stale: 60, revalidate: 300, expire: 3600 } : { stale: 15, revalidate: 15, expire: 60 });
+  return { data: result, firstRun };
+}
+
+export async function getLandingData(): Promise<LandingData | null> {
+  return (await getLanding()).data;
+}
+
+export async function isFirstRun(): Promise<boolean> {
+  return (await getLanding()).firstRun;
 }

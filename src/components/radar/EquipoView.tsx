@@ -220,6 +220,8 @@ function People() {
     );
 
   const users = team ? [...team.users].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, "es")) : [];
+  // The team always needs one active admin: the last one cannot lose the role or be deactivated (the API refuses too).
+  const activeAdmins = users.filter((u) => u.active && u.role === "admin").length;
 
   return (
     <div className="flex flex-col gap-8">
@@ -244,63 +246,72 @@ function People() {
           </div>
         ) : (
           <ul className="divide-y rounded-lg border">
-            {users.map((u) => (
-              <li key={u.id} className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3", !u.active && "bg-muted/40")}>
-                <div className="order-1 flex min-w-0 flex-1 basis-56 items-center gap-3">
-                  <PersonAvatar name={u.name || u.email} className={cn("size-8 text-xs", !u.active && "opacity-60")} />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">
-                      {u.name || "Sin nombre"}
-                      {u.id === me.id && <span className="font-normal text-muted-foreground"> (tú)</span>}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+            {users.map((u) => {
+              const lastAdmin = u.active && u.role === "admin" && activeAdmins === 1;
+              return (
+                <li key={u.id} className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3", !u.active && "bg-muted/40")}>
+                  <div className="order-1 flex min-w-0 flex-1 basis-56 items-center gap-3">
+                    <PersonAvatar name={u.name || u.email} className={cn("size-8 text-xs", !u.active && "opacity-60")} />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">
+                        {u.name || "Sin nombre"}
+                        {u.id === me.id && <span className="font-normal text-muted-foreground"> (tú)</span>}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="order-3 flex flex-wrap items-center gap-2">
-                  <Badge variant={u.role === "admin" ? "secondary" : "outline"} className="gap-1 font-normal">
-                    {u.role === "admin" && <ShieldCheck aria-hidden />}
-                    {ROLE_LABEL[u.role]}
-                  </Badge>
-                  {u.active ? (
-                    <Badge variant="outline" className="gap-1 font-normal">
-                      <CircleCheck className="text-primary" aria-hidden /> Activa
+                  <div className="order-3 flex flex-wrap items-center gap-2">
+                    <Badge variant={u.role === "admin" ? "secondary" : "outline"} className="gap-1 font-normal">
+                      {u.role === "admin" && <ShieldCheck aria-hidden />}
+                      {ROLE_LABEL[u.role]}
                     </Badge>
-                  ) : (
-                    <Badge variant="outline" className="gap-1 font-normal text-muted-foreground">
-                      <CircleMinus aria-hidden /> Desactivada
-                    </Badge>
-                  )}
-                </div>
-                <p className="order-4 w-36 text-xs text-muted-foreground" title={u.lastLoginAt ? fmtDayLong(u.lastLoginAt) : undefined}>
-                  {u.lastLoginAt ? `Entró ${fmtAgo(u.lastLoginAt)}` : "Nunca ha entrado"}
-                </p>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon-sm" className="order-2 sm:order-5" aria-label={`Acciones para ${u.name || u.email}`} disabled={busy === u.id}>
-                      {busy === u.id ? <Loader2 className="animate-spin" aria-hidden /> : <MoreHorizontal aria-hidden />}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-72">
-                    {u.active && (
-                      <DropdownMenuItem onSelect={() => void resetLink(u)}>
-                        <KeyRound aria-hidden /> Generar enlace para restablecer contraseña
-                      </DropdownMenuItem>
+                    {u.active ? (
+                      <Badge variant="outline" className="gap-1 font-normal">
+                        <CircleCheck className="text-primary" aria-hidden /> Activa
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="gap-1 font-normal text-muted-foreground">
+                        <CircleMinus aria-hidden /> Desactivada
+                      </Badge>
                     )}
-                    {u.active && (
-                      <DropdownMenuItem onSelect={() => askRole(u)}>
-                        {u.role === "admin" ? <ShieldOff aria-hidden /> : <ShieldCheck aria-hidden />}
-                        {u.role === "admin" ? "Quitar administración" : "Dar administración"}
+                  </div>
+                  <p className="order-4 w-36 text-xs text-muted-foreground" title={u.lastLoginAt ? fmtDayLong(u.lastLoginAt) : undefined}>
+                    {u.lastLoginAt ? `Entró ${fmtAgo(u.lastLoginAt)}` : "Nunca ha entrado"}
+                  </p>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon-sm" className="order-2 sm:order-5" aria-label={`Acciones para ${u.name || u.email}`} disabled={busy === u.id}>
+                        {busy === u.id ? <Loader2 className="animate-spin" aria-hidden /> : <MoreHorizontal aria-hidden />}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-72">
+                      {u.active && (
+                        <DropdownMenuItem onSelect={() => void resetLink(u)}>
+                          <KeyRound aria-hidden /> Generar enlace para restablecer contraseña
+                        </DropdownMenuItem>
+                      )}
+                      {u.active && (
+                        <DropdownMenuItem onSelect={() => askRole(u)} disabled={lastAdmin}>
+                          {u.role === "admin" ? <ShieldOff aria-hidden /> : <ShieldCheck aria-hidden />}
+                          {u.role === "admin" ? "Quitar administración" : "Dar administración"}
+                        </DropdownMenuItem>
+                      )}
+                      {u.active && <DropdownMenuSeparator />}
+                      <DropdownMenuItem onSelect={() => askActive(u)} variant={u.active ? "destructive" : "default"} disabled={lastAdmin}>
+                        {u.active ? <UserRoundX aria-hidden /> : <UserRoundCheck aria-hidden />}
+                        {u.active ? "Desactivar" : "Reactivar"}
                       </DropdownMenuItem>
-                    )}
-                    {u.active && <DropdownMenuSeparator />}
-                    <DropdownMenuItem onSelect={() => askActive(u)} variant={u.active ? "destructive" : "default"}>
-                      {u.active ? <UserRoundX aria-hidden /> : <UserRoundCheck aria-hidden />}
-                      {u.active ? "Desactivar" : "Reactivar"}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </li>
-            ))}
+                      {lastAdmin && (
+                        <p className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">
+                          {u.id === me.id ? "Eres" : "Es"} la única persona con administración. Para quitarla o desactivar{" "}
+                          {u.id === me.id ? "tu cuenta" : "esta cuenta"}, da antes administración a otra persona.
+                        </p>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

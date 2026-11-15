@@ -1,7 +1,8 @@
 "use client";
 
-import { AlarmClock, ArrowRight, Check, ChevronDown, DoorOpen, Loader2, Repeat, Target, TriangleAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlarmClock, ArrowRight, Check, ChevronDown, DoorOpen, Loader2, Repeat, Target, TriangleAlert, UsersRound, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import type { PersonRef } from "@/lib/team";
 import Link from "next/link";
 import { isNeutral } from "./profile";
 import type { Opportunity, OpportunityKind } from "@/lib/opportunity";
@@ -10,7 +11,7 @@ import {
   DEFAULT_FILTERS,
   dimValues,
   EMPTY_DIMS,
-  filtersToQuery,
+  sameOrgs,
   fmtAgo,
   fmtDayShort,
   haystackOf,
@@ -39,7 +40,7 @@ import {
   type Skip,
   type Triage,
 } from "./model";
-import { useRadar } from "./store";
+import { savedBy, useRadar } from "./store";
 import { BarList, WeekBars, type BarRow, type WeekBin } from "./charts";
 import { TerritoryPanel } from "./SpainMap";
 import { FilterBar, weekChipLabel, type BarDim } from "./filters";
@@ -84,8 +85,6 @@ function dimLabel(dim: Dim, key: string): string {
       return TRIAGE_LABELS[key as Triage] ?? key;
     case "plazo":
       return PLAZO_LABELS[key] ?? key;
-    case "organismo":
-      return tidy(key);
     default:
       return key;
   }
@@ -96,6 +95,8 @@ export function HomeView() {
   if (loading && !data) return <LoadingHome />;
   if (error && !data) return <ErrorState message={error} onRetry={() => reload()} />;
   if (!data) return null;
+  // First run: the sources are still being read (the store polls until the ingest finishes).
+  if (data.ingest?.running && (data.items.length === 0 || !data.lastIngestAt)) return <LoadingHome firstRun />;
   return (
     <>
       {data.ingestStale && data.lastIngestAt && <IngestStaleAlert lastIngestAt={data.lastIngestAt} />}
@@ -119,19 +120,15 @@ function IngestStaleAlert({ lastIngestAt }: { lastIngestAt: string }) {
 }
 
 function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fetchedAt: string; sourceCount: number }) {
-  const { filters, setFilters, triageOf, refreshing, error, profile } = useRadar();
+  const { filters, setFilters, markPush, triageOf, refreshing, error, offline, profile, teamOrgs, settings } = useRadar();
+  const teamOrgsOn = teamOrgs.length > 0 && sameOrgs(filters.dims.organismo, teamOrgs);
+  const orgsSaved = savedBy(settings, "organisms");
   const [more, setMore] = useState(false);
   const hay = useMemo(() => new Map(items.map((o) => [o.id, haystackOf(o)])), [items]);
 
   // Same rule the store uses to open on "Próximas ediciones": the whole radar, not the filtered list.
+  // (The store keeps the filters, the page and the open call in the URL.)
   const quiet = useMemo(() => noOpenHighFit(items), [items]);
-
-  // Keep the filters in the URL so links can be shared. While the default is "Próximas ediciones",
-  // choosing "Para pedir ahora" is marked too, so a reload stays there.
-  useEffect(() => {
-    const q = filtersToQuery(filters, quiet && plazoViewOf(filters) === "ahora");
-    if (window.location.pathname === "/" && window.location.search !== q) window.history.replaceState(null, "", `/${q}`);
-  }, [filters, quiet]);
 
   const subset = useMemo(
     () => (skip: Skip) => items.filter((o) => matches(o, filters, triageOf(o.id), hay.get(o.id)!, skip)),
@@ -193,7 +190,18 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
   const barDims: BarDim[] = [
     { dim: "kind", label: "Tipo", options: rows.kind },
     { dim: "source", label: "Fuente", options: rows.source },
-    { dim: "organismo", label: "Organismo", options: rows.organismo, wide: true },
+    {
+      dim: "organismo",
+      label: "Organismo",
+      options: rows.organismo,
+      wide: true,
+      note: (
+        <>
+          <span className="block font-medium text-foreground">Este filtro se guarda para todo el equipo</span>
+          {orgsSaved && <span className="block">{savedLine(orgsSaved)}</span>}
+        </>
+      ),
+    },
     { dim: "region", label: "Territorio", options: rows.region },
     { dim: "workLine", label: "Línea de trabajo", options: rows.workLine },
     { dim: "plazo", label: "Plazo", options: rows.plazo },
@@ -214,22 +222,36 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
     ediciones: anyPlazo.filter(isNextEdition).length,
     todas: anyPlazo.length,
   };
-  const setView = (v: PlazoView) => setFilters((f) => withPlazoView(f, v));
+  const setView = (v: PlazoView) => {
+    markPush();
+    setFilters((f) => withPlazoView(f, v));
+  };
+  // A tile shows exactly its own filter on "Para pedir ahora", so the list then has the tile's number of rows.
+  const togglePlazoTile = (k: "abierta" | "30d") => {
+    markPush();
+    setFilters((f) =>
+      f.dims.plazo.includes(k) && plazoViewOf(f) === "ahora"
+        ? { ...f, dims: { ...f.dims, plazo: f.dims.plazo.filter((x) => x !== k) } }
+        : { ...withPlazoView(f, "ahora"), dims: { ...f.dims, plazo: [k] } },
+    );
+  };
   // High fit across every deadline state: today the strongest matches may all be closed recurring grants.
   const allPlazo = withPlazoView(filters, "todas");
   const altoAll = items.filter((o) => o.fit.tier === "alto" && matches(o, allPlazo, triageOf(o.id), hay.get(o.id)!, "tier"));
   const altoOpen = altoAll.filter((o) => !isClosed(o)).length;
   const altoNext = altoAll.filter(isNextEdition).length;
-  const toggleAlto = () =>
+  const toggleAlto = () => {
+    markPush();
     setFilters((f) =>
       f.dims.tier.includes("alto")
         ? withPlazoView({ ...f, dims: { ...f.dims, tier: f.dims.tier.filter((k) => k !== "alto") } }, "ahora")
-        : withPlazoView({ ...f, dims: { ...f.dims, tier: [...f.dims.tier, "alto"] } }, "todas"),
+        : withPlazoView({ ...f, dims: { ...f.dims, tier: ["alto"] } }, "todas"),
     );
+  };
 
   const stats = [
-    { label: "Abiertas ahora", icon: DoorOpen, value: countOf(rows.plazo, "abierta"), caption: "Se pueden pedir hoy", on: filters.dims.plazo.includes("abierta"), toggle: () => toggleDim("plazo", "abierta") },
-    { label: "Cierran en ≤30 días", icon: AlarmClock, value: countOf(rows.plazo, "30d"), caption: "Hay que decidir pronto", on: filters.dims.plazo.includes("30d"), toggle: () => toggleDim("plazo", "30d") },
+    { label: PLAZO_LABELS.abierta, icon: DoorOpen, value: countOf(rows.plazo, "abierta"), caption: "Se pueden pedir hoy", on: view === "ahora" && filters.dims.plazo.includes("abierta"), toggle: () => togglePlazoTile("abierta") },
+    { label: PLAZO_LABELS["30d"], icon: AlarmClock, value: countOf(rows.plazo, "30d"), caption: "Hay que decidir pronto", on: view === "ahora" && filters.dims.plazo.includes("30d"), toggle: () => togglePlazoTile("30d") },
     { label: "Encaje alto", icon: Target, value: altoAll.length, caption: altoOpen ? "Se parecen a lo que hacéis" : "Ninguna abierta hoy · ver próximas ediciones", on: filters.dims.tier.includes("alto"), toggle: toggleAlto },
     { label: "Próximas ediciones", icon: Repeat, value: viewCounts.ediciones, caption: "Cerradas que suelen volver", on: view === "ediciones", toggle: () => setView(view === "ediciones" ? "ahora" : "ediciones") },
   ];
@@ -244,7 +266,7 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
               {items.length} oportunidades de {sourceCount} fuentes · datos de {fmtAgo(fetchedAt)}
             </span>
             {!isNeutral(profile) && <Link href="/perfil" className="inline-flex h-5 items-center rounded-full border px-2 text-xs text-foreground hover:bg-accent">Perfil ajustado</Link>}
-            {error && !refreshing && <span className="text-xs text-amber-800">No se pudo actualizar; mostrando la última copia.</span>}
+            {error && !refreshing && !offline && <span className="text-xs text-amber-800">No se pudo actualizar; mostrando la última copia.</span>}
           </span>
         }
       />
@@ -255,14 +277,16 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
             key={s.label}
             type="button"
             aria-pressed={s.on}
+            data-tile={s.label}
             onClick={s.toggle}
             className={cn(
               "flex cursor-pointer flex-col gap-2 rounded-lg border bg-card p-4 text-left transition-colors outline-none hover:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:p-5",
               s.on && "border-primary ring-1 ring-primary",
             )}
           >
-            <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground sm:text-sm">
-              <span className="truncate">{s.label}</span>
+            <span className="flex items-start justify-between gap-2 text-xs text-muted-foreground sm:text-sm">
+              {/* Two lines kept for every tile where some label wraps, so the numbers line up. */}
+              <span className="min-h-[2lh] xl:min-h-0">{s.label}</span>
               {s.on ? <Check className="size-4 shrink-0 text-primary" aria-hidden /> : <s.icon className="size-4 shrink-0 max-sm:hidden" aria-hidden />}
             </span>
             <span className="text-3xl font-semibold tracking-tight tabular-nums">{s.value}</span>
@@ -272,8 +296,9 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
       </div>
 
       <Card className="gap-0 py-0" aria-label="Resumen gráfico">
-        <div className="grid divide-y lg:grid-cols-[1.6fr_1fr_1.5fr] lg:divide-x lg:divide-y-0">
-          <WeekBars bins={bins} later={later} selected={filters.week} onSelect={(w) => setFilters((f) => ({ ...f, week: w }))} />
+        {/* On "Próximas ediciones" every call has closed already: a chart of closing dates would say nothing true. */}
+        <div className={cn("grid divide-y lg:divide-x lg:divide-y-0", view === "ediciones" ? "lg:grid-cols-[1fr_1.5fr]" : "lg:grid-cols-[1.6fr_1fr_1.5fr]")}>
+          {view !== "ediciones" && <WeekBars bins={bins} later={later} selected={filters.week} onSelect={(w) => setFilters((f) => ({ ...f, week: w }))} />}
           <BarList title="Línea de trabajo" rows={rows.workLine} selected={filters.dims.workLine} onToggle={(k) => toggleDim("workLine", k)} total={total} maxRows={4} />
           <TerritoryPanel rows={rows.region} open={openByRegion} selected={filters.dims.region} onToggle={(k) => toggleDim("region", k)} total={total} />
         </div>
@@ -302,7 +327,7 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
           <Tabs value={view} onValueChange={(v) => setView(v as PlazoView)} className="max-w-full overflow-x-auto">
             <TabsList aria-label="Plazo">
               {(Object.keys(PLAZO_VIEW_LABELS) as PlazoView[]).map((v) => (
-                <TabsTrigger key={v} value={v} className="px-2 sm:px-3">
+                <TabsTrigger key={v} value={v} className="px-2 sm:px-3" aria-controls="lista-convocatorias">
                   <span className="max-sm:hidden">{PLAZO_VIEW_LABELS[v]}</span>
                   <span className="sm:hidden">{SHORT_VIEW_LABELS[v]}</span>
                   <span className="text-muted-foreground tabular-nums">{viewCounts[v]}</span>
@@ -326,18 +351,44 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
             </p>
           )}
         </div>
+        {teamOrgsOn && <TeamOrgsNotice count={teamOrgs.length} saved={orgsSaved} onClear={() => setFilters((f) => ({ ...f, dims: { ...f.dims, organismo: [] } }))} />}
         <FilterBar dims={barDims} chips={chips} total={total} />
-        <div className={cn("transition-opacity", refreshing && "opacity-90")}>
-          <ResultsTable items={visible} onClear={clearAll} resetKey={JSON.stringify(filters)} />
+        <div id="lista-convocatorias" className={cn("transition-opacity", refreshing && "opacity-90")}>
+          <ResultsTable items={visible} onClear={clearAll} />
         </div>
       </section>
     </div>
   );
 }
 
+/** "Guardado por Ana el 15 de noviembre, a las 9:02." */
+function savedLine({ by, at }: { by: PersonRef | null; at: string }): string {
+  const d = new Date(at);
+  const day = d.toLocaleDateString("es-ES", { day: "numeric", month: "long" });
+  const time = d.toLocaleTimeString("es-ES", { hour: "numeric", minute: "2-digit" });
+  return `Guardado por ${by?.name || "alguien del equipo"} el ${day}, a las ${time}.`;
+}
+
+/** The team's saved organism filter is on: say so on Inicio, with a one-click way out (for everyone). */
+function TeamOrgsNotice({ count, saved, onClear }: { count: number; saved: { by: PersonRef | null; at: string } | null; onClear: () => void }) {
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+      <UsersRound className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="min-w-0 flex-1">
+        Filtro del equipo: solo {count === 1 ? "1 organismo" : `${count} organismos`}. Lo ve así todo el equipo.
+        {saved && <span className="text-muted-foreground"> {savedLine(saved)}</span>}
+      </span>
+      <Button variant="ghost" size="sm" className="h-8" onClick={onClear} aria-label="Quitar el filtro de organismos para todo el equipo">
+        <X aria-hidden /> Quitar
+      </Button>
+    </div>
+  );
+}
+
 /** Shown while no open call fits well: explains why the home opens on the next editions and links both tabs. */
 function QuietNotice({ view, onSwitch }: { view: "ahora" | "ediciones"; onSwitch: () => void }) {
-  const link = "inline-flex cursor-pointer items-center gap-1 font-medium text-primary underline-offset-4 hover:underline";
+  // The pseudo-element makes the tap area taller than the line of text without changing the look.
+  const link = "relative inline-flex cursor-pointer items-center gap-1 font-medium text-primary underline-offset-4 after:absolute after:-inset-y-1.5 after:inset-x-0 after:content-[''] hover:underline";
   if (view === "ediciones")
     return (
       <Alert role="status">
@@ -369,13 +420,17 @@ function QuietNotice({ view, onSwitch }: { view: "ahora" | "ediciones"; onSwitch
 
 /* ---------- Loading (first visit only; later visits paint the saved copy instantly) ---------- */
 
-function LoadingHome() {
+function LoadingHome({ firstRun = false }: { firstRun?: boolean }) {
   return (
     <div className="flex flex-col gap-8" aria-busy="true">
       <PageHeader title="Convocatorias" />
       <div className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm" role="status">
         <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
-        <span>Cargando las convocatorias…</span>
+        <span>
+          {firstRun
+            ? "Primera carga en marcha: estamos leyendo las fuentes oficiales. Suele tardar unos 2 minutos. La lista aparecerá aquí sola."
+            : "Cargando las convocatorias…"}
+        </span>
       </div>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (

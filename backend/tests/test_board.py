@@ -57,7 +57,8 @@ async def test_tracking_survives_the_call_leaving_the_sources(
 
 async def test_settings_shared_and_validated(admin: httpx.AsyncClient, member: httpx.AsyncClient) -> None:
     assert (await member.get("/api/settings")).json() == {
-        "profile": None, "organisms": None, "updatedBy": None, "updatedAt": None,
+        "profile": None, "organisms": None, "updatedBy": None, "updatedAt": None, "profileUpdatedBy": None,
+        "profileUpdatedAt": None, "organismsUpdatedBy": None, "organismsUpdatedAt": None,
     }  # fmt: skip
     profile = {
         "extraKeywords": [{"term": "dehesa", "weight": 10, "line": "restauracion"}, {"term": "lince", "weight": 5}],
@@ -74,8 +75,13 @@ async def test_settings_shared_and_validated(admin: httpx.AsyncClient, member: h
     out = (await admin.get("/api/settings")).json()  # another person sees it
     assert out["profile"] == {**profile, "minBudget": 5000.0} and out["organisms"] == organisms
     assert out["updatedBy"]["name"] == "Luis" and out["updatedAt"]
-    # partial update keeps the other field
-    assert (await admin.put("/api/settings", json={"organisms": []})).json()["profile"] == out["profile"]
+    assert out["profileUpdatedBy"]["name"] == out["organismsUpdatedBy"]["name"] == "Luis"
+    # partial update keeps the other field, and its saved-by/at
+    after = (await admin.put("/api/settings", json={"organisms": []})).json()
+    assert after["profile"] == out["profile"]
+    assert (after["profileUpdatedBy"], after["profileUpdatedAt"]) == (out["profileUpdatedBy"], out["profileUpdatedAt"])
+    assert after["organismsUpdatedBy"]["name"] == after["updatedBy"]["name"] == "Ana"
+    assert after["organismsUpdatedAt"] > out["organismsUpdatedAt"]
     bad = await member.put("/api/settings", json={"profile": {"extraKeywords": [{"term": "x", "weight": 99}]}})
     assert bad.status_code == 422
     neutral = await member.put("/api/settings", json={"profile": {}})  # default profile = never customised
@@ -189,7 +195,7 @@ async def test_public_endpoint_leaks_nothing_about_people_or_board(
         assert secret not in body, secret
     data = res.json()
     assert set(data) == {"items", "sources", "fetchedAt", "cached", "stale", "refreshing", "storage", "lastIngestAt",
-                         "ingestStale"}  # fmt: skip
+                         "ingestStale", "ingest"}  # fmt: skip
     assert {o["id"] for o in data["items"]} == {o.id for o in items}
 
 

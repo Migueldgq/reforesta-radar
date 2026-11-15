@@ -168,6 +168,8 @@ export function applyProfile(o: Opportunity, p: UserProfile, hay = haystack(o)):
   // Like the server: closed calls (next edition) never climb into "alto" through a bonus.
   const cap = SERVER_GEO?.closedCap ?? 55;
   if (o.fit.deadlineState === "cerrada" && score > o.fit.score) score = Math.max(o.fit.score, Math.min(score, cap));
+  // Nor does a bonus lift a call above the cap of its kind (tenders, bulletin notices…).
+  if (o.fit.scoreCap != null && score > o.fit.score) score = Math.max(o.fit.score, Math.min(score, o.fit.scoreCap));
   return {
     ...o,
     fit: {

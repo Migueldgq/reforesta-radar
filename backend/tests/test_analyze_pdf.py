@@ -26,9 +26,10 @@ def signed_in() -> Iterator[None]:
     app.dependency_overrides.pop(current_user, None)
 
 
-# Text extraction differs from pdf.js in one spot of the MITECO sample: pypdf joins "ES - ESPAÑA" and the next
-# line without a break, so the text is one character shorter. Nothing else in the result changes.
-EXTRACTION_DIFFS = {"madrid": set(), "miteco": {"charCount", "excerpt"}}
+# Fields still produced exactly as the TS route did. Not compared: charCount and excerpt of MITECO (pypdf joins
+# "ES - ESPAÑA" and the next line, one character shorter), and the title/organism/deadlines/fit the analyzer now reads
+# better (organism headings over two lines, long "Orden …" titles, deadline sentences with a term or a date).
+SAME_AS_TS = {"fileName", "totalPages", "summary", "beneficiaries", "budgetHighlights", "requirements"}
 
 
 def _sample(name: str) -> dict:
@@ -37,15 +38,41 @@ def _sample(name: str) -> dict:
     return res.json()
 
 
-@pytest.mark.parametrize(("name", "score", "tier"), [("madrid", 84, "alto"), ("miteco", 25, "bajo")])
-def test_samples_match_ts(name: str, score: int, tier: str) -> None:
+@pytest.mark.parametrize("name", ["madrid", "miteco"])
+def test_samples_keep_the_ts_highlights(name: str) -> None:
     got = _sample(name)
     ts = json.loads((GOLDEN / f"analyze_pdf_{name}.json").read_text())
-    assert got["fit"]["score"] == score
-    assert got["fit"]["tier"] == tier
-    assert set(got) == set(ts)
-    for key in set(ts) - EXTRACTION_DIFFS[name]:
+    for key in SAME_AS_TS:
         assert got[key] == ts[key], key
+
+
+def test_madrid_sample_header_deadlines_and_score() -> None:
+    got = _sample("madrid")
+    assert got["title"].startswith("Orden 1689/2026, de la Consejería de Medio Ambiente, Agricultura e Interior, por")
+    assert got["title"].endswith("en la Comunidad de Madrid.")
+    assert got["organism"] == "Consejería de Medio Ambiente, Agricultura e Interior"
+    # the prioritisation clause ("una vez finalizado el plazo de presentación…") is not a deadline
+    assert len(got["deadlineHighlights"]) == 1 and "10 días hábiles" in got["deadlineHighlights"][0]
+    assert (got["fit"]["score"], got["fit"]["tier"], got["scoreSource"], got["notice"]) == (80, "alto", "pdf", None)
+    # a Comunidad de Madrid environmental call is one of the organisms the team checks by hand
+    assert not any("revisáis a mano" in r for r in got["fit"]["reasons"])
+
+
+def test_miteco_sample_without_the_call_is_not_scored() -> None:
+    """A 3-page BDNS printout (2,200 characters, no app database here): too little to score honestly."""
+    got = _sample("miteco")
+    assert (got["scoreSource"], got["fit"]["score"], got["callId"]) == ("none", 0, None)
+    assert got["notice"] == "No hemos podido leer lo suficiente de este PDF para puntuarlo."
+    assert got["fit"]["reasons"] == []
+
+
+def test_unknown_organism_gets_no_manual_sources_reason() -> None:
+    from app.pdf.analyzer import analyze_text
+
+    body = "Resolución por la que se convocan ayudas para la restauración de humedales y charcas. " * 60
+    got = analyze_text(2, body, "bases.pdf")
+    assert got.organism is None and got.score_source == "pdf"
+    assert not any("revisáis a mano" in r for r in got.fit.reasons)
 
 
 def test_upload_pdf_and_415_on_non_pdf() -> None:
@@ -53,7 +80,7 @@ def test_upload_pdf_and_415_on_non_pdf() -> None:
     res = client.post("/api/analyze-pdf", files={"file": ("orden.pdf", pdf, "application/pdf")})
     assert res.status_code == 200
     assert res.json()["fileName"] == "orden.pdf"
-    assert res.json()["fit"]["score"] == 84
+    assert res.json()["fit"]["score"] == 80
 
     res = client.post("/api/analyze-pdf", files={"file": ("bases.docx", b"PK\x03\x04 not a pdf", "application/pdf")})
     assert res.status_code == 415

@@ -40,6 +40,8 @@ def content_dict(o: OpportunityBase) -> dict[str, Any]:
     data = o.to_json()
     data.pop("fit", None)
     data.pop("firstSeenAt", None)
+    if not data.get("deadlineEstimated"):  # added later: absent when false, so older rows keep their hash
+        data.pop("deadlineEstimated", None)
     return data
 
 

@@ -17,6 +17,16 @@ MINOR_WORDS = frozenset({"de", "del", "la", "las", "los", "el", "y", "i", "en"})
 CALL_IN_TITLE = re.compile(r"(convoca|extracto|bases reguladoras)")
 GRANT_IN_TITLE = re.compile(r"(subvenc|ayuda|premio)")
 UNIVERSITY = re.compile(r"^(universidad|universitat|universidade)")
+# Tenders for running a building (security, cleaning, supplies, upkeep of its facilities): the topic words come from
+# the name of the centre ("Centro Nacional de Educación Ambiental"), not from the work.
+FACILITY_SERVICE = re.compile(
+    r"\b(servicios? de (vigilancia|seguridad|limpieza)|suministros?\b|mantenimiento (de|del) (las |los |el )?"
+    r"(instalaciones|edificios?|equipos|vehiculos|sistemas|ascensores|climatizacion))"
+)
+FACILITY_WARNING = (
+    "Licitación para el funcionamiento de unas instalaciones (vigilancia, limpieza, mantenimiento o suministros): el "
+    "tema sale del nombre del centro, no del trabajo."
+)
 
 
 def _title_case(s: str) -> str:
@@ -38,8 +48,10 @@ def geographic_fit(o: Opportunity) -> FitAnalysis:
     warning: str | None = None
     cap = 100
     g = GeoFit.regions.get(region)
-    if o.nivel_admin == "Privada" and (region == "Estatal" or not known):
-        pass  # nationwide private/RSC programme: no territorial restriction
+    if o.kind == "empresa" or (o.nivel_admin == "Privada" and (region == "Estatal" or not known)):
+        # nationwide private programme; a company programme limited to a territory already has that as one of its
+        # curated limits (app/sources/rsc.py), so its region (the territory) is not penalised twice
+        pass
     elif region == "Comunidad de Madrid":
         g = GeoFit.madrid_municipal if is_municipal else GeoFit.regions[region]
         delta, reason = g.delta, g.reason
@@ -91,6 +103,9 @@ def kind_fit(o: Opportunity) -> FitAnalysis:
         warnings.append("Licitación: es un contrato de servicios; exige solvencia técnica y oferta económica.")
         if weak_topic:
             score = min(score, KindFit.off_topic_cap)
+        elif FACILITY_SERVICE.search(title_norm):
+            score = min(score, KindFit.off_topic_cap)
+            warnings.append(FACILITY_WARNING)
     elif o.kind == "boletin" and not (CALL_IN_TITLE.search(title_norm) and GRANT_IN_TITLE.search(title_norm)):
         score = min(score, KindFit.bulletin_cap)
         warnings.append("Publicación informativa: no es una convocatoria a la que presentarse.")
@@ -113,21 +128,49 @@ def kind_fit(o: Opportunity) -> FitAnalysis:
     )
 
 
+def kind_ceiling(o: Opportunity) -> int | None:
+    """The lowest kind cap kind_fit() applies to this call (None: none). A later bonus (the team's Perfil) must not
+    lift the call above it, or a tender would climb to "alto" on a topic bonus."""
+    title_norm = normalize_text(o.titulo)
+    weak_topic = o.kind != "europa" and _title_topic(o.titulo) < KindFit.min_title_topic
+    caps: list[int] = []
+    if o.kind == "licitacion":
+        caps.append(KindFit.tender_cap)
+        if weak_topic or FACILITY_SERVICE.search(title_norm):
+            caps.append(KindFit.off_topic_cap)
+    elif o.kind == "boletin" and not (CALL_IN_TITLE.search(title_norm) and GRANT_IN_TITLE.search(title_norm)):
+        caps.append(KindFit.bulletin_cap)
+        if weak_topic:
+            caps.append(KindFit.off_topic_cap)
+    elif o.kind == "europa" and "Horizon Europe" in o.organismo:
+        caps.append(KindFit.horizon_cap)
+    if UNIVERSITY.search(normalize_text(o.organismo)):
+        caps.append(KindFit.university_cap)
+    return min(caps) if caps else None
+
+
 def adjusted_fit(o: Opportunity) -> FitAnalysis:
     """Geographic fit, then actionability by kind, on top of the stored base fit; then the history of a BDNS call.
 
     The history delta goes on the base fit, so the territorial and kind caps still bound it; its cap is applied last
     (a ceiling on the displayed score, which geographic bonuses must not lift) and its reasons go first.
     """
+    cap = kind_ceiling(o)
     adj = history_adjust(o.history)
     if adj is None:
-        return kind_fit(o.model_copy(update={"fit": geographic_fit(o)}))
+        fit = kind_fit(o.model_copy(update={"fit": geographic_fit(o)}))
+        return fit if cap is None else fit.model_copy(update={"score_cap": cap})
     base = apply_adjust(o.fit, FitAdjust(delta=adj.delta, append_warnings=adj.append_warnings))
     based = o.model_copy(update={"fit": base})
     fit = kind_fit(based.model_copy(update={"fit": geographic_fit(based)}))
     score = max(0, min(100, fit.score, 100 if adj.cap is None else adj.cap))
     return fit.model_copy(
-        update={"score": score, "tier": tier_for(score), "reasons": [*adj.prepend_reasons, *fit.reasons]}
+        update={
+            "score": score,
+            "tier": tier_for(score),
+            "reasons": [*adj.prepend_reasons, *fit.reasons],
+            "score_cap": cap,
+        }
     )
 
 

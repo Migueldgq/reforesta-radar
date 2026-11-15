@@ -204,6 +204,7 @@ def _to_raw(e: BoeEntry, det: NoticeDetails) -> RawOpportunity:
         nivel_admin="Estatal",
         published_at=e["fecha"],
         deadline=deadline,
+        deadline_estimated=bool(deadline) and not explicit,
         deadline_text=det["deadlineText"],
         tipo="Licitación pública" if e["esLicitacion"] else "Extracto de convocatoria",
         url=e["urlHtml"] or f"https://www.boe.es/diario_boe/txt.php?id={e['identificador']}",
@@ -214,7 +215,11 @@ def _to_raw(e: BoeEntry, det: NoticeDetails) -> RawOpportunity:
         else [],
         summary=det["summary"],
         score_input=_input(
-            e, extra_text=det["summary"] or "", fecha_fin_solicitud=deadline, fecha_inicio_solicitud=e["fecha"]
+            e,
+            extra_text=det["summary"] or "",
+            fecha_fin_solicitud=deadline,
+            fecha_inicio_solicitud=e["fecha"],
+            deadline_estimated=bool(deadline) and not explicit,
         ),
         adjust=FitAdjust(append_warnings=[ESTIMATED_WARNING]) if deadline and not explicit else None,
     )

@@ -1,14 +1,14 @@
 "use client";
 
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Opportunity, OpportunityKind } from "@/lib/opportunity";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { daysLeft, fmtEuros, reforestaWins, tidy, TRIAGE_ORDER, type Triage } from "./model";
+import { fmtEuros, parseDay, reforestaWins, sourceLabelOf, territoryOf, tidy, TRIAGE_ORDER, type Triage } from "./model";
 import { useRadar } from "./store";
 import { Deadline, EmptyState, ScoreChip, TriageSelect, WonMarker } from "./ui";
 
@@ -36,6 +36,18 @@ const DEFAULT_DIR: Record<Col, Dir> = {
 
 const coll = new Intl.Collator("es", { sensitivity: "base" });
 
+const hasBudget = (o: Opportunity) => o.budget != null && o.budget > 0;
+
+/**
+ * Rows without a value go last whichever the direction: 0 = has one (sorted), 1 = Importe as text only, 2 = nothing.
+ */
+function group(o: Opportunity, col: Col): number {
+  if (col === "budget") return hasBudget(o) ? 0 : o.amountText ? 1 : 2;
+  if (col === "deadline") return parseDay(o.deadline) != null ? 0 : 1;
+  return 0;
+}
+
+/** Only called for two rows in group 0. */
 function compare(a: Opportunity, b: Opportunity, col: Col, triageOf: (id: string) => Triage): number {
   switch (col) {
     case "score":
@@ -45,35 +57,31 @@ function compare(a: Opportunity, b: Opportunity, col: Col, triageOf: (id: string
     case "kind":
       return coll.compare(KIND_SHORT[a.kind], KIND_SHORT[b.kind]);
     case "source":
-      return coll.compare(a.sourceLabel, b.sourceLabel);
+      return coll.compare(sourceLabelOf(a), sourceLabelOf(b));
     case "region":
-      return coll.compare(a.region, b.region);
-    case "deadline": {
-      const da = daysLeft(a);
-      const db = daysLeft(b);
-      // Closed and undated go last when ascending
-      const va = da == null ? 1e6 : da < 0 ? 1e5 - da : da;
-      const vb = db == null ? 1e6 : db < 0 ? 1e5 - db : db;
-      return va - vb;
-    }
+      return coll.compare(territoryOf(a), territoryOf(b));
+    case "deadline":
+      // The actual date, year included (closed calls on "Todas" sort among the rest by their date).
+      return parseDay(a.deadline)! - parseDay(b.deadline)!;
     case "budget":
-      return (a.budget ?? -1) - (b.budget ?? -1);
+      return a.budget! - b.budget!;
     case "triage":
       return TRIAGE_ORDER.indexOf(triageOf(a.id)) - TRIAGE_ORDER.indexOf(triageOf(b.id));
   }
 }
 
-export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[]; onClear: () => void; resetKey: string }) {
-  const { triageOf, openDetail } = useRadar();
+export function ResultsTable({ items, onClear }: { items: Opportunity[]; onClear: () => void }) {
+  // The page lives in the store (and the URL, `?pagina=`); any filter change takes it back to the first one.
+  const { triageOf, openDetail, page, setPage } = useRadar();
   const [sort, setSort] = useState<{ col: Col; dir: Dir }>({ col: "score", dir: "desc" });
   const [size, setSize] = useState(25);
-  const [pg, setPg] = useState({ k: resetKey, n: 0 });
-  const page = pg.k === resetKey ? pg.n : 0;
-  const setPage = (n: number) => setPg({ k: resetKey, n });
+  const top = useRef<HTMLDivElement>(null);
 
   const sorted = useMemo(() => {
     const m = sort.dir === "asc" ? 1 : -1;
-    return [...items].sort((a, b) => m * compare(a, b, sort.col, triageOf) || b.fit.score - a.fit.score);
+    return [...items].sort(
+      (a, b) => group(a, sort.col) - group(b, sort.col) || (group(a, sort.col) === 0 ? m * compare(a, b, sort.col, triageOf) : 0) || b.fit.score - a.fit.score,
+    );
   }, [items, sort, triageOf]);
 
   const pages = Math.max(1, Math.ceil(sorted.length / size));
@@ -121,7 +129,7 @@ export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[
   // Columns follow the table's own width (the sidebar may be open or not), not the viewport.
   // Lowest priority goes first: Tipo, Fuente, Importe, Territorio; below 41rem, cards.
   return (
-    <div className="@container rounded-lg border">
+    <div ref={top} className="@container scroll-mt-16 rounded-lg border">
       {/* Wide container: table */}
       <div className="hidden @min-[41rem]:block">
         <Table className="table-fixed">
@@ -140,7 +148,7 @@ export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[
           </TableHeader>
           <TableBody>
             {rows.map((o) => (
-              <Row key={o.id} o={o} onOpen={() => openDetail(o.id)} />
+              <Row key={o.id} o={o} onOpen={(el) => openDetail(o.id, el)} />
             ))}
           </TableBody>
         </Table>
@@ -149,7 +157,7 @@ export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[
       {/* Narrow container: cards */}
       <ul className="divide-y @min-[41rem]:hidden">
         {rows.map((o) => (
-          <MobileCard key={o.id} o={o} onOpen={() => openDetail(o.id)} />
+          <MobileCard key={o.id} o={o} onOpen={(el) => openDetail(o.id, el)} />
         ))}
       </ul>
 
@@ -158,7 +166,13 @@ export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[
         page={p}
         pages={pages}
         size={size}
-        onPage={setPage}
+        onPage={(n) => {
+          setPage(n);
+          // Back to the top of the results, where the new page starts.
+          requestAnimationFrame(() => {
+            if (top.current && top.current.getBoundingClientRect().top < 0) top.current.scrollIntoView({ block: "start" });
+          });
+        }}
         onSize={(n) => {
           setSize(n);
           setPage(0);
@@ -180,21 +194,25 @@ function Amount({ o }: { o: Opportunity }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
-function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
+function Row({ o, onOpen }: { o: Opportunity; onOpen: (opener: HTMLElement | null) => void }) {
   const title = tidy(o.titulo);
   const amount = fmtEuros(o.budget);
+  const btn = useRef<HTMLButtonElement>(null);
+  const territory = territoryOf(o);
   return (
-    <TableRow onClick={onOpen} className="cursor-pointer">
+    <TableRow onClick={() => onOpen(btn.current)} className="cursor-pointer">
       <TableCell className="py-3 pl-4">
         <ScoreChip fit={o.fit} />
       </TableCell>
       <TableCell className="py-3 whitespace-normal">
         <button
+          ref={btn}
           type="button"
           title={title}
+          data-opener={o.id}
           onClick={(e) => {
             e.stopPropagation();
-            onOpen();
+            onOpen(e.currentTarget);
           }}
           className="block w-full cursor-pointer rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
@@ -206,10 +224,10 @@ function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
                 <WonMarker o={o} className="align-[-2px]" /> ·{" "}
               </>
             )}
-            <span className="@min-[60.5rem]:hidden">{o.sourceLabel} · </span>
-            <span className="@min-[48rem]:hidden">{o.region} · </span>
+            <span className="@min-[60.5rem]:hidden">{sourceLabelOf(o)} · </span>
+            <span className="@min-[48rem]:hidden">{territory} · </span>
             {amount && <span className="@min-[54rem]:hidden">{amount} · </span>}
-            {tidy(o.organismo)}
+            {o.organismo}
           </span>
         </button>
       </TableCell>
@@ -218,11 +236,12 @@ function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
           {KIND_SHORT[o.kind]}
         </Badge>
       </TableCell>
-      <TableCell className="hidden truncate py-3 text-muted-foreground @min-[60.5rem]:table-cell" title={o.sourceLabel}>
-        {o.sourceLabel}
+      <TableCell className="hidden truncate py-3 text-muted-foreground @min-[60.5rem]:table-cell" title={sourceLabelOf(o)}>
+        {sourceLabelOf(o)}
       </TableCell>
-      <TableCell className="hidden truncate py-3 text-muted-foreground @min-[48rem]:table-cell" title={o.region}>
-        {o.region}
+      {/* Two lines rather than cutting "Comunidad de Madrid" short. */}
+      <TableCell className="hidden py-3 whitespace-normal text-muted-foreground @min-[48rem]:table-cell" title={territory}>
+        <span className="line-clamp-2 leading-snug break-words">{territory}</span>
       </TableCell>
       <TableCell className="py-3">
         <Deadline o={o} />
@@ -237,18 +256,18 @@ function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
   );
 }
 
-function MobileCard({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
+function MobileCard({ o, onOpen }: { o: Opportunity; onOpen: (opener: HTMLElement | null) => void }) {
   return (
     <li className="relative flex gap-3 px-4 py-4">
       <ScoreChip fit={o.fit} />
       <div className="min-w-0 flex-1 space-y-2">
         <p className="truncate text-xs text-muted-foreground">
-          {KIND_SHORT[o.kind]} · {o.sourceLabel} · {o.region}
+          {KIND_SHORT[o.kind]} · {sourceLabelOf(o)} · {territoryOf(o)}
         </p>
-        <button type="button" onClick={onOpen} className="block text-left after:absolute after:inset-0 after:content-['']">
+        <button type="button" data-opener={o.id} onClick={(e) => onOpen(e.currentTarget)} className="block text-left after:absolute after:inset-0 after:content-['']">
           <span className="line-clamp-3 leading-snug font-medium">{tidy(o.titulo)}</span>
         </button>
-        <p className="truncate text-xs text-muted-foreground">{tidy(o.organismo)}</p>
+        <p className="truncate text-xs text-muted-foreground">{o.organismo}</p>
         <WonMarker o={o} className="flex w-fit" />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-0.5">
           <Deadline o={o} />

@@ -22,10 +22,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { daysLeft, fmtDate, fmtDayShort, fmtEuros, isClosed, isNextEdition, joinEs, openingNote, parseDay, reforestaWins, todayUTC, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel, type Triage } from "./model";
+import { daysLeft, ESTIMATE_TIP, fmtDate, fmtDayShort, fmtEuros, isClosed, isNextEdition, joinEs, openingNote, parseDay, reforestaWins, todayUTC, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel, type Triage } from "./model";
 import { useRadar } from "./store";
 
 const badge = "gap-1 font-medium whitespace-nowrap [&>svg]:size-3.5";
+
+/** Why a control that saves something is off while the server cannot be reached. */
+export const OFFLINE_TIP = "Sin conexión con el servidor: no se puede guardar ahora";
 
 const SCORE_SIZE = {
   sm: "h-5 min-w-7 rounded-md px-1.5 text-xs",
@@ -73,8 +76,10 @@ function deadlineState(o: Opportunity) {
   const d = daysLeft(o);
   const end = parseDay(o.deadline);
   const opens = parseDay(o.opensAt);
-  const closes = end != null ? `Cierra el ${fmtDayNote(end)}` : null;
-  const closed = end != null ? `Cerró el ${fmtDayNote(end)}` : null;
+  // An estimated date (worked out from "20 días hábiles…") never reads as an exact one.
+  const est = !!o.deadlineEstimated && end != null;
+  const closes = end != null ? (est ? `Cierra hacia el ${fmtDayNote(end)} · fecha estimada` : `Cierra el ${fmtDayNote(end)}`) : null;
+  const closed = end != null ? (est ? `Cerró hacia el ${fmtDayNote(end)} (estimada)` : `Cerró el ${fmtDayNote(end)}`) : null;
   if (isNextEdition(o)) {
     // When it usually opens is more useful than when the last one closed; that date stays in the tooltip.
     const opening = openingNote(o);
@@ -82,14 +87,14 @@ function deadlineState(o: Opportunity) {
     const note = [full, closed].filter(Boolean).join(" · ") || undefined;
     return { Icon: RotateCw, label: "Próxima edición", tone: "muted", title: "Convocatoria periódica: prepara la siguiente edición", detail: opening ?? closed, note } as const;
   }
-  if (isClosed(o)) return { Icon: CircleSlash, label: "Cerrada", tone: "muted", title: undefined, detail: closed } as const;
+  if (isClosed(o)) return { Icon: CircleSlash, label: "Cerrada", tone: "muted", title: est ? ESTIMATE_TIP : undefined, detail: closed } as const;
   if (opens != null && opens > todayUTC())
-    return { Icon: CalendarClock, label: `Abre el ${fmtDayNote(opens)}`, tone: "sky", title: `Abre el ${fmtDate(o.opensAt)}`, detail: closes } as const;
+    return { Icon: CalendarClock, label: `Abre el ${fmtDayNote(opens)}`, tone: "sky", title: `Abre el ${fmtDate(o.opensAt)}${est ? `. Cierre estimado: ${ESTIMATE_TIP.toLowerCase()}` : ""}`, detail: closes } as const;
   if (d == null)
     return { Icon: CalendarDays, label: o.kind === "empresa" ? "Todo el año" : "Sin fecha", tone: "muted", title: o.deadlineText ?? undefined, detail: null } as const;
-  const label = d === 0 ? "Cierra hoy" : d === 1 ? "Mañana" : `${d} días`;
-  const title = fmtDate(o.deadline) ?? undefined;
-  const detail = d === 0 ? null : closes;
+  const label = est ? (d === 0 ? "≈ Cierra hoy" : d === 1 ? "≈ Mañana" : `≈ ${d} días`) : d === 0 ? "Cierra hoy" : d === 1 ? "Mañana" : `${d} días`;
+  const title = est ? `Hacia el ${fmtDate(o.deadline)} (fecha estimada). ${ESTIMATE_TIP}.` : (fmtDate(o.deadline) ?? undefined);
+  const detail = d === 0 && !est ? null : closes;
   if (d <= 7) return { Icon: AlarmClock, label, tone: "red", title, detail } as const;
   if (d <= 30) return { Icon: Clock, label, tone: "amber", title, detail } as const;
   return { Icon: CalendarDays, label, tone: "plain", title, detail } as const;
@@ -113,7 +118,10 @@ export function Deadline({ o, className }: { o: Opportunity; className?: string 
     <div className={cn("flex min-w-0 flex-col items-start gap-1", className)}>
       <DeadlineChip o={o} />
       {s.detail && (
-        <span className="line-clamp-2 pl-0.5 text-xs leading-snug whitespace-normal text-muted-foreground tabular-nums" title={"note" in s ? s.note : undefined}>
+        <span
+          className="line-clamp-2 pl-0.5 text-xs leading-snug whitespace-normal text-muted-foreground tabular-nums"
+          title={"note" in s ? s.note : o.deadlineEstimated ? ESTIMATE_TIP : undefined}
+        >
           {s.detail}
         </span>
       )}
@@ -141,13 +149,14 @@ export function WorkLines({ lines }: { lines: string[] }) {
 }
 
 export function TriageSelect({ o, className }: { o: Pick<Opportunity, "id" | "titulo" | "organismo" | "deadline">; className?: string }) {
-  const { triageOf, setTriage } = useRadar();
+  const { triageOf, setTriage, offline } = useRadar();
   const value = triageOf(o.id);
   return (
-    <Select value={value} onValueChange={(v) => setTriage(o, v as Triage)}>
+    <Select value={value} onValueChange={(v) => setTriage(o, v as Triage)} disabled={offline}>
       <SelectTrigger
         size="sm"
         aria-label="Estado de seguimiento"
+        title={offline ? OFFLINE_TIP : undefined}
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
         className={cn("w-[128px] bg-background shadow-none", value !== "nueva" && "border-primary/40 font-medium text-primary", className)}

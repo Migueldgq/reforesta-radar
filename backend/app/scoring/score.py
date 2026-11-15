@@ -42,6 +42,29 @@ ENV_ORGANISM_TERMS = (
 
 # "interés general/social" and "IRPF" also appear in bases of unrelated aid: only trust them in the title
 _TITLE_ONLY_ONG_TERMS = frozenset({"interes general", "interes social", "irpf"})
+# Terms that name non-profits as such. The rest of ONG_POSITIVE_TERMS ("asociaciones", "entitats"...) and the BDNS
+# beneficiary category "personas jurídicas que no desarrollan actividad económica" also cover sector associations.
+_EXPLICIT_NON_PROFIT = frozenset({
+    "sin animo de lucro", "sin fines de lucro", "sense anim de lucre", "sen animo de lucro", "sen fins de lucro", "ong",
+    "ongs", "organizaciones no gubernamentales", "entidades no lucrativas", "entidades sin animo", "tercer sector",
+    "entidades de custodia",
+})  # fmt: skip
+# Dealbreakers that name an economic sector (livestock, farming, hunting, fishing): when one fires, an association or
+# a non-economic legal person among the beneficiaries is that sector's (livestock health groups, hunters' clubs).
+SECTOR_WARNINGS = frozenset({
+    "Relacionada con actividad cinegética.", "Orientada al sector pesquero.", "Orientada a acuicultura.",
+    "Orientada a regadíos/explotaciones agrarias.", "Orientada a explotaciones ganaderas.",
+    "Orientada a explotaciones agrarias.",
+})  # fmt: skip
+SECTOR_ASSOCIATIONS_WARNING = (
+    "Las asociaciones a las que se dirige son del propio sector (ganadero, agrario, de caza o pesca), no ONG "
+    "ambientales."
+)
+# Running costs of the LEADER local action groups: only those groups can apply (not "solicitantes que no son grupos").
+_LEADER_GROUPS = re.compile(r"grupos? de (desarrollo rural|accion local)")
+_LEADER_RUNNING = re.compile(r"funcionamiento|animacion|apoyo a los grupos|gestores de la estrategia")
+LEADER_GROUPS_WARNING = "Para los Grupos de Desarrollo Rural (LEADER) de la zona: solo ellos pueden pedirla."
+LEADER_GROUPS_PENALTY = 30
 _PERSONAS_FISICAS = re.compile("personas fisicas que desarrollan")
 
 
@@ -64,6 +87,8 @@ class ScoreInput(Contract):
     # ("Dos meses desde el día siguiente a la publicación"), to estimate whether the window is over (step 6).
     fecha_publicacion: str | None = None
     texto_plazo: str | None = None
+    # fecha_fin_solicitud is an estimate (the source gives a term, not a date): reasons say so (ADR 0029).
+    deadline_estimated: bool = False
 
 
 def tier_for(score: int) -> Tier:
@@ -95,14 +120,15 @@ STALE_UNDATED_DAYS = 270
 _NUM_WORDS = {"un": 1, "una": 1, "uno": 1, "dos": 2, "dues": 2, "dous": 2, "tres": 3, "cuatro": 4, "quatre": 4,
               "catro": 4, "cinco": 5, "cinc": 5, "seis": 6, "sis": 6, "diez": 10, "deu": 10, "quince": 15,
               "quinze": 15, "veinte": 20, "vint": 20, "treinta": 30, "trenta": 30}  # fmt: skip
-# "N días hábiles / naturales" (es, ca, gl), "N meses / mesos", also "VEINTE (20) DÍAS HÁBILES"; a bare "N días" is
-# left out: whether it means working or calendar days is not said.
+# "N días hábiles / naturales" (es, ca, gl), "N meses / mesos", also "VEINTE (20) DÍAS HÁBILES" and "Diez días (10)
+# naturales". A bare "N días" counts as working days: Ley 39/2015, art. 30.2 ("cuando los plazos se señalen por días,
+# se entiende que éstos son hábiles").
 _TERM_RE = re.compile(
     r"(?<![a-z0-9])(" + "|".join(_NUM_WORDS) + r"|[0-9]{1,3})(?:\s*\([0-9]{1,3}\))?\s+"
-    r"(?:(?:dias?|dies)\s+)?(habiles|habils|naturales|naturals|meses|mesos|mes)(?![a-z])"
+    r"(?:(dias?|dies)(?![a-z])\s*(?:\([0-9]{1,3}\)\s*)?)?(habiles|habils|naturales|naturals|meses|mesos|mes)?(?![a-z])"
 )
 _SAME_DAY_NEXT_MONTH = re.compile(r"\b(mismo|mesmo) ordinal\b")  # Galicia: "mismo ordinal del mes siguiente"
-_FROM_PUBLICATION = re.compile(r"publicac|publicidad|publicacio|endema")
+_FROM_PUBLICATION = re.compile(r"publicac|publicidad|publicacio|\bpublic\b|endema|extract")
 _NO_FIXED_END = ("todo el ano", "tot l any", "todo o ano", "permanent", "hasta agotar", "fins a esgotar",
                  "ata esgotar", "mientras exista", "pendiente de", "no es necesario", "convocatoria abierta",
                  "de forma continua")  # fmt: skip
@@ -123,7 +149,11 @@ def estimated_end(term: str | None, published: str | None, opens: str | None) ->
     if not term or not (published or opens):
         return None
     text = normalize_text(term)
-    found = {(_NUM_WORDS.get(n) or int(n), "mes" if u.startswith("mes") else u[:5]) for n, u in _TERM_RE.findall(text)}
+    found = {
+        (_NUM_WORDS.get(n) or int(n), "mes" if u.startswith("mes") else u[:5] if u else "habil")
+        for n, d, u in _TERM_RE.findall(text)
+        if d or u
+    }
     if _SAME_DAY_NEXT_MONTH.search(text):
         found.add((1, "mes"))
     if len(found) != 1 or not _FROM_PUBLICATION.search(text):
@@ -146,7 +176,8 @@ def estimated_end(term: str | None, published: str | None, opens: str | None) ->
     return end, f"{label} desde {'la apertura del plazo' if opens else 'la publicación'}"
 
 
-def _short_date(d: date) -> str:
+def short_date(d: date) -> str:
+    """ "11 feb 2026"."""
     return f"{d.day} {_MONTHS_SHORT[d.month - 1]} {d.year}"
 
 
@@ -210,9 +241,25 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
     # 4. Eligibility for an NGO
     is_ong_eligible: bool | None = None
     ong_in_benef = any(has_term(benef_text, t) for t in ONG_POSITIVE_TERMS)
-    ong_in_text = any(has_term(title_norm if t in _TITLE_ONLY_ONG_TERMS else topic_text, t) for t in ONG_POSITIVE_TERMS)
+    ong_text_terms = {
+        t for t in ONG_POSITIVE_TERMS if has_term(title_norm if t in _TITLE_ONLY_ONG_TERMS else topic_text, t)
+    }
+    ong_in_text = bool(ong_text_terms)
+    sector = not ong_text_terms & _EXPLICIT_NON_PROFIT and any(w in SECTOR_WARNINGS for w in warnings)
+    leader_groups = (
+        _LEADER_GROUPS.search(title_norm) is not None
+        and _LEADER_RUNNING.search(title_norm) is not None
+        and "no son grupos" not in title_norm
+    )
     if inp.kind == "empresa":
         is_ong_eligible = True
+    elif leader_groups:
+        is_ong_eligible = False
+        raw -= LEADER_GROUPS_PENALTY
+        warnings.append(LEADER_GROUPS_WARNING)
+    elif sector and (ong_in_text or ong_in_benef):
+        # the generic signal is the sector's associations: no NGO bonus, eligibility unknown
+        warnings.append(SECTOR_ASSOCIATIONS_WARNING)
     elif ong_in_text:
         is_ong_eligible = True
         raw += 14
@@ -249,7 +296,8 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
     ):
         manual_source_match = "Comunidad de Madrid (ambiental)"
     outside_manual_sources = manual_source_match is None
-    if outside_manual_sources and inp.kind != "empresa":
+    # an unknown organism (a PDF whose heading names none) is not known to be outside them: no reason, no bonus
+    if outside_manual_sources and inp.kind != "empresa" and inp.organismo.strip():
         raw += 4
         reasons.append(
             "No es de los organismos que ya revisáis a mano (Fundación Biodiversidad, MITECO, Comunidad de Madrid, "
@@ -280,24 +328,18 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
         # started 45+ days ago, BDNS says not open and no end date: treat as closed
         deadline_state = "cerrada"
     elif inp.abierto is not True and inp.fecha_publicacion:
-        # no end date and BDNS does not say open: estimate from the term, else from the age of the publication
-        today_d = today_dt.date()
-        if est := estimated_end(inp.texto_plazo, inp.fecha_publicacion, inp.fecha_inicio_solicitud):
-            if est[0] < today_d:
-                deadline_state = "cerrada"
-                warnings.append(f"Plazo estimado: cerró hacia el {_short_date(est[0])} ({est[1]}).")
-        else:
-            try:
-                age = (today_d - date.fromisoformat(inp.fecha_publicacion[:10])).days
-            except ValueError:
-                age = 0
-            open_ended = normalize_text(f"{inp.texto_plazo or ''} {inp.titulo}")
-            if age >= STALE_UNDATED_DAYS and not any(t in open_ended for t in _NO_FIXED_END):
-                deadline_state = "cerrada"
-                warnings.append(
-                    f"Probablemente cerrada: sin fecha de cierre y publicada hace {age // 30} meses; "
-                    "confirmar en las bases."
-                )
+        # no end date (not even an estimate: the connector estimates from the term) and BDNS does not say open
+        try:
+            age = (today_dt.date() - date.fromisoformat(inp.fecha_publicacion[:10])).days
+        except ValueError:
+            age = 0
+        open_ended = normalize_text(f"{inp.texto_plazo or ''} {inp.titulo}")
+        if age >= STALE_UNDATED_DAYS and not any(t in open_ended for t in _NO_FIXED_END):
+            deadline_state = "cerrada"
+            warnings.append(
+                f"Probablemente cerrada: sin fecha de cierre y publicada hace {age // 30} meses; "
+                "confirmar en las bases."
+            )
 
     # Closed competitive grant open to non-profits = next year's pipeline: keep its fit, small timing
     # penalty only (an open equivalent gets +10, so it always ranks above). Anything else closed sinks.
@@ -312,18 +354,23 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
         raw += 4 if recurring_grant else -15
         if is_competitive and not hard_block:
             local_end = end.astimezone(settings.tz) if end else None
-            closed_on = f"cerró el {local_end.day}/{local_end.month}/{local_end.year}" if local_end else "ya cerró"
+            closed_on = "ya cerró"
+            if local_end:
+                on = f"{local_end.day}/{local_end.month}/{local_end.year}"
+                closed_on = f"cerró hacia el {on} (fecha estimada)" if inp.deadline_estimated else f"cerró el {on}"
             reasons.append(f"Convocatoria periódica: la edición actual {closed_on}; prepara la siguiente con tiempo.")
         else:
             warnings.append("Plazo cerrado.")
     elif deadline_state == "abierta":
         raw += 10
+        about = "unos " if inp.deadline_estimated else ""
+        estimated = " (fecha estimada)" if inp.deadline_estimated else ""
         if days_remaining is not None and days_remaining <= 7:
             plural = "" if days_remaining == 1 else "s"
-            warnings.append(f"Cierra en {days_remaining} día{plural}: valorar si da tiempo.")
+            warnings.append(f"Cierra en {about}{days_remaining} día{plural}{estimated}: valorar si da tiempo.")
         else:
             reasons.append(
-                f"Plazo abierto: quedan {days_remaining} días."
+                f"Plazo abierto: quedan {about}{days_remaining} días{estimated}."
                 if days_remaining is not None
                 else "Plazo de solicitud abierto."
             )

@@ -71,6 +71,7 @@ export interface FitAnalysis {
   warnings: string[];
   daysRemaining: number | null;
   deadlineState: "abierta" | "proxima" | "cerrada" | "sin_fecha";
+  scoreCap?: number; // kind cap the server applied; absent when the kind has none
 }
 
 export interface ConvocatoriaItem {
@@ -115,6 +116,10 @@ export interface PdfAnalysisResult {
   requirements: string[];
   fit: FitAnalysis;
   excerpt: string;
+  /** radar: `fit` is the call `callId`'s, as in the list (before Perfil); pdf: scored on the text; none: too little text. */
+  scoreSource?: "radar" | "pdf" | "none";
+  callId?: string | null;
+  notice?: string | null;
 }
 
 export interface BoeItem {
@@ -141,7 +146,7 @@ export interface SourceHealth {
   id: string;
   name: string;
   category: string;
-  status: "ok" | "partial" | "error";
+  status: "ok" | "partial" | "error" | "disabled"; // disabled: switched off by configuration (count 0, note says why)
   count: number;
   url: string;
   note: string;

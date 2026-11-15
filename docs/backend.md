@@ -24,13 +24,16 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
 - Una fuente que falla no toca sus filas. Solo una fuente con estado `ok` marca como `gone_at` lo que ya no devuelve.
   Las filas de fuentes que ya no están registradas se marcan `gone_at` en la siguiente ingesta.
 - La API nunca consulta las fuentes al responder: no hay `?refresh=1`. La web no tiene botón de recarga; el pie de
-  la barra lateral dice de cuándo son los datos («Datos de hoy, 9:02»).
+  la barra lateral dice de cuándo son los datos («Datos de hoy, 9:02»). Un administrador puede pedir una carga con
+  «Actualizar ahora» en la vista Fuentes: la API solo la apunta en `ingest_requests` y la ejecuta `ingest-scheduler`.
 - `ingestStale` (más de 36 h sin una ingesta correcta, es decir, una carga diaria perdida) hace que Inicio muestre
   «Los datos son de hace N h: la carga diaria no ha terminado bien desde entonces».
-- Si Postgres no responde, la API devuelve 503; si la API no responde, la web muestra un estado de error (o la
-  última copia guardada en el navegador, con un aviso). La portada se pinta sin cifras.
+- Si Postgres no responde, la API devuelve 503. Si la API no responde, la web abre con la última lista guardada en
+  el navegador y un aviso con la hora de esos datos; los cambios del equipo (tablero, votos, asignaciones) quedan
+  desactivados con una explicación, y la web reintenta sola y recarga al volver el servidor. Sin copia guardada
+  muestra un estado de error. La portada se pinta sin cifras.
 - Esquema: migraciones de Alembic en `backend/alembic/` (la API las aplica al arrancar).
-- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 15) se guarda en cada `ingest_runs`; súbelo cuando
+- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 17) se guarda en cada `ingest_runs`; súbelo cuando
   cambie la puntuación.
 - Historial BDNS: tras guardar la ingesta, un paso aparte busca ediciones anteriores de las convocatorias BDNS
   relevantes (cuándo suelen abrir, cuánto plazo dan) y quién las ganó (solo recuentos por tipo de entidad, nunca
@@ -123,14 +126,14 @@ la ingesta programada es el servicio `ingest-scheduler` (`backend/app/ingest/sch
 - [ ] No registrar en los logs del proxy las rutas `/invitacion/*` ni `/restablecer/*` (llevan el token).
 - [ ] Quitar `RADAR_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` del `.env` tras el primer arranque; al menos dos admins.
 - [ ] Valorar una vida máxima absoluta de la sesión (hoy: 30 días desde el último uso, sin tope absoluto).
-- [ ] Copias de seguridad de Postgres (ver riesgos).
+- [ ] Copias de seguridad de Postgres ([mantenimiento.md](mantenimiento.md#copias-de-seguridad)).
 - [ ] Servidor MCP (`/mcp`): ver la lista de [mcp.md](mcp.md#antes-de-publicarlo-en-internet).
 
 ## Riesgos conocidos
 
 | Riesgo | Salvaguarda |
 |---|---|
-| Sin copias de seguridad automáticas de Postgres | Pendiente: `pg_dump` periódico del volumen `radar-pgdata`. |
+| Sin copias de seguridad automáticas de Postgres | Pendiente de automatizar. Comandos de `pg_dump` y restauración en [mantenimiento.md](mantenimiento.md#copias-de-seguridad). |
 | Equipo apagado o dormido a las 9:00 | `ingest-scheduler` comprueba cada 30 s e ingesta al despertar si no hubo ninguna ingesta correcta desde las 9:00. |
 | Una fuente cambia su HTML | Se registra en `source_runs`; sus filas anteriores siguen visibles y la fuente sale como parcial o error. |
 | IP del cliente poco fiable | Next reenvía el `X-Forwarded-For` que manda el navegador y no añade el suyo, así que la API no se lo cree (`FORWARDED_ALLOW_IPS=127.0.0.1` por defecto): todos los navegadores comparten la IP del contenedor `web`. Por eso una contraseña correcta nunca se rechaza por fallos ajenos (solo el tope de 50 fallos por cuenta bloquea a todos). Con un proxy inverso delante que sobrescriba `X-Forwarded-For`, poner en `FORWARDED_ALLOW_IPS` la red de compose (p. ej. `172.16.0.0/12`). |

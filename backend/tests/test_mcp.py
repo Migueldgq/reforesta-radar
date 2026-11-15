@@ -52,7 +52,7 @@ def _opp(oid: str, titulo: str, score: int, state: str = "abierta", deadline: st
 
 CALLS = [
     _opp("bdns:1", "Ayudas para charcas y anfibios", 70),
-    _opp("bdns:2", "Subvenciones para humedales", 55, region="Galicia"),
+    _opp("bdns:2", "Subvenciones para humedales", 55, region="Galicia", deadline_estimated=True),
     _opp("bdns:3", "Proyectos ambientales de la Comunidad de Madrid", 65, "cerrada", "2026-03-01"),
     _opp("bdns:4", "Educación ambiental en colegios", 45, "sin_fecha", None),
     *[_opp(f"bdns:{n}", f"Convocatoria de relleno {n}", 30) for n in range(10, 70)],
@@ -317,15 +317,19 @@ async def test_search_filters_pagination_and_caps(engine: AsyncEngine, running: 
         assert [r["id"] for r in hit["convocatorias"]] == ["bdns:1"]
         row = hit["convocatorias"][0]
         assert len(row["motivos"]) == 2 and row["url"] == "https://example.org/bdns:1"
+        assert "cierreEstimado" not in row  # only when the deadline is an estimate
         assert set(row) <= {"id", "titulo", "organismo", "fuente", "territorio", "tipo", "estado", "cierre",
-                            "diasRestantes", "abre", "sueleAbrir", "importe", "importeTexto", "nota", "nivel",
-                            "motivos", "aviso", "tablero", "url"}  # fmt: skip
+                            "cierreEstimado", "diasRestantes", "abre", "sueleAbrir", "importe", "importeTexto",
+                            "nota", "nivel", "motivos", "aviso", "tablero", "url"}  # fmt: skip
         _, closed = await call(c, "buscar_convocatorias", {"estado": ["cerrada"], "texto": "ambientales madrid"})
         assert [r["id"] for r in closed["convocatorias"]] == ["bdns:3"]
         _, soon = await call(c, "buscar_convocatorias", {"cierra_antes": "2026-12-31", "fuente": "bdns"})
         assert [r["id"] for r in soon["convocatorias"]] == ["bdns:3"]
         _, gal = await call(c, "buscar_convocatorias", {"territorio": "Galicia", "encaje_minimo": 1})
         assert [r["id"] for r in gal["convocatorias"]] == ["bdns:2"]
+        assert gal["convocatorias"][0]["cierreEstimado"] is True
+        _, est = await call(c, "ver_convocatoria", {"id": "bdns:2"})
+        assert est["fechas"]["cierreEstimado"] is True and est["fechas"]["cierreNota"].startswith("Fecha estimada")
         _, rsc = await call(c, "buscar_convocatorias", {"fuente": "rsc", "orden": "cierre"})
         assert {r["tipo"] for r in rsc["convocatorias"]} == {"empresa"}
         _, detail = await call(c, "ver_convocatoria", {"id": "bdns:1"})

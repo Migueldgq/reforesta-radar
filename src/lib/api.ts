@@ -1,7 +1,8 @@
 /**
  * The one way the browser talks to the API (same origin, `/api/*`, see docs/api-auth.md).
  * - Mutating calls carry `X-Radar-CSRF: 1` (also multipart uploads).
- * - A 401 on a protected route sends the user to `/login?next=<current page>`.
+ * - A 401 on a protected route sends the user to `/login?next=<current page>&caducada=1` (the session ran out mid-use).
+ * - Network errors and 5xx mark the server as unreachable (`serverDown`) until the next answer that is not.
  * - Failures throw `ApiError` with a Spanish message ready to show.
  */
 
@@ -38,9 +39,12 @@ export function safeNext(next: string | null | undefined): string {
   }
 }
 
-export function loginUrl(next?: string): string {
+export function loginUrl(next?: string, extra?: Record<string, string>): string {
   const n = safeNext(next);
-  return n === "/" ? "/login" : `/login?next=${encodeURIComponent(n)}`;
+  const p = new URLSearchParams(n === "/" ? {} : { next: n });
+  for (const [k, v] of Object.entries(extra ?? {})) p.set(k, v);
+  const q = p.toString();
+  return q ? `/login?${q}` : "/login";
 }
 
 /**
@@ -53,10 +57,36 @@ export function hardNavigate(path: string) {
 
 let redirecting = false;
 
-function toLogin() {
+/** The session expired mid-use. `lostChange`: the request that got the 401 was a change, so it was not saved. */
+function toLogin(lostChange: boolean) {
   if (redirecting || typeof window === "undefined" || isPublicPath(window.location.pathname)) return;
   redirecting = true;
-  window.location.assign(loginUrl(window.location.pathname + window.location.search));
+  window.location.assign(loginUrl(window.location.pathname + window.location.search, lostChange ? { caducada: "1", cambio: "1" } : { caducada: "1" }));
+}
+
+/* ---------- Is the server reachable? (network error or 5xx on the last call) ---------- */
+
+let serverDown = false;
+const downListeners = new Set<() => void>();
+
+function setServerDown(v: boolean) {
+  if (serverDown === v) return;
+  serverDown = v;
+  downListeners.forEach((l) => l());
+}
+
+/** For `useSyncExternalStore`: true while the last API call could not reach the server. */
+export const serverStatus = {
+  subscribe(l: () => void) {
+    downListeners.add(l);
+    return () => void downListeners.delete(l);
+  },
+  isDown: () => serverDown,
+};
+
+/** The server could not be reached or failed (not a 4xx answer such as "no permission"). */
+export function isUnreachable(e: unknown): boolean {
+  return e instanceof ApiError && (e.status === 0 || e.status >= 500);
 }
 
 const FALLBACK: Record<number, string> = {
@@ -87,6 +117,8 @@ export interface ApiOptions {
   signal?: AbortSignal;
   /** Do not redirect to /login on 401 (auth forms, where 401 means "wrong password"). */
   noAuthRedirect?: boolean;
+  /** A 5xx here is about something else (e.g. an official site that did not answer), not the radar's server. */
+  ownErrors?: boolean;
 }
 
 export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Promise<T> {
@@ -104,8 +136,10 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
     res = await fetch(path, { method, headers, body, signal: opts.signal, cache: "no-store", credentials: "same-origin" });
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
+    setServerDown(true);
     throw new ApiError("No hay conexión con el servidor del radar. Revisa tu conexión y vuelve a probar.", 0);
   }
+  if (!opts.ownErrors || res.ok) setServerDown(res.status >= 500);
 
   const text = await res.text();
   let data: unknown = null;
@@ -117,7 +151,7 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
     }
   }
   if (!res.ok) {
-    if (res.status === 401 && !opts.noAuthRedirect && !path.startsWith("/api/auth/")) toLogin();
+    if (res.status === 401 && !opts.noAuthRedirect && !path.startsWith("/api/auth/")) toLogin(method !== "GET");
     const retry = Number(res.headers.get("Retry-After"));
     throw new ApiError(messageOf(res.status, data), res.status, data, Number.isFinite(retry) && retry > 0 ? Math.ceil(retry) : 0);
   }

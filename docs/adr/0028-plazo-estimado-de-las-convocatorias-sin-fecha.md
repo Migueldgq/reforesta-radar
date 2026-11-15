@@ -1,6 +1,6 @@
 # 0028. Plazo estimado de las convocatorias BDNS sin fecha de cierre
 
-- Estado: Aceptada
+- Estado: Sustituida por 0029
 - Fecha: 2026-11-15 (rama `feat/fase-3-mcp`, `SCORING_VERSION` 15)
 
 ## Contexto

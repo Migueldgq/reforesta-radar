@@ -17,6 +17,7 @@ from sqlalchemy import TextClause, text
 
 from app.config import local_now, settings
 from app.db.session import make_engine
+from app.ingest.store import INTERRUPTED_RUNS_SQL
 
 log = logging.getLogger("scheduler")
 
@@ -98,6 +99,7 @@ def main() -> None:
     announced: datetime | None = None
     try:
         asyncio.run(_execute(INTERRUPTED_SQL))
+        asyncio.run(_execute(INTERRUPTED_RUNS_SQL))  # an ingest killed with the previous scheduler
     except Exception as e:  # noqa: BLE001
         log.warning("cannot reset interrupted requests: %s", e)
     while True:
