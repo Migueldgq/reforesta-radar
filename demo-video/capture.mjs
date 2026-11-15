@@ -350,7 +350,7 @@ async function click(page, x, y, pause = 250) {
  * `within` (CSS) limits the search for the scroller to that element, e.g. the open side sheet.
  */
 async function scroll(page, { dy = null, el = null, at = 0.3, ms = 900, within = null, speed = CONFIG.scrollSpeed } = {}) {
-  await ramp(speed, () =>
+  const run = () =>
     page.evaluate(
       async (dy, el, at, ms, within) => {
         const scope = within ? document.querySelector(within) : document;
@@ -379,8 +379,8 @@ async function scroll(page, { dy = null, el = null, at = 0.3, ms = 900, within =
       at,
       ms,
       within,
-    ),
-  );
+    );
+  await (speed == null ? run() : ramp(speed, run)); // null: inside a caller's ramp (e.g. `skip`), leave its speed alone
   await sleep(100);
 }
 
@@ -726,9 +726,14 @@ const ACTIONS = {
     await glide(page, sc.x + sc.width + 140, sc.cy + 26, 700, 1.4);
     await sleep(Math.max(1200, voiceMs(1) * 0.45));
     const mot = await must(page, S.pdfMotivos, "Motivos");
-    await skip(() => scroll(page, { el: mot, at: 0.02, ms: 50 }));
-    const m = await box(mot, { scroll: false });
-    await cam(region({ x: title.x, y: m.y, width: title.width, height: Math.min(m.height, 430) }, 18), { dur: 0 });
+    // The scroll and the cut happen inside one cut-out stretch (scroll's own ramp would otherwise leave a frame of the
+    // page moving under the floor); `ceil` keeps the extract line above «Motivos» out of the new shot.
+    const m = await skip(async () => {
+      await scroll(page, { el: mot, at: 0.02, ms: 50, speed: null });
+      const b = await box(mot, { scroll: false });
+      await cam({ ...region({ x: title.x, y: b.y, width: title.width, height: Math.min(b.height, 430) }, 18), ceil: b.y - 12 }, { dur: 0 });
+      return b;
+    });
     await glide(page, title.x + title.width * 0.3, m.y + 90, 800, 1.4);
   },
 

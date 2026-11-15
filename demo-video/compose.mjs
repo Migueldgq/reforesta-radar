@@ -476,6 +476,13 @@ timed.forEach((s, idx) => {
         html.push(`<div id="fl-${s.id}-${ci}" class="clip floor" ${win(s.start + c.t, until - c.t)} style="z-index:${z + 1}"></div>`);
         anim.push(`tl.fromTo("#fl-${s.id}-${ci}", { y: ${fy(prev)} }, { y: ${fy(k)}, duration: ${d || 0.01}, ease: "power3.inOut", immediateRender: false }, ${r3(s.start + c.t)});`);
       }
+      // `ceil`: the same above css y = ceil (a white band from the top of the stage down to that line).
+      if (c.ceil != null) {
+        const until = cams[ci + 2]?.t ?? s.end - s.start;
+        const ch = (q) => r3(Math.max(0, q.y + q.scale * c.ceil));
+        html.push(`<div id="ce-${s.id}-${ci}" class="clip ceil" ${win(s.start + c.t, until - c.t)} style="z-index:${z + 1}"></div>`);
+        anim.push(`tl.fromTo("#ce-${s.id}-${ci}", { height: ${ch(prev)} }, { height: ${ch(k)}, duration: ${d || 0.01}, ease: "power3.inOut", immediateRender: false }, ${r3(s.start + c.t)});`);
+      }
       if (c.curtain === false && curtainX != null) {
         // the shot no longer needs it: the curtain fades out while the camera moves
         anim.push(`tl.to("#cu-${s.id}", { opacity: 0, duration: ${d || 0.01}, ease: "power2.out" }, ${r3(s.start + c.t)});`);
@@ -661,6 +668,7 @@ const page = `<!doctype html>
       .greenbg { background: var(--accent); }
       .curtain { right: auto; width: ${W}px; top: ${STAGE.top}px; background: var(--ground); }
       .floor { bottom: auto; height: ${H}px; background: var(--ground); }
+      .ceil { top: ${STAGE.top}px; bottom: auto; background: var(--ground); }
       .placeholder { display: grid; place-items: center; top: ${STAGE.top}px; }
       .placeholder span { font-size: 32px; color: var(--muted); }
 
