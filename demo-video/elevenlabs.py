@@ -46,8 +46,11 @@ def call(method, path, body=None, raw=False):
         sys.exit(f"HTTP {e.code} on {method} {path.split('?')[0]}: {e.read().decode(errors='replace')[:500]}")
 
 
-def tts(voice, text, out, prev=None, nxt=None):
-    body = {"text": text, "model_id": MODEL, "voice_settings": SETTINGS, "seed": 7}
+SEED = 7  # a line can set its own `seed` in scenes.mjs when a take needs another try
+
+
+def tts(voice, text, out, prev=None, nxt=None, seed=SEED):
+    body = {"text": text, "model_id": MODEL, "voice_settings": SETTINGS, "seed": seed}
     if MODEL.startswith(("eleven_v4", "eleven_v3")):
         body["language_code"] = "es"
     if prev:
@@ -78,11 +81,12 @@ def cmd_lines(voice):
     L = spec["lines"]
     sent = 0
     for i, line in enumerate(L):
-        h = hashlib.sha1(json.dumps([voice, MODEL, SETTINGS, line["text"]]).encode()).hexdigest()[:12]
+        key = [voice, MODEL, SETTINGS, line["text"]] + ([line["seed"]] if "seed" in line else [])  # default seed: old hashes stay valid
+        h = hashlib.sha1(json.dumps(key).encode()).hexdigest()[:12]
         out = HERE / "voice" / f"{line['id']}.mp3"
         if cache.get(line["id"]) == h and out.exists():
             continue
-        tts(voice, line["text"], out, L[i - 1]["text"] if i else None, L[i + 1]["text"] if i + 1 < len(L) else None)
+        tts(voice, line["text"], out, L[i - 1]["text"] if i else None, L[i + 1]["text"] if i + 1 < len(L) else None, line.get("seed", SEED))
         wav = HERE / "voice" / f"{line['id']}.wav"  # the local draft of this line, if any, would shadow the new file
         if wav.exists():
             wav.rename(wav.with_suffix(".kokoro.wav.bak"))
