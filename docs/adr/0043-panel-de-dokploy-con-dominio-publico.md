@@ -1,6 +1,6 @@
 # 0043. Panel de Dokploy en un dominio público, con 2FA obligatorio y límites de peticiones
 
-- Estado: Propuesta
+- Estado: Aceptada
 - Fecha: 2026-11-15 (rama `feat/panel-dominio`)
 - Sustituye en parte a: [0039](0039-despliegue-con-dokploy.md), solo el punto «El panel no se publica»; el resto de
   0039 sigue vigente.
@@ -13,8 +13,9 @@ cualquier sitio, también desde el móvil, donde el túnel no es práctico. El a
 responsable eligió la comodidad, con la condición de que el panel solo se publique con 2FA activado en su cuenta.
 Hay un registro DNS `A` `panel.miguelddev.com` → la IP del servidor (sin `AAAA` ni `CAA`).
 
-Comprobado el 2026-11-15 en la base de datos de Dokploy (solo recuentos): 1 cuenta en el panel, 0 con 2FA. Por eso
-esta decisión está **propuesta, no aplicada**: el panel sigue sin publicar.
+Comprobado el 2026-11-15 en la base de datos de Dokploy (solo recuentos): primero 1 cuenta en el panel y 0 con 2FA
+(no se publicó); después de que el responsable lo activara, 1 de 1 con 2FA verificado. Publicado ese mismo día con
+`sudo reforesta-panel public`.
 
 ## Decisión
 - **Ruta propia de Traefik en el repositorio**, `deploy/traefik-panel.yml`, que se copia a
@@ -65,8 +66,6 @@ esta decisión está **propuesta, no aplicada**: el panel sigue sin publicar.
   con `PANEL_URL`, que el panel responde con HSTS.
 - **Volver a privado en un paso:** `sudo reforesta-panel private` (o borrar
   `/etc/dokploy/traefik/dynamic/reforesta-panel.yml`).
-- Al aplicarse (`sudo reforesta-panel public`), este ADR pasa a «Aceptada» y en 0039 se anota que su punto del panel
-  queda sustituido por 0043.
 
 ## Alternativas consideradas
 - Seguir solo con el túnel SSH (0039): lo recomendó el asistente; el responsable lo descartó por comodidad (entrar
