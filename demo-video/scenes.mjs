@@ -86,8 +86,8 @@ export const SCENES = [
     voice: [
       { text: "La nota también avisa. Esta, de Madrid y forestal, parece buena, pero ninguna de las ayudas anteriores fue a una entidad sin ánimo de lucro." },
       {
-        text: "Y se queda en un 45. No hay inteligencia artificial detrás: son reglas a la vista, que podéis ajustar en el Perfil del equipo.",
-        say: "Y se queda en un cuarenta y cinco. No hay inteligencia artificial detrás: son reglas a la vista, que podéis ajustar en el Perfil del equipo.",
+        text: "Y se queda en un 45. La nota sale de reglas a la vista. Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver.",
+        say: "Y se queda en un cuarenta y cinco. La nota sale de reglas a la vista. Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver.",
         notes: "«45» se lee «cuarenta y cinco».",
       },
     ],
