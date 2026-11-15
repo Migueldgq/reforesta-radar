@@ -10,8 +10,8 @@ Proyecto para **1hack A Coruña: el reto de Reforesta** (Common Seeds / The Agil
 [RETO.md](./RETO.md).
 
 - Vídeo de la demo: pendiente <!-- TODO: enlace al vídeo -->
-- Despliegue público: ninguno; se ejecuta en local con Docker (opciones de alojamiento en
-  [ADR 0024](./docs/adr/0024-alojamiento.md)).
+- Despliegue público: <https://reforesta-radar.miguelddev.com> (Oracle Cloud Always Free, Caddy y GitHub Actions;
+  cómo se despliega y se mantiene en [docs/despliegue.md](./docs/despliegue.md)).
 
 ## Qué hace hoy
 

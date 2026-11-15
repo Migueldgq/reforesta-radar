@@ -128,7 +128,8 @@ Hay tres niveles, de menos a más técnico:
 
 ## Copias de seguridad
 
-No hay copias automáticas. Todo lo que no se recupera con una carga nueva (cuentas, tablero, notas, votos, Perfil)
+En producción hay una copia diaria automática y la restauración está probada: ver
+[despliegue.md](despliegue.md#copias-de-seguridad-y-restauración). En una instalación local no hay copias automáticas. Todo lo que no se recupera con una carga nueva (cuentas, tablero, notas, votos, Perfil)
 está en Postgres, en el volumen de Docker `reforesta-radar_radar-pgdata`.
 
 **Hacer una copia** (no hace falta parar nada):
@@ -184,7 +185,8 @@ docker compose run --rm ingest         # comprobar que todas las fuentes siguen 
 ```
 
 - **Imágenes base fijadas.** Están en tres sitios: `FROM python:…` en `backend/Dockerfile`, `FROM node:…` en
-  `Dockerfile` e `image: postgres:…` en `docker-compose.yml`. Para subirlas, mira la última versión de la misma
+  `Dockerfile` e `image: postgres:…` en `docker-compose.yml`. En producción, además, `image: caddy:…` en
+  `docker-compose.prod.yml` (`docker run --rm caddy:2-alpine caddy version` da la última 2.x). Para subirlas, mira la última versión de la misma
   rama (por ejemplo `docker pull python:3.13-slim && docker run --rm python:3.13-slim python -V`, igual con
   `node:22-alpine` y `node -v`, y `postgres:16-alpine` con `postgres -V`), escribe ese número en los tres sitios,
   reconstruye y pasa la prueba completa de arriba. Dentro de la misma versión mayor de Postgres (16.x) basta con
