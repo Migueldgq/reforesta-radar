@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import type { Opportunity } from "@/lib/opportunity";
 import type { FitAnalysis } from "@/lib/types";
-import { RSC_OPPORTUNITIES } from "@/lib/rsc-opportunities";
 import { Badge } from "@/components/ui/badge";
 import { fmtDate, fmtDayShort, parseDay, tidy } from "@/components/radar/model";
 import { cn } from "@/lib/utils";
@@ -322,16 +321,24 @@ export function BoardPreview({ data }: { data: LandingData | null }) {
 
 /* ---------- Companies ---------- */
 
-export function CompaniesPreview() {
+export function CompaniesPreview({ data }: { data: LandingData | null }) {
+  const items = data?.companies ?? [];
+  if (!items.length)
+    return (
+      <p className="p-4 text-sm text-muted-foreground sm:px-5">
+        Programas de fundaciones y empresas, comprobados a mano en la web de cada entidad.
+      </p>
+    );
   return (
     <ul className="divide-y">
-      {RSC_OPPORTUNITIES.slice(0, 3).map((r) => (
-        <li key={r.id} className="p-4 sm:px-5">
+      {items.map((o) => (
+        <li key={o.id} className="space-y-1.5 p-4 sm:px-5">
           <div className="flex items-baseline justify-between gap-3">
-            <p className="truncate text-sm font-medium">{r.entity}</p>
-            <span className="shrink-0 text-xs text-muted-foreground">{r.type}</span>
+            <p className="truncate text-sm font-medium">{o.organismo}</p>
+            <span className="shrink-0 text-xs text-muted-foreground">{o.tipo}</span>
           </div>
-          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">Ángulo: {r.pitchAngle}</p>
+          <p className="line-clamp-1 text-xs text-muted-foreground">{o.amountText}</p>
+          <DeadlineBadge o={o} today={data!.today} />
         </li>
       ))}
     </ul>

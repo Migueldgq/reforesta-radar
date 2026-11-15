@@ -97,7 +97,7 @@ const SOURCE_NOTES: Record<string, { name: string; what: string; how: string }> 
   bocm: { name: "BOCM", what: "Sumarios de la Comunidad de Madrid de los últimos 21 días.", how: "XML oficial" },
   dog: { name: "DOG", what: "Diario Oficial de Galicia, últimos 45 días.", how: "Web" },
   fb: { name: "Fundación Biodiversidad", what: "Buscador de convocatorias de la Fundación Biodiversidad.", how: "Web" },
-  rsc: { name: "RSC", what: "Programas de empresas y fundaciones seleccionados a mano.", how: "En el código" },
+  rsc: { name: "RSC", what: "Programas de empresas y fundaciones, comprobados a mano en la web de cada entidad.", how: "En el código" },
 };
 
 const NOT_DOING = [
@@ -370,9 +370,9 @@ export default function LandingPage() {
             <SmallFeature
               icon={<Building2 />}
               title="Empresas."
-              body="Programas de RSC y fundaciones privadas, con por qué encajan y un ángulo para el primer contacto."
+              body="Programas de fundaciones y empresas, comprobados a mano en la web de cada entidad: importe, plazo, requisitos y qué los limita."
             >
-              <CompaniesPreview />
+              <Live render={(d) => <CompaniesPreview data={d} />} />
             </SmallFeature>
             <SmallFeature
               icon={<FileSearch />}

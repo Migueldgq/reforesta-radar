@@ -117,19 +117,6 @@ export interface PdfAnalysisResult {
   excerpt: string;
 }
 
-export interface RscOpportunity {
-  id: string;
-  entity: string;
-  program: string;
-  type: "Fundación privada" | "Programa RSC" | "Convocatoria mixta";
-  focus: WorkLine[];
-  typicalAmount: string;
-  cadence: string;
-  whyReforesta: string;
-  pitchAngle: string;
-  url: string;
-}
-
 export interface BoeItem {
   identificador: string;
   fechaPublicacion: string;
