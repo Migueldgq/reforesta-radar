@@ -388,7 +388,8 @@ function TeamOrgsNotice({ count, saved, onClear }: { count: number; saved: { by:
 
 /** Shown while no open call fits well: explains why the home opens on the next editions and links both tabs. */
 function QuietNotice({ view, onSwitch }: { view: "ahora" | "ediciones"; onSwitch: () => void }) {
-  const link = "inline-flex cursor-pointer items-center gap-1 font-medium text-primary underline-offset-4 hover:underline";
+  // The pseudo-element makes the tap area taller than the line of text without changing the look.
+  const link = "relative inline-flex cursor-pointer items-center gap-1 font-medium text-primary underline-offset-4 after:absolute after:-inset-y-1.5 after:inset-x-0 after:content-[''] hover:underline";
   if (view === "ediciones")
     return (
       <Alert role="status">

@@ -120,7 +120,7 @@ function Section({ title, sub, children }: { title: string; sub?: ReactNode; chi
 function More({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Collapsible className="group/more">
-      <CollapsibleTrigger className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+      <CollapsibleTrigger className="relative inline-flex items-center gap-1 text-xs text-muted-foreground after:absolute after:-inset-y-1.5 after:inset-x-0 after:content-[''] hover:text-foreground">
         <ChevronDown className="size-3.5 transition-transform group-data-[state=open]/more:rotate-180" aria-hidden />
         {label}
       </CollapsibleTrigger>

@@ -196,7 +196,7 @@ function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" role="navigation" aria-label="Menú del radar">
       <SidebarHeader>
         <SidebarMenu className="flex-row items-center group-data-[collapsible=icon]:flex-col">
           <SidebarMenuItem className="min-w-0 flex-1">

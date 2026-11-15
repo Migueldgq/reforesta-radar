@@ -5,6 +5,9 @@ import { cn } from "@/lib/utils";
 import { BarList, type BarRow } from "./charts";
 import { INSET_BORDER, MAP_HEIGHT, MAP_REGIONS, MAP_WIDTH, type MapRegion } from "./spain-map-data";
 
+/** A region drawn as a small circle ("M x,y a8,8 …"): Ceuta and Melilla. */
+const DOT = /^M([\d.]+),([\d.]+)a8,8 /;
+
 /** Region strings in the data that belong to the same shape (the sources are not consistent). */
 const ALIASES: Record<string, string[]> = {
   Asturias: ["Asturias", "Principado de Asturias"],
@@ -36,7 +39,11 @@ export function TerritoryPanel({
 }) {
   const [asList, setAsList] = useState(false);
   const switcher = (
-    <button type="button" onClick={() => setAsList((v) => !v)} className="cursor-pointer rounded px-1.5 text-xs font-medium text-primary hover:underline">
+    <button
+      type="button"
+      onClick={() => setAsList((v) => !v)}
+      className="relative cursor-pointer rounded px-1.5 text-xs font-medium text-primary after:absolute after:-inset-y-1.5 after:inset-x-0 after:content-[''] hover:underline"
+    >
       {asList ? "Ver mapa" : "Ver lista"}
     </button>
   );
@@ -131,7 +138,7 @@ function SpainMap({
             <button
               type="button"
               onClick={() => selected.forEach(onToggle)}
-              className="cursor-pointer rounded px-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+              className="relative cursor-pointer rounded px-1.5 text-xs font-medium text-muted-foreground after:absolute after:-inset-y-1.5 after:inset-x-0 after:content-[''] hover:text-foreground hover:underline"
             >
               Quitar selección
             </button>
@@ -168,6 +175,23 @@ function SpainMap({
             onBlur={leave}
           />
         ))}
+        {/* Ceuta and Melilla are 8-unit dots: a larger invisible circle takes the tap (the path stays the accessible button). */}
+        {regions.map((r) => {
+          const dot = DOT.exec(r.d);
+          return dot ? (
+            <circle
+              key={`hit-${r.id}`}
+              cx={Number(dot[1]) + 8}
+              cy={Number(dot[2])}
+              r={25}
+              fill="transparent"
+              aria-hidden
+              className="cursor-pointer"
+              onClick={() => toggleRegion(r)}
+              onPointerMove={(e) => enter(r, { x: e.clientX, y: e.clientY })}
+            />
+          ) : null;
+        })}
         <g pointerEvents="none">
           {regions
             .filter((r) => r.on)

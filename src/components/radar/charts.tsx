@@ -120,7 +120,11 @@ export function BarList({
         </ul>
       )}
       {sorted.length > maxRows && (
-        <button type="button" onClick={() => setExpanded((v) => !v)} className="cursor-pointer self-start rounded px-1.5 text-xs font-medium text-primary hover:underline">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="relative cursor-pointer self-start rounded px-1.5 text-xs font-medium text-primary after:absolute after:-inset-y-1.5 after:inset-x-0 after:content-[''] hover:underline"
+        >
           {expanded ? "Ver menos" : `Ver las ${sorted.length}`}
         </button>
       )}
@@ -172,7 +176,6 @@ export function WeekBars({
               <button
                 type="button"
                 aria-pressed={on}
-                aria-label={`Del ${b.range}: ${b.count} convocatorias cierran`}
                 onClick={() => onSelect(on ? null : b.start)}
                 onPointerEnter={(e) =>
                   show(
@@ -198,7 +201,11 @@ export function WeekBars({
                 onBlur={hide}
                 className="group flex h-full w-full cursor-pointer flex-col items-center justify-end gap-1 rounded-md transition-colors outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
-                <span className="flex min-h-0 w-full flex-1 flex-col items-center justify-end pt-5">
+                {/* The name comes from this sentence; the number and date drawn below are for the eye only. */}
+                <span className="sr-only">
+                  Del {b.range}: {b.count} {b.count === 1 ? "cierra" : "cierran"}
+                </span>
+                <span className="flex min-h-0 w-full flex-1 flex-col items-center justify-end pt-5" aria-hidden>
                   <span className="relative block w-full max-w-8 transition-[height] duration-300" style={{ height: h }}>
                     <span
                       data-count
@@ -212,7 +219,7 @@ export function WeekBars({
                   </span>
                 </span>
                 <span className="h-px w-full bg-border" aria-hidden />
-                <span className={cn("pb-1 text-[11px] leading-tight whitespace-nowrap", on ? "font-medium" : "text-muted-foreground", i % 2 === 1 && "@max-[30rem]:invisible")}>
+                <span aria-hidden className={cn("pb-1 text-[11px] leading-tight whitespace-nowrap", on ? "font-medium" : "text-muted-foreground", i % 2 === 1 && "@max-[30rem]:invisible")}>
                   {i === 0 ? "Hoy" : b.label}
                 </span>
               </button>

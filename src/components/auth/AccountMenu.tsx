@@ -44,7 +44,8 @@ export function AccountMenu() {
         <SidebarMenuItem>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <SidebarMenuButton size="lg" tooltip={me.name || me.email} className="data-[state=open]:bg-sidebar-accent" aria-label={`Tu cuenta: ${me.name || me.email}`}>
+              <SidebarMenuButton size="lg" tooltip={me.name || me.email} className="data-[state=open]:bg-sidebar-accent">
+                <span className="sr-only">Tu cuenta: </span>
                 <span className="grid size-8 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold text-foreground/80 ring-1 ring-border" aria-hidden>
                   {initials(me.name || me.email)}
                 </span>

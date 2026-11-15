@@ -218,7 +218,7 @@ function FilterBadge({ label, onRemove }: { label: string; onRemove: () => void 
         type="button"
         onClick={onRemove}
         aria-label={`Quitar filtro: ${label}`}
-        className="grid size-5 cursor-pointer place-items-center rounded-sm hover:bg-foreground/10"
+        className="relative grid size-5 cursor-pointer place-items-center rounded-sm after:absolute after:-inset-1 after:content-[''] hover:bg-foreground/10"
       >
         <X className="size-3" aria-hidden />
       </button>
