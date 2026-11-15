@@ -68,6 +68,10 @@ def redirect_matches(registered: list[str], requested: str) -> bool:
     return any(r == requested or _same_except_loopback_port(r, requested) for r in registered)
 
 
+# Letters and symbols that render as nothing (a name of these would look empty or pad itself out): treated as spaces.
+BLANK_LOOKING = frozenset("\u115f\u1160\u17b4\u17b5\u2800\u3164\uffa0")
+
+
 def clean_name(raw: str | None) -> str:
     """NFC, then: no control or format characters (bidi overrides, zero-width), at most one combining mark per base
     character (no "zalgo" text spilling over the consent screen), whitespace collapsed, MAX_NAME characters."""
@@ -75,7 +79,7 @@ def clean_name(raw: str | None) -> str:
     marks = 0
     for c in unicodedata.normalize("NFC", raw or ""):
         cat = unicodedata.category(c)
-        if c.isspace():
+        if c.isspace() or c in BLANK_LOOKING:
             out.append(" ")
             marks = 1  # no mark on a space
         elif cat[0] == "C":

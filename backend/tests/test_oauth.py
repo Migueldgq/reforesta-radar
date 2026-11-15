@@ -741,3 +741,4 @@ def test_clean_name() -> None:
     assert clean_name("Cla\u202eude\u200b\n\tCode") == "Claude Code"  # bidi override, zero-width, whitespace
     assert clean_name("x" * 100) == "x" * 60
     assert clean_name("\u200b") == "Asistente sin nombre"
+    assert clean_name("\u2800\u3164 Claude \u2800") == "Claude"  # blank-looking letters count as spaces
