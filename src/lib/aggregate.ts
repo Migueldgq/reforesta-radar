@@ -4,7 +4,6 @@ import { cachedSource, getAggregate, warmUp, type AggregateData, type SourceResu
 import type { OpportunitiesResponse, Opportunity } from "./opportunity";
 import { RSC_OPPORTUNITIES } from "./rsc-opportunities";
 import { geographicFit, kindFit, scoreRsc } from "./scoring";
-import { fetchBocyl, fetchBoja, fetchMontemadrid, fetchTed } from "./sources/extra";
 import { scrapeBocm, scrapeDog, scrapeEu, scrapeFundacionBiodiversidad } from "./sources/multi-source";
 import type { SourceHealth } from "./types";
 
@@ -19,10 +18,6 @@ export const SOURCES: [string, string, number, number, () => Promise<SourceResul
   ["bocm", "BOCM · Comunidad de Madrid", 3 * HOUR, 25000, scrapeBocm],
   ["dog", "DOG · Diario Oficial de Galicia", 3 * HOUR, 25000, scrapeDog],
   ["fb", "Fundación Biodiversidad", 6 * HOUR, 25000, scrapeFundacionBiodiversidad],
-  ["boja", "BOJA · Junta de Andalucía", 3 * HOUR, 25000, fetchBoja],
-  ["bocyl", "BOCYL · Castilla y León", 3 * HOUR, 25000, fetchBocyl],
-  ["ted", "TED · Licitaciones UE (España)", 3 * HOUR, 25000, fetchTed],
-  ["montemadrid", "Fundación Montemadrid · Convocatorias", 12 * HOUR, 25000, fetchMontemadrid],
 ];
 
 export function rscItems(): Opportunity[] {
@@ -124,7 +119,8 @@ async function readDb(): Promise<AggregateData> {
     const s = await readState();
     // A database that has never had a successful ingest would show an empty radar: use the cache path instead.
     if (!s.lastIngestAt) throw Object.assign(new Error("no successful ingest yet"), { code: "SIN_INGESTA" });
-    const sources = s.sources.sort((a, b) => SOURCE_ORDER.indexOf(a.id) - SOURCE_ORDER.indexOf(b.id));
+    // Health rows of sources removed from the app stay in source_runs: show only registered sources.
+    const sources = s.sources.filter((x) => SOURCE_ORDER.includes(x.id)).sort((a, b) => SOURCE_ORDER.indexOf(a.id) - SOURCE_ORDER.indexOf(b.id));
     const lastMs = s.lastIngestAt ? Date.parse(s.lastIngestAt) : null;
     const data: AggregateData = {
       items: s.items,

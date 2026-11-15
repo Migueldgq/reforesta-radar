@@ -6,7 +6,7 @@ Todo es opcional: sin `DATABASE_URL` la app funciona igual que antes (memoria + 
 
 ```
 GitHub Actions (cron 3×/día + "Run workflow")
-   └─ npx tsx scripts/ingest.ts ──► fuentes (BDNS, BOE, UE, BOCM, DOG, FB, BOJA, BOCYL, TED, Montemadrid, RSC)
+   └─ npx tsx scripts/ingest.ts ──► fuentes (BDNS, BOE, UE, BOCM, DOG, FB, RSC)
             │  una transacción por ejecución
             ▼
    Postgres (Supabase): opportunities · opportunity_changes · ingest_runs · source_runs · fetch_cache
@@ -16,6 +16,7 @@ GitHub Actions (cron 3×/día + "Run workflow")
 
 - La ingesta guarda el ítem **base**; el ranking se aplica al leer, así un cambio de puntuación no exige reingestar.
 - Una fuente que falla no toca sus filas. Solo una fuente con estado `ok` marca como `gone_at` lo que ya no devuelve.
+- Las filas de una fuente que ya no está en `SOURCES` (ni es `rsc`) se marcan `gone_at` en la siguiente ingesta, sea cual sea `--source`; el resumen lo indica en «removed sources». La web tampoco muestra la salud de esas fuentes.
 - `?refresh=1` con base de datos no consulta las fuentes desde la web: devuelve el estado guardado.
 - Si la base de datos no responde (o aún no hay ninguna ingesta correcta), la web usa la caché local y lo indica en `storageError`.
 - Esquema: `supabase/migrations/0001_init.sql`. SQL de la app: `src/lib/db.ts` y `src/lib/store-pg.ts`.

@@ -4,7 +4,7 @@ export type NivelAdmin = "Estatal" | "Autonómica" | "Local" | "UE" | "Privada" 
 export interface OpportunityDocument { name: string; description: string; url: string; docId?: number }
 export interface Opportunity {
   id: string;              // unique + stable: `${source}:${nativeId}`
-  source: string;          // "bdns" | "boe" | "bocm" | "dog" | "eu" | "fb" | "rsc" | extra ids
+  source: string;          // "bdns" | "boe" | "bocm" | "dog" | "eu" | "fb" | "rsc"
   sourceLabel: string;     // short human label, e.g. "BDNS", "BOE", "UE · LIFE"
   kind: OpportunityKind;
   titulo: string;
