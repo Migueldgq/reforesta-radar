@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { CircleAlert, CircleCheck, Link2Off, Loader2 } from "lucide-react";
+import { CircleAlert, CircleCheck, Clock, Link2Off, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api, ApiError, errorText, hardNavigate, safeNext } from "@/lib/api";
 import { PASSWORD_MAX, PASSWORD_MIN, type SessionInfo } from "@/lib/team";
@@ -140,6 +140,8 @@ function usePasswordPair() {
 export function LoginView() {
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
+  // Set by the API client when a session ran out mid-use (`cambio`: the request was a change, so it was lost).
+  const expired = params.get("caducada") === "1" ? (params.get("cambio") === "1" ? "Tu sesión ha caducado. Vuelve a entrar; el último cambio no se guardó." : "Tu sesión ha caducado. Vuelve a entrar.") : null;
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -202,6 +204,12 @@ export function LoginView() {
       }
     >
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        {expired && !error && (
+          <p role="status" className="flex gap-2 rounded-md border bg-muted/50 px-3 py-2.5 text-sm">
+            <Clock className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span>{expired}</span>
+          </p>
+        )}
         <Field label="Correo electrónico">
           {(p) => (
             <Input

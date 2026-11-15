@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { McpConnect } from "./McpConnect";
-import { useSession } from "./session";
+import { forgetSession, useSession } from "./session";
 
 /** The signed-in person in the sidebar footer, with "Mi cuenta" and "Cerrar sesión". Works in the collapsed rail too. */
 export function AccountMenu() {
@@ -34,6 +34,7 @@ export function AccountMenu() {
     } catch {
       /* the cookie may already be gone; go to the login page anyway */
     }
+    forgetSession();
     hardNavigate("/login");
   }
 
