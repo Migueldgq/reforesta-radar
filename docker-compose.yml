@@ -33,6 +33,12 @@ x-backend: &backend
     # reverse proxy in front of `web` overwrites that header, set this to the compose network (e.g. 172.16.0.0/12).
     FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
     RADAR_ARGON2_CONCURRENCY: ${RADAR_ARGON2_CONCURRENCY:-2}
+    # Read-only MCP server at /mcp (docs/mcp.md): public tools without a token, team view with a personal token.
+    RADAR_MCP_PUBLIC: ${RADAR_MCP_PUBLIC:-true}
+    RADAR_MCP_PUBLIC_RATE: ${RADAR_MCP_PUBLIC_RATE:-60}
+    RADAR_MCP_URL: ${RADAR_MCP_URL:-}
+    RADAR_MCP_ALLOWED_HOSTS: ${RADAR_MCP_ALLOWED_HOSTS:-}
+    RADAR_MCP_ALLOWED_ORIGINS: ${RADAR_MCP_ALLOWED_ORIGINS:-}
   depends_on:
     postgres:
       condition: service_healthy

@@ -13,6 +13,8 @@ A restart forgets the counters; that is acceptable for a 7-person tool. Login ru
 import time
 from collections import deque
 
+from app.config import settings
+
 
 class Throttle:
     def __init__(self, limit: int, window_s: float, max_keys: int = 10_000) -> None:
@@ -70,8 +72,13 @@ password_change = Throttle(limit=5, window_s=WINDOW_S)
 # Self-service reset e-mails (only with SMTP): per address and per IP within an hour.
 forgot_by_account = Throttle(limit=3, window_s=3600)
 forgot_by_ip = Throttle(limit=10, window_s=3600)
+# Requests to /mcp with a malformed or unknown/revoked/expired token, per client IP. Over it, invalid tokens from that
+# IP get 429 instead of 401; a valid token is always checked first and never refused (all share one IP behind Next).
+mcp_bad_token = Throttle(limit=30, window_s=WINDOW_S)
+# Requests to /mcp without a token (public tools), per client IP and minute (RADAR_MCP_PUBLIC_RATE).
+mcp_public = Throttle(limit=settings.mcp_public_rate, window_s=60)
 
 
 def clear_all() -> None:
-    for t in (account_ceiling, account_ip, password_change, forgot_by_account, forgot_by_ip):
+    for t in (account_ceiling, account_ip, password_change, forgot_by_account, forgot_by_ip, mcp_bad_token, mcp_public):
         t.clear()

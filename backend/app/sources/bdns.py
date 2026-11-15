@@ -269,6 +269,9 @@ def detail_to_raw(raw: dict[str, Any], d: dict[str, Any], now: datetime) -> RawO
         )
 
     deadline_text = None if fecha_fin else " · ".join(x for x in (d.get("textInicio"), text_fin) if x) or None
+    # official publication: the first announcement in a journal, else the BDNS registration date
+    announced = sorted(a["datPublicacion"][:10] for a in d.get("anuncios") or [] if a.get("datPublicacion"))
+    publicado = _nn(announced[0] if announced else None, d.get("fechaRecepcion"), raw.get("fechaRecepcion"))
     summary_parts = [p for p in (bases and f"Bases: {bases}", finalidad and f"Finalidad: {finalidad}.") if p]
     numero = raw["numeroConvocatoria"]
 
@@ -314,6 +317,8 @@ def detail_to_raw(raw: dict[str, Any], d: dict[str, Any], now: datetime) -> RawO
             abierto=d.get("abierto"),
             extra_text=f"{bases} {objetivos} {_nn(d.get('descripcionLeng'), '')}",
             kind="subvencion",
+            fecha_publicacion=publicado,
+            texto_plazo=deadline_text,
         ),
         adjust=adjust,
     )

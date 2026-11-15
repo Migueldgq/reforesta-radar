@@ -1,6 +1,6 @@
 # 0025. Servidor MCP de solo lectura para el asistente del equipo
 
-- Estado: Propuesta
+- Estado: Sustituida por 0026
 - Fecha: 2026-11-15 (fecha de registro; no hay commit asociado)
 
 ## Contexto

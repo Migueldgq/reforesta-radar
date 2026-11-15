@@ -1,4 +1,4 @@
-"""Request body cap for /api/, applied before routing (so before the session check and before any parsing):
+"""Request body cap for /api/ and /mcp, applied before routing (so before the session check and before any parsing):
 16 MiB for /api/analyze-pdf (15 MB PDF + multipart overhead), 1 MiB elsewhere. A larger `Content-Length` is
 answered 413 at once; a chunked body is counted while it streams and cut off at the cap."""
 
@@ -20,7 +20,7 @@ class BodyLimitMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or not scope["path"].startswith("/api/"):
+        if scope["type"] != "http" or not (scope["path"].startswith("/api/") or scope["path"].startswith("/mcp")):
             await self.app(scope, receive, send)
             return
         limit = limit_for(scope["path"])

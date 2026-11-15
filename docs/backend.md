@@ -12,9 +12,9 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
             ▼
    Postgres 16: opportunities · opportunity_changes · ingest_runs · source_runs · fetch_cache · bdns_editions
                 users · sessions · invitations · password_resets · tracking · tracking_notes · org_settings ·
-                votes · ingest_requests
+                votes · ingest_requests · personal_tokens
             ▲  lectura / escritura del equipo
-   API FastAPI (/api/oportunidades, /api/fuentes, /api/perfil, /api/analyze-pdf, /api/auth, /api/board, …)
+   API FastAPI (/api/oportunidades, /api/fuentes, /api/perfil, /api/analyze-pdf, /api/auth, /api/board, …, /mcp)
             ▲  rewrite /api/* (next.config.ts, API_URL)
    Next.js ──► navegador
 ```
@@ -30,7 +30,7 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
 - Si Postgres no responde, la API devuelve 503; si la API no responde, la web muestra un estado de error (o la
   última copia guardada en el navegador, con un aviso). La portada se pinta sin cifras.
 - Esquema: migraciones de Alembic en `backend/alembic/` (la API las aplica al arrancar).
-- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 14) se guarda en cada `ingest_runs`; súbelo cuando
+- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 15) se guarda en cada `ingest_runs`; súbelo cuando
   cambie la puntuación.
 - Historial BDNS: tras guardar la ingesta, un paso aparte busca ediciones anteriores de las convocatorias BDNS
   relevantes (cuándo suelen abrir, cuánto plazo dan) y quién las ganó (solo recuentos por tipo de entidad, nunca
@@ -107,8 +107,15 @@ la ingesta programada es el servicio `ingest-scheduler` (`backend/app/ingest/sch
 
 ## Antes de publicarlo en internet
 
-- [ ] Proxy inverso (Caddy, nginx) con https delante de `web` que **sobrescriba** `X-Forwarded-For`; solo entonces
-      `FORWARDED_ALLOW_IPS` = red de compose (p. ej. `172.16.0.0/12`). Sin proxy, déjalo en `127.0.0.1`.
+- [ ] Proxy inverso (Caddy, nginx) con https delante de `web` que **sobrescriba** `X-Forwarded-For` (nginx:
+      `proxy_set_header X-Forwarded-For $remote_addr;`, no `$proxy_add_x_forwarded_for`); solo entonces
+      `FORWARDED_ALLOW_IPS` = red de compose (p. ej. `172.16.0.0/12`). Sin proxy, déjalo en `127.0.0.1`: todos los
+      clientes comparten entonces la IP de `web` (y el cupo sin token de `/mcp`).
+- [ ] Con ese proxy, el contenedor `web` no debe ser alcanzable directamente (puerto solo en `127.0.0.1` o sin
+      publicar): Next solo pone `X-Forwarded-For` si falta, así que saltándose el proxy el cliente elige su IP y se
+      salta todos los límites, el de login incluido.
+- [ ] Tiempos máximos de petición y de lectura del cuerpo en el proxy; no registrar la cabecera `Authorization`.
+- [ ] Opcional: caché corta en el proxy para `GET /api/public/oportunidades` (igual para todos).
 - [ ] Límite de tamaño de cuerpo también en el proxy (16 MB basta: el PDF más grande).
 - [ ] `RADAR_COOKIE_SECURE=true` y `RADAR_PUBLIC_URL=https://…` (los enlaces de invitación usan esa URL).
 - [ ] El puerto de la API (`8010`) solo en `127.0.0.1` (como ya está) o sin publicar; si se expone, quitar `/docs`
@@ -117,6 +124,7 @@ la ingesta programada es el servicio `ingest-scheduler` (`backend/app/ingest/sch
 - [ ] Quitar `RADAR_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` del `.env` tras el primer arranque; al menos dos admins.
 - [ ] Valorar una vida máxima absoluta de la sesión (hoy: 30 días desde el último uso, sin tope absoluto).
 - [ ] Copias de seguridad de Postgres (ver riesgos).
+- [ ] Servidor MCP (`/mcp`): ver la lista de [mcp.md](mcp.md#antes-de-publicarlo-en-internet).
 
 ## Riesgos conocidos
 

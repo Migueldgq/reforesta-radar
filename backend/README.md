@@ -57,7 +57,8 @@ backend/
       tokens.py          random tokens; only their sha256 is stored
       deps.py            sessions, cookie, `current_user` / `require_admin` dependencies, per-request transaction
       csrf.py            X-Radar-CSRF + Sec-Fetch-Site check on unsafe /api/ requests
-      throttle.py        in-process login throttling (per account, per IP)
+      throttle.py        in-process throttling (logins per account and IP; /mcp per IP)
+      pats.py            personal access tokens for /mcp (rr_pat_…, sha256 only, expiry, revocation)
       accounts.py        users, invitations, reset links, bootstrap admin
       mail.py            optional SMTP for links (off without SMTP_HOST)
     config.py          settings from environment variables
@@ -69,6 +70,7 @@ backend/
       score.py           ScoreInput, score_convocatoria, score_rsc, tier_for, FitAdjust
       rank.py            geographic_fit, kind_fit, rank, clean_items (read time)
       history.py         FitAdjust from the past winners of a BDNS call (read time, after geo + kind)
+      team_profile.py    the team's Perfil on top of the server score (port of applyProfileAll in the web)
       regions.py         infer_comunidad_autonoma
     sources/           connectors
       base.py            Source, RawOpportunity, FetchResult, SourceContext, score_raw
@@ -92,9 +94,12 @@ backend/
     api/team.py        /api/team/* (admin), /api/users, /api/me
     api/board.py       /api/board, /api/settings, /api/votes, /api/import
     api/ingest_requests.py  /api/ingest: "update now" requests for ingest-scheduler
+    api/tokens.py      /api/me/tokens: personal access tokens (session only)
+    mcp/               read-only MCP server (../docs/mcp.md): server.py tools, http.py /mcp endpoint and its
+                       auth, __main__.py stdio (python -m app.mcp)
     db/                tables (SQLAlchemy Core) and async engine
   alembic/             migrations (0001 = supabase/migrations/0001_init.sql, 0002-0003 = bdns_editions,
-                       0004 = accounts and team state)
+                       0004 = accounts and team state, 0005 = personal tokens)
   tests/               parity, connectors on recorded fixtures, store semantics
 ```
 
@@ -116,8 +121,9 @@ Correctness over elegance: same numbers, same Spanish strings, same order of rea
 The goldens and the `expected.json` fixtures are **frozen**: they were dumped from the TypeScript backend before it
 was deleted (the dump tools `tools/dump_ts_*.ts` and `tools/capture_*_inputs.py` went with it; see git history
 before the Python cutover). They pin the scoring as it was at parity. When you change the scoring on purpose,
-update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 14: the
-BDNS history signal; it is stored in `ingest_runs.scoring_version`).
+update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 15: the
+BDNS history signal, then the estimated end of undated BDNS calls, ADR 0028; it is stored in
+`ingest_runs.scoring_version`).
 
 Details that matter when porting more code:
 

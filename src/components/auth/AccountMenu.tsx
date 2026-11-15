@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
+import { McpConnect } from "./McpConnect";
 import { useSession } from "./session";
 
 /** The signed-in person in the sidebar footer, with "Mi cuenta" and "Cerrar sesión". Works in the collapsed rail too. */
@@ -78,7 +79,7 @@ function AccountDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
   const { me } = useSession();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-md">
+      <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Mi cuenta</DialogTitle>
           <DialogDescription>
@@ -91,6 +92,8 @@ function AccountDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
             <NameForm />
             <Separator />
             <PasswordForm />
+            <Separator />
+            <McpConnect />
           </div>
         )}
       </DialogContent>

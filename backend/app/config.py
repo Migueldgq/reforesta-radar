@@ -53,6 +53,24 @@ class Settings:
     smtp_from: str = field(default_factory=lambda: os.getenv("SMTP_FROM", ""))
     smtp_starttls: bool = field(default_factory=lambda: _bool(os.getenv("SMTP_STARTTLS", "true")))
 
+    # --- read-only MCP server at /mcp (app/mcp, docs/mcp.md) ---
+    # Public tools without a token (the same data as /api/public/oportunidades). false: everything needs a token.
+    mcp_public: bool = field(default_factory=lambda: _bool(os.getenv("RADAR_MCP_PUBLIC", "true")))
+    # Requests per minute per client IP to /mcp without a token (with a token: unlimited, tokens are personal).
+    mcp_public_rate: int = field(default_factory=lambda: int(os.getenv("RADAR_MCP_PUBLIC_RATE", "60")))
+    # URL people paste into their assistant (shown in "Mi cuenta"). Default: the web origin, which proxies /mcp.
+    mcp_url: str = field(default_factory=lambda: os.getenv("RADAR_MCP_URL", ""))
+    # DNS-rebinding protection: Host and Origin values /mcp accepts besides the defaults (localhost, the compose
+    # service name and the host of RADAR_PUBLIC_URL / RADAR_MCP_URL). Comma-separated; "host:*" = any port.
+    mcp_allowed_hosts: list[str] = field(default_factory=lambda: _list(os.getenv("RADAR_MCP_ALLOWED_HOSTS", "")))
+    mcp_allowed_origins: list[str] = field(default_factory=lambda: _list(os.getenv("RADAR_MCP_ALLOWED_ORIGINS", "")))
+    # stdio mode (`python -m app.mcp`) only: e-mail of the active account whose team view the tools show.
+    mcp_user: str = field(default_factory=lambda: os.getenv("RADAR_MCP_USER", ""))
+
+    @property
+    def mcp_public_url(self) -> str:
+        return (self.mcp_url or f"{self.public_url}/mcp").rstrip("/")
+
     @property
     def email_enabled(self) -> bool:
         return bool(self.smtp_host and self.smtp_from)

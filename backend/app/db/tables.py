@@ -1,5 +1,5 @@
 """Table definitions (SQLAlchemy Core). Schema owner: alembic/versions/ (0001 init, 0002 + 0003 bdns_editions,
-0004 accounts and team state).
+0004 accounts and team state, 0005 personal tokens).
 
 Same tables and columns as supabase/migrations/0001_init.sql, so data and semantics carry over:
 rows hold the BASE opportunity (connector output + base fit); geographic and kind fit are applied at read time.
@@ -188,6 +188,20 @@ password_resets = Table(
     Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
     Column("expires_at", TSTZ, nullable=False),
     Column("used_at", TSTZ),
+)
+
+# Personal access tokens for the read-only MCP server (0005; app/auth/pats.py). Sent as `Authorization: Bearer`.
+personal_tokens = Table(
+    "personal_tokens",
+    metadata,
+    Column("id", BigInteger, Identity(always=True), primary_key=True),
+    Column("user_id", BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("name", Text, nullable=False),
+    Column("token_hash", Text, nullable=False, unique=True),
+    Column("created_at", TSTZ, nullable=False, server_default=text("now()")),
+    Column("expires_at", TSTZ, nullable=False),
+    Column("last_used_at", TSTZ),
+    Column("revoked_at", TSTZ),
 )
 
 # ---------- Team state (0004) ----------

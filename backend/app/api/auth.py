@@ -34,7 +34,7 @@ from app.auth.passwords import (
 from app.auth.tokens import hash_token
 from app.config import settings
 from app.db.tables import invitations, password_resets, sessions, users
-from app.models import Contract
+from app.models import CleanStr, Contract
 
 log = logging.getLogger("auth")
 router = APIRouter(tags=["auth"])
@@ -44,7 +44,7 @@ TOO_MANY = "Demasiados intentos. Espera unos minutos y vuelve a probar."
 BAD_LINK = "El enlace no es válido o ha caducado. Pide uno nuevo a un administrador."
 ACCOUNT_EXISTS = "Ya existe una cuenta con ese correo. Inicia sesión."
 
-Token = Annotated[str, Field(min_length=1, max_length=200)]
+Token = Annotated[CleanStr, Field(min_length=1, max_length=200)]
 Password = Annotated[str, Field(max_length=1024)]  # length rule checked by hand for a Spanish message
 
 
@@ -61,7 +61,7 @@ class SessionInfo(Contract):
 
 
 class LoginIn(Contract):
-    email: Annotated[str, Field(max_length=320)]
+    email: Annotated[CleanStr, Field(max_length=320)]
     password: Password
 
 
@@ -78,7 +78,7 @@ class InvitationInfo(Contract):
 
 class AcceptInvitationIn(Contract):
     token: Token
-    name: Annotated[str, Field(max_length=100)] = ""
+    name: Annotated[CleanStr, Field(max_length=100)] = ""
     password: Password
 
 
@@ -93,7 +93,7 @@ class AcceptResetIn(Contract):
 
 
 class ForgotIn(Contract):
-    email: Annotated[str, Field(max_length=320)]
+    email: Annotated[CleanStr, Field(max_length=320)]
 
 
 def check_password(password: str) -> None:

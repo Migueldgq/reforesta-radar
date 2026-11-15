@@ -118,3 +118,94 @@ def test_bdns_nivel_and_pre_drop() -> None:
     assert bdns.bdns_nivel(None) == "Otros"
     row = {"descripcion": "Subvención nominativa a la asociación X", "fechaRecepcion": "2026-11-01", "nivel1": "ESTADO"}
     assert bdns.pre_score(row, NOW) == -1
+
+
+# ---------- undated calls: estimated end ----------
+
+
+def _undated(numero: str, titulo: str, published: str, text_inicio: str | None, text_fin: str | None,
+             anuncios: list[str] = ()) -> bdns.RawOpportunity:  # fmt: skip
+    row = {"numeroConvocatoria": numero, "descripcion": titulo, "fechaRecepcion": published, "nivel1": "LOCAL"}
+    detail = {
+        "descripcion": titulo,
+        "organo": {"nivel1": "LOCAL", "nivel2": "PALENCIA", "nivel3": "DIPUTACIÓN PROVINCIAL DE PALENCIA"},
+        "tipoConvocatoria": "Concurrencia competitiva - canónica",
+        "tiposBeneficiarios": [{"descripcion": "PERSONAS JURÍDICAS QUE NO DESARROLLAN ACTIVIDAD ECONÓMICA"}],
+        "fechaRecepcion": published,
+        "textInicio": text_inicio,
+        "textFin": text_fin,
+        "abierto": False,
+        "anuncios": [{"datPublicacion": a} for a in anuncios],
+    }
+    return bdns.detail_to_raw(row, detail, NOW)
+
+
+def test_undated_call_closes_on_its_estimated_term() -> None:
+    """Live case (Palencia, "Huebra 2026"): no end date, BDNS says not open, term counted from the publication."""
+    raw = _undated("874408", "Bases para subvenciones de proyectos de reforestación y voluntariado ambiental",
+                   "2025-12-11", "Dia después de la publicación de las bases en el BOP",
+                   "Dos meses desde el día siguiente al de la publicación de la convocatoria en el BOP")  # fmt: skip
+    assert raw.deadline is None  # an estimate is never shown as the deadline
+    fit = score_raw(raw, NOW.date()).fit
+    assert fit.deadline_state == "cerrada"
+    assert "Plazo estimado: cerró hacia el 11 feb 2026 (2 meses desde la publicación)." in fit.warnings
+    # still a next-edition lead: competitive, open to non-profits
+    assert any(r.startswith("Convocatoria periódica: la edición actual ya cerró") for r in fit.reasons)
+
+
+def test_estimate_counts_from_the_journal_publication_and_keeps_open_windows() -> None:
+    # Castilla-La Mancha: BDNS registration 27/01, journal 30/01 (a later announcement only adds credit)
+    raw = _undated("883531", "Resolución de 27/01/2026, expresiones de interés cambio climático", "2026-01-27",
+                   "Desde el día siguiente de la publicación de la convocatoria en el Diario Oficial de C-LM",
+                   "Tres meses desde la publicación de la convocatoria en el Diario Oficial de Castilla-La Mancha.",
+                   ["2026-07-24", "2026-01-30"])  # fmt: skip
+    assert (
+        "Plazo estimado: cerró hacia el 30 abr 2026 (3 meses desde la publicación)."
+        in score_raw(raw, NOW.date()).fit.warnings
+    )
+    recent = _undated("1", "Subvenciones para voluntariado ambiental", "2026-11-02",
+                      "Desde el día siguiente a la publicación", "Un mes desde la publicación")  # fmt: skip
+    assert score_raw(recent, NOW.date()).fit.deadline_state == "sin_fecha"
+
+
+def test_estimated_end_reads_only_unambiguous_terms() -> None:
+    from datetime import date
+
+    from app.scoring.score import estimated_end
+
+    pub = "2026-05-07"  # a Thursday
+    assert estimated_end("VEINTE (20) DÍAS HÁBILES a contar desde el día siguiente al de la publicación", pub, None) \
+        == (date(2026, 6, 4), "20 días hábiles desde la publicación")  # fmt: skip
+    assert estimated_end("Quince días naturales desde la publicación", pub, None)[0] == date(2026, 5, 22)
+    assert estimated_end("El termini serà de dos mesos naturals, a comptar des de l'endemà de la publicació", pub,
+                         None)[0] == date(2026, 7, 7)  # fmt: skip
+    assert estimated_end("día seguinte á publicación DOG · mesmo ordinal mes seguinte publicación DOG", pub, None)[0] \
+        == date(2026, 6, 7)  # fmt: skip
+    assert estimated_end("Des de l'endemà de la publicació · 10 Dies Hàbils", pub, "2026-10-03") == (
+        date(2026, 10, 16), "10 días hábiles desde la apertura del plazo")  # fmt: skip
+    assert estimated_end("Un mes desde la publicación", "2026-01-31", None)[0] == date(2026, 2, 28)
+    for unclear in (
+        "en un termini màxim de 20 dies des de la publicació",  # días: working or calendar?
+        "Línea 1: 20 días hábiles desde la publicación; línea 2: un mes desde la publicación",  # two terms
+        "Un mes después",  # from when?
+        "Pendiente de definir · Hasta agotar el crédito",
+        None,
+    ):
+        assert estimated_end(unclear, pub, None) is None, unclear
+
+
+def test_old_undated_call_without_a_readable_term_is_probably_closed() -> None:
+    old = _undated("869020", "Resolución de ayudas agroambientales de la PAC", "2025-11-17",
+                   "Conforme establece la Orden 7/2025", "Conforme establece la Orden 7/2025")  # fmt: skip
+    fit = score_raw(old, NOW.date()).fit
+    assert fit.deadline_state == "cerrada"
+    assert (
+        "Probablemente cerrada: sin fecha de cierre y publicada hace 12 meses; confirmar en las bases." in fit.warnings
+    )
+    # younger than STALE_UNDATED_DAYS, or open-ended by its own wording: left as they were
+    young = _undated("2", "Ayudas agroambientales", "2026-06-01", "Conforme establece la Orden", None)
+    assert score_raw(young, NOW.date()).fit.deadline_state == "sin_fecha"
+    endless = _undated("3", "Ayudas forestales", "2025-06-11", "Pendiente de definir", "Hasta agotar el crédito")
+    assert score_raw(endless, NOW.date()).fit.deadline_state == "sin_fecha"
+    yearlong = _undated("4", "Ayudas al voluntariado ambiental", "2025-06-11", "Todo el año", None)
+    assert score_raw(yearlong, NOW.date()).fit.deadline_state == "sin_fecha"
