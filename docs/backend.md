@@ -12,9 +12,9 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
             ▼
    Postgres 16: opportunities · opportunity_changes · ingest_runs · source_runs · fetch_cache · bdns_editions
                 users · sessions · invitations · password_resets · tracking · tracking_notes · org_settings ·
-                votes · ingest_requests
+                votes · ingest_requests · personal_tokens
             ▲  lectura / escritura del equipo
-   API FastAPI (/api/oportunidades, /api/fuentes, /api/perfil, /api/analyze-pdf, /api/auth, /api/board, …)
+   API FastAPI (/api/oportunidades, /api/fuentes, /api/perfil, /api/analyze-pdf, /api/auth, /api/board, …, /mcp)
             ▲  rewrite /api/* (next.config.ts, API_URL)
    Next.js ──► navegador
 ```
@@ -117,6 +117,7 @@ la ingesta programada es el servicio `ingest-scheduler` (`backend/app/ingest/sch
 - [ ] Quitar `RADAR_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` del `.env` tras el primer arranque; al menos dos admins.
 - [ ] Valorar una vida máxima absoluta de la sesión (hoy: 30 días desde el último uso, sin tope absoluto).
 - [ ] Copias de seguridad de Postgres (ver riesgos).
+- [ ] Servidor MCP (`/mcp`): ver la lista de [mcp.md](mcp.md#antes-de-publicarlo-en-internet).
 
 ## Riesgos conocidos
 

@@ -116,6 +116,11 @@ Endpoints (todos los sirve la API de Python; la web los expone en su mismo orige
 | `GET /api/fuentes` | Estado de cada fuente en su última ingesta. |
 | `GET /api/perfil` | Reglas y perfil de Reforesta que usa la puntuación (vista Perfil). |
 | `POST /api/analyze-pdf` | Analiza un PDF (subido, de ejemplo, documento BDNS o URL). |
+| `POST /mcp` | Servidor MCP de solo lectura para el asistente de IA de cada persona (ver abajo). |
+
+**Conectar un asistente de IA (MCP).** `claude mcp add --transport http reforesta-radar http://localhost:3010/mcp`
+basta para que Claude Code consulte las convocatorias; con un token personal (Mi cuenta) ve también el tablero del
+equipo. Guía, herramientas y privacidad en [docs/mcp.md](./docs/mcp.md).
 
 ---
 

@@ -11,7 +11,7 @@ Timestamps are ISO 8601 with offset (`2026-11-15T13:18:36.655384+00:00`); dates 
 | Same origin | The browser calls `/api/*` on the web origin; Next.js rewrites it to the API (`next.config.ts`). Never call the API port from the browser. |
 | Session cookie | `radar_session`: opaque random token, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age` 30 days, `Secure` when `RADAR_COOKIE_SECURE=true` (set it behind https). The API sets and clears it; JavaScript can neither read nor needs to. Expiry is server-side, 30 days after the last use (sliding). |
 | CSRF | Every `POST`, `PUT`, `PATCH`, `DELETE` under `/api/` (login and logout included) **must send `X-Radar-CSRF: 1`**. Requests whose `Sec-Fetch-Site` is `cross-site` or `same-site` are rejected even with the header. Missing/wrong → `403 {"detail": "Petición rechazada (falta la cabecera X-Radar-CSRF o viene de otro sitio)."}`. GETs need nothing. Simplest: one `fetch` wrapper that always adds the header (also for the multipart `/api/analyze-pdf`). |
-| Who may call what | Open: `GET /health`, `/api/auth/*`, `/api/public/*`. Everything else under `/api/` needs a session (401 without). Admin-only routes (marked **admin** below) answer 403 to members. Members can edit everything on the board. |
+| Who may call what | Open: `GET /health`, `/api/auth/*`, `/api/public/*`. Everything else under `/api/` needs a session (401 without). `/mcp` has its own rules (no cookie; optional `Bearer` personal token): [mcp.md](mcp.md). Admin-only routes (marked **admin** below) answer 403 to members. Members can edit everything on the board. |
 | Body size | Bodies over **1 MiB** (16 MiB on `/api/analyze-pdf`) get `413 {"detail": "La petición es demasiado grande."}` before anything else (session check included). |
 | Errors | `{"detail": "<Spanish message, ready to show>"}` with the status code. Validation errors from the schema are FastAPI's `422 {"detail": [{"loc": [...], "msg": "...", ...}]}` (English, for developers: validate in the form before sending). Exceptions: `POST /api/ingest` 409 carries more fields (below); `/api/analyze-pdf` keeps its old `{"error": "..."}` shape. |
 | 401 | `{"detail": "No has iniciado sesión o la sesión ha caducado."}` on any protected route: send the user to the login page (keep the current URL to come back). |
@@ -78,7 +78,21 @@ type Triage = "nueva" | "estudio" | "presentar" | "presentada" | "descartada"; /
 | Method + path | Body | 2xx | Errors |
 |---|---|---|---|
 | `PATCH /api/me` | `{name}` (1-100) | `200 Me` | `400` empty |
-| `POST /api/me/password` | `{currentPassword, newPassword}` | `204`; all sessions ended, a fresh cookie is set for this browser | `400 "La contraseña actual no es correcta."` or length; `429` after 5 wrong current passwords in 15 min (per user; it never affects logging in) |
+| `POST /api/me/password` | `{currentPassword, newPassword}` | `204`; all sessions ended (and personal tokens revoked), a fresh cookie is set for this browser | `400 "La contraseña actual no es correcta."` or length; `429` after 5 wrong current passwords in 15 min (per user; it never affects logging in) |
+| `GET /api/me/tokens` | – | `200 {tokens: PersonalToken[], mcpUrl, publicTools}` (my usable tokens, newest first) | – |
+| `POST /api/me/tokens` | `{name (1-100), expiresInDays?: 1-365 = 90}` | `201 {token: PersonalToken, secret}` | `400` blank name; `409` already 20 active; `422` out of range |
+| `DELETE /api/me/tokens/{id}` | – | `204` | `404` not mine or not active |
+
+```ts
+type PersonalToken = { id: number; name: string; createdAt: string; expiresAt: string; lastUsedAt: string | null };
+```
+
+Personal access tokens are for the read-only MCP server at `/mcp` ([mcp.md](mcp.md), ADR 0027), never for `/api/*`
+(a `Bearer` header there is ignored: still 401 without the cookie). `secret` (`rr_pat_` + 43 characters) is shown
+**once**: only its hash is stored. `mcpUrl` is the URL to paste into the assistant (`RADAR_MCP_URL`, default
+`RADAR_PUBLIC_URL/mcp`); `publicTools` says whether the public tools work without a token. Tokens are revoked whenever
+all of a person's sessions end (password change or reset, role change, deactivation) and stop working while the
+account is inactive. `lastUsedAt` is updated at most every 5 minutes.
 
 ## People
 
