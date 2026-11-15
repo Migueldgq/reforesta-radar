@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { AlarmClock, Building2, ChevronRight, Compass, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, RotateCw, SlidersHorizontal, Sprout, Target } from "lucide-react";
+import { AlarmClock, Building2, ChevronRight, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, RotateCw, SlidersHorizontal, Sprout, Target } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -41,16 +41,14 @@ const TOOLS = [
   { href: "/perfil", label: "Perfil", icon: SlidersHorizontal },
 ];
 
-type QuickKey = "abierta" | "30d" | "alto" | "fuera";
+type QuickKey = "abierta" | "30d" | "alto";
 const QUICK: { key: QuickKey; label: string; icon: typeof House }[] = [
   { key: "abierta", label: "Abiertas ahora", icon: DoorOpen },
   { key: "30d", label: "Cierran en 30 días", icon: AlarmClock },
   { key: "alto", label: "Encaje alto", icon: Target },
-  { key: "fuera", label: "Fuera de tus 4 fuentes", icon: Compass },
 ];
 
 function quickOn(f: Filters, k: QuickKey) {
-  if (k === "fuera") return f.flags.includes("fuera");
   if (k === "alto") return f.dims.tier.includes("alto");
   return f.dims.plazo.includes(k);
 }
@@ -121,7 +119,7 @@ function AppSidebar() {
   const busy = loading || refreshing;
 
   const counts = useMemo(() => {
-    const c: Record<QuickKey, number> = { abierta: 0, "30d": 0, alto: 0, fuera: 0 };
+    const c: Record<QuickKey, number> = { abierta: 0, "30d": 0, alto: 0 };
     for (const o of data?.items ?? []) {
       // High fit counts every deadline state (closed recurring grants are next-edition leads), like Inicio's card.
       if (o.fit.tier === "alto") c.alto++;
@@ -129,7 +127,6 @@ function AppSidebar() {
       const p = plazoValues(o);
       if (p.includes("abierta")) c.abierta++;
       if (p.includes("30d")) c["30d"]++;
-      if (o.fit.outsideManualSources) c.fuera++;
     }
     return c;
   }, [data]);
@@ -139,11 +136,12 @@ function AppSidebar() {
   const applyQuick = (k: QuickKey) => {
     const on = path === "/" && quickOn(filters, k);
     setFilters((f) => {
-      const base: Filters = { ...DEFAULT_FILTERS, hideClosed: f.hideClosed, dims: EMPTY_DIMS };
+      // Quick views keep the chosen organisms: that choice is a standing preference, cleared only by "Limpiar".
+      const dims = { ...EMPTY_DIMS, organismo: f.dims.organismo };
+      const base: Filters = { ...DEFAULT_FILTERS, hideClosed: f.hideClosed, dims };
       if (on) return k === "alto" ? { ...base, hideClosed: true } : base;
-      if (k === "fuera") return { ...base, flags: ["fuera"] };
-      if (k === "alto") return { ...base, hideClosed: false, dims: { ...EMPTY_DIMS, tier: ["alto"] } };
-      return { ...base, dims: { ...EMPTY_DIMS, plazo: [k] } };
+      if (k === "alto") return { ...base, hideClosed: false, dims: { ...dims, tier: ["alto"] } };
+      return { ...base, dims: { ...dims, plazo: [k] } };
     });
     if (path !== "/") router.push("/");
     close();

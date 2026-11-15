@@ -89,6 +89,28 @@ function subscribe(l: () => void) {
   };
 }
 
+/* ---------- Chosen convening bodies (Organismo filter) persisted in localStorage ---------- */
+
+const ORGS_KEY = "reforesta-radar:organismos:v1";
+
+function readOrgs(): string[] {
+  try {
+    const v: unknown = JSON.parse(window.localStorage.getItem(ORGS_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeOrgs(orgs: string[]) {
+  try {
+    if (orgs.length) window.localStorage.setItem(ORGS_KEY, JSON.stringify(orgs));
+    else window.localStorage.removeItem(ORGS_KEY);
+  } catch {
+    /* storage unavailable: ignore */
+  }
+}
+
 async function request(): Promise<{ data?: Payload; error?: string }> {
   try {
     const res = await fetch("/api/oportunidades", { cache: "no-store" });
@@ -151,6 +173,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchRef = useRef<(() => Promise<void>) | null>(null);
+  const orgsLoaded = useRef(false);
 
   // Fetch, store the payload for instant paint next time, and re-poll while the server says it is refreshing.
   const fetchData = useCallback((): Promise<void> => {
@@ -180,14 +203,21 @@ export function RadarProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         setRefreshing(true);
       }
-      const init = filtersFromUrl();
-      if (init) setFilters(init);
+      // Organisms in the URL win; otherwise restore the ones chosen last time.
+      const init = filtersFromUrl() ?? DEFAULT_FILTERS;
+      const organismo = init.dims.organismo.length ? init.dims.organismo : readOrgs();
+      setFilters({ ...init, dims: { ...init.dims, organismo } });
+      orgsLoaded.current = true;
     });
     void fetchData();
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
   }, [fetchData]);
+
+  useEffect(() => {
+    if (orgsLoaded.current) writeOrgs(filters.dims.organismo);
+  }, [filters.dims.organismo]);
 
   const reload = useCallback(() => {
     if (data) setRefreshing(true);

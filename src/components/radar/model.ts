@@ -138,13 +138,11 @@ export function fmtAgo(iso: string | null): string {
 
 /* ---------- Filters ---------- */
 
-export type Dim = "source" | "region" | "workLine" | "kind" | "tier" | "budget" | "triage" | "plazo";
-export type Flag = "abiertas" | "urgentes" | "alto" | "fuera";
+export type Dim = "source" | "organismo" | "region" | "workLine" | "kind" | "tier" | "budget" | "triage" | "plazo";
 
 export interface Filters {
   q: string;
   hideClosed: boolean;
-  flags: Flag[];
   week: number | null;
   dims: Record<Dim, string[]>;
 }
@@ -152,6 +150,7 @@ export interface Filters {
 export const EMPTY_DIMS: Record<Dim, string[]> = {
   plazo: [],
   source: [],
+  organismo: [],
   region: [],
   workLine: [],
   kind: [],
@@ -160,34 +159,14 @@ export const EMPTY_DIMS: Record<Dim, string[]> = {
   triage: [],
 };
 
-export const DEFAULT_FILTERS: Filters = { q: "", hideClosed: true, flags: [], week: null, dims: EMPTY_DIMS };
-
-export const FLAG_LABELS: Record<Flag, string> = {
-  abiertas: "Abiertas ahora",
-  urgentes: "Cierran en 30 días o menos",
-  alto: "Encaje alto",
-  fuera: "Fuera de tus 4 fuentes",
-};
-
-export function flagMatch(o: Opportunity, f: Flag): boolean {
-  switch (f) {
-    case "abiertas":
-      return isOpenNow(o);
-    case "urgentes": {
-      const d = daysLeft(o);
-      return d != null && d >= 0 && d <= 30;
-    }
-    case "alto":
-      return o.fit.tier === "alto";
-    case "fuera":
-      return o.fit.outsideManualSources;
-  }
-}
+export const DEFAULT_FILTERS: Filters = { q: "", hideClosed: true, week: null, dims: EMPTY_DIMS };
 
 export function dimValues(o: Opportunity, dim: Dim, triage: Triage): string[] {
   switch (dim) {
     case "source":
       return [o.sourceLabel];
+    case "organismo":
+      return [o.organismo.trim().replace(/\s+/g, " ")];
     case "region":
       return [o.region || "Sin territorio"];
     case "workLine":
@@ -231,7 +210,7 @@ export function normalize(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-export type Skip = Dim | "week" | Flag | null;
+export type Skip = Dim | "week" | null;
 
 export function matches(
   o: Opportunity,
@@ -241,7 +220,6 @@ export function matches(
   skip: Skip = null,
 ): boolean {
   if (f.hideClosed && skip !== "plazo" && !f.dims.plazo.some((k) => k === "cerrada" || k === "edicion") && isClosed(o)) return false;
-  for (const fl of f.flags) if (fl !== skip && !flagMatch(o, fl)) return false;
   if (f.week != null && skip !== "week") {
     const d = parseDay(o.deadline);
     if (d == null || d < f.week || d >= f.week + WEEK_MS) return false;
@@ -324,13 +302,12 @@ export function withPlazoView(f: Filters, v: PlazoView): Filters {
 
 /* ---------- Filters <-> URL query (shareable links) ---------- */
 
-const URL_DIMS: Dim[] = ["plazo", "kind", "source", "region", "workLine", "tier", "budget", "triage"];
+const URL_DIMS: Dim[] = ["plazo", "kind", "source", "organismo", "region", "workLine", "tier", "budget", "triage"];
 
 export function filtersToQuery(f: Filters): string {
   const p = new URLSearchParams();
   if (f.q.trim()) p.set("q", f.q.trim());
   for (const d of URL_DIMS) if (f.dims[d].length) p.set(d, f.dims[d].join("|"));
-  if (f.flags.includes("fuera")) p.set("fuera", "1");
   if (!f.hideClosed) p.set("cerradas", "1");
   if (f.week != null) p.set("semana", new Date(f.week).toISOString().slice(0, 10));
   const s = p.toString();
@@ -348,7 +325,6 @@ export function filtersFromUrl(): Filters | null {
   return {
     q: p.get("q") ?? "",
     hideClosed: p.get("cerradas") !== "1",
-    flags: p.get("fuera") === "1" ? ["fuera"] : [],
     week: parseDay(p.get("semana")),
     dims,
   };

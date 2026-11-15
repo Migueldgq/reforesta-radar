@@ -3,9 +3,6 @@ import type { OpportunitiesResponse, Opportunity } from "@/lib/opportunity";
 import type { SourceHealth } from "@/lib/types";
 import { daysLeft, isClosed, isOpenNow, mondayOf, todayUTC, WEEK_MS } from "@/components/radar/model";
 
-/** The four sources Reforesta already checks by hand (RETO.md). */
-export const MANUAL_SOURCES = ["MITECO", "Fundación Biodiversidad", "Comunidad de Madrid (ambiental)", "Agenda 2030"];
-
 const NEXT_EDITION = /Convocatoria periódica: la edición actual (?:cerró el ([\d/]+)|ya cerró)/;
 
 export interface LandingData {
@@ -13,7 +10,6 @@ export interface LandingData {
   today: number;
   total: number;
   open: number;
-  outside: number;
   nextEdition: number;
   fetchedAt: string;
   sources: SourceHealth[];
@@ -53,7 +49,6 @@ function summarize(items: Opportunity[], sources: SourceHealth[], fetchedAt: str
     today,
     total: items.length,
     open: openItems.length,
-    outside: items.filter((o) => o.fit.outsideManualSources).length,
     nextEdition: nextEd.length,
     fetchedAt,
     sources,

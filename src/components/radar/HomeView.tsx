@@ -1,6 +1,6 @@
 "use client";
 
-import { AlarmClock, Check, ChevronDown, Compass, DoorOpen, Loader2, Target, TriangleAlert } from "lucide-react";
+import { AlarmClock, Check, ChevronDown, DoorOpen, Loader2, Repeat, Target, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { isNeutral } from "./profile";
@@ -60,6 +60,7 @@ const SHORT_VIEW_LABELS: Record<PlazoView, string> = { ahora: "Pedir ahora", edi
 const DIM_TITLES: Record<Dim, string> = {
   plazo: "Plazo",
   source: "Fuente",
+  organismo: "Organismo",
   region: "Territorio",
   workLine: "Línea",
   kind: "Tipo",
@@ -82,6 +83,8 @@ function dimLabel(dim: Dim, key: string): string {
       return TRIAGE_LABELS[key as Triage] ?? key;
     case "plazo":
       return PLAZO_LABELS[key] ?? key;
+    case "organismo":
+      return tidy(key);
     default:
       return key;
   }
@@ -142,8 +145,6 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
       const cur = f.dims[dim];
       return { ...f, dims: { ...f.dims, [dim]: cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key] } };
     });
-  const toggleFuera = () =>
-    setFilters((f) => ({ ...f, flags: f.flags.includes("fuera") ? f.flags.filter((x) => x !== "fuera") : [...f.flags, "fuera"] }));
   const clearAll = () => setFilters((f) => ({ ...DEFAULT_FILTERS, hideClosed: f.hideClosed, dims: EMPTY_DIMS }));
 
   const rows = {
@@ -151,13 +152,14 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
     tier: agg("tier", ["alto", "medio", "bajo"]),
     kind: agg("kind", KIND_KEYS),
     source: sortByCount(agg("source")),
+    // Selected organisms stay listed (count 0) even when none of their calls match the other filters.
+    organismo: sortByCount(agg("organismo", filters.dims.organismo)),
     region: sortByCount(agg("region")),
     workLine: agg("workLine", WORK_LINE_KEYS),
     budget: agg("budget", BUDGET_BUCKETS.map((b) => b.key)),
     triage: agg("triage", TRIAGE_ORDER),
   };
   const countOf = (r: BarRow[], k: string) => r.find((x) => x.key === k)?.count ?? 0;
-  const fueraCount = subset("fuera").filter((o) => o.fit.outsideManualSources).length;
   const openByRegion = new Map<string, number>();
   for (const o of subset("region")) if (isOpenNow(o)) for (const v of dimValues(o, "region", triageOf(o.id))) openByRegion.set(v, (openByRegion.get(v) ?? 0) + 1);
 
@@ -183,6 +185,7 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
   const barDims: BarDim[] = [
     { dim: "kind", label: "Tipo", options: rows.kind },
     { dim: "source", label: "Fuente", options: rows.source },
+    { dim: "organismo", label: "Organismo", options: rows.organismo, wide: true },
     { dim: "region", label: "Territorio", options: rows.region },
     { dim: "workLine", label: "Línea de trabajo", options: rows.workLine },
     { dim: "plazo", label: "Plazo", options: rows.plazo },
@@ -190,7 +193,6 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
   ];
   const chips: { key: string; label: string; remove: () => void }[] = [];
   if (filters.q.trim()) chips.push({ key: "q", label: `Texto: “${filters.q.trim()}”`, remove: () => setFilters((f) => ({ ...f, q: "" })) });
-  if (filters.flags.includes("fuera")) chips.push({ key: "fuera", label: "Fuera de tus 4 fuentes", remove: toggleFuera });
   if (filters.week != null)
     chips.push({ key: "week", label: weekChipLabel(filters.week), remove: () => setFilters((f) => ({ ...f, week: null })) });
   for (const dim of Object.keys(filters.dims) as Dim[])
@@ -221,7 +223,7 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
     { label: "Abiertas ahora", icon: DoorOpen, value: countOf(rows.plazo, "abierta"), caption: "Se pueden pedir hoy", on: filters.dims.plazo.includes("abierta"), toggle: () => toggleDim("plazo", "abierta") },
     { label: "Cierran en ≤30 días", icon: AlarmClock, value: countOf(rows.plazo, "30d"), caption: "Hay que decidir pronto", on: filters.dims.plazo.includes("30d"), toggle: () => toggleDim("plazo", "30d") },
     { label: "Encaje alto", icon: Target, value: altoAll.length, caption: altoOpen ? "Se parecen a lo que hacéis" : "Ninguna abierta hoy · ver próximas ediciones", on: filters.dims.tier.includes("alto"), toggle: toggleAlto },
-    { label: "Fuera de tus 4 fuentes", icon: Compass, value: fueraCount, caption: "Lo que hoy no estáis viendo", on: filters.flags.includes("fuera"), toggle: toggleFuera },
+    { label: "Próximas ediciones", icon: Repeat, value: viewCounts.ediciones, caption: "Cerradas que suelen volver", on: view === "ediciones", toggle: () => setView(view === "ediciones" ? "ahora" : "ediciones") },
   ];
 
   return (
@@ -314,7 +316,7 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
             </p>
           )}
         </div>
-        <FilterBar dims={barDims} chips={chips} total={total} fueraCount={fueraCount} />
+        <FilterBar dims={barDims} chips={chips} total={total} />
         <div className={cn("transition-opacity", refreshing && "opacity-90")}>
           <ResultsTable items={visible} onClear={clearAll} resetKey={JSON.stringify(filters)} />
         </div>

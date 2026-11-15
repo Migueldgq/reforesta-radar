@@ -4,7 +4,6 @@ import Link from "next/link";
 import { ArrowRight, Building2, FileSearch, ListChecks } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppScreenshot, Eyebrow, GithubMark, LandingNav, LogoMark, REPO_URL, Section } from "@/components/landing/chrome";
-import { MANUAL_SOURCES } from "@/components/landing/data";
 import { FindScene, RankScene, TrackScene } from "@/components/landing/how-demo";
 import { MotionRoot } from "@/components/landing/motion";
 import { HeroFigures, Live } from "@/components/landing/live";
@@ -15,7 +14,6 @@ import {
   Frame,
   LiveNote,
   NextEditionList,
-  OutsideBar,
   PdfPreview,
   SourceBars,
   Stage,
@@ -321,6 +319,7 @@ export default function LandingPage() {
               Subvenciones, licitaciones, anuncios en boletines, fondos europeos y programas de empresa, en el mismo
               formato. Los filtros se guardan en el enlace, así que una vista se comparte copiando la dirección.
             </p>
+            <p>Se puede elegir qué organismos convocantes ver, y el radar recuerda esa elección.</p>
             <p>Si una fuente falla, se siguen mostrando sus últimos datos buenos y la vista Fuentes lo indica.</p>
           </FeatureRow>
 
@@ -344,24 +343,6 @@ export default function LandingPage() {
           </FeatureRow>
 
           <FeatureRow
-            eyebrow="Fuera de tus 4 fuentes"
-            title="Lo que no habrías visto revisando a mano."
-            preview={
-              <Stage>
-                <Frame title="Procedencia de los resultados">
-                  <Live render={(d) => <OutsideBar data={d} />} />
-                </Frame>
-              </Stage>
-            }
-          >
-            <p>
-              Cada resultado que no viene de {MANUAL_SOURCES.slice(0, 3).join(", ")} o {MANUAL_SOURCES[3]} lleva la marca
-              «Fuera de tus 4 fuentes», y hay un filtro rápido para ver solo esos.
-            </p>
-          </FeatureRow>
-
-          <FeatureRow
-            flip
             eyebrow="Próxima edición"
             title="Las convocatorias anuales cerradas se quedan como aviso."
             preview={
