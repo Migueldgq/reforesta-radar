@@ -15,7 +15,16 @@ const nextConfig: NextConfig = {
     // answers 413 itself past that, so leave room for the file plus multipart overhead.
     proxyClientMaxBodySize: "16mb",
   },
+  poweredByHeader: false,
   async headers() {
+    // Defaults for every response. The proxy in front (Traefik) only adds HSTS, so these live here; the
+    // route-specific rules below come later and override the same keys (the last matching rule wins).
+    const defaults = [
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "X-Frame-Options", value: "SAMEORIGIN" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+    ];
     // Invitation and reset links carry a one-time token in the path: keep it out of any Referer.
     const noReferrer = [{ key: "Referrer-Policy", value: "no-referrer" }];
     // The assistant's permission page: never inside a frame (clickjacking) and its request id never in a Referer.
@@ -26,6 +35,7 @@ const nextConfig: NextConfig = {
       { key: "Cache-Control", value: "no-store" },
     ];
     return [
+      { source: "/:path*", headers: defaults },
       { source: "/invitacion/:token*", headers: noReferrer },
       { source: "/restablecer/:token*", headers: noReferrer },
       { source: "/autorizar", headers: consent },

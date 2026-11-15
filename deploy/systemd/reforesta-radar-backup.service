@@ -5,5 +5,7 @@ After=docker.service
 
 [Service]
 Type=oneshot
-Environment=APP_DIR=/opt/reforesta-radar
-ExecStart=/opt/reforesta-radar/deploy/backup.sh
+# RADAR_APP; and, for the off-site copy, BACKUP_PAR_URL (root-only file, optional).
+EnvironmentFile=/etc/reforesta-radar/deploy.env
+EnvironmentFile=-/etc/reforesta-radar/backup.env
+ExecStart=/usr/local/sbin/reforesta-radar-backup

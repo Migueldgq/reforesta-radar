@@ -1,6 +1,6 @@
 # 0037. Despliegue en Oracle Cloud Always Free con Caddy, copias diarias y GitHub Actions
 
-- Estado: Aceptada
+- Estado: Sustituida por 0039
 - Fecha: 2026-11-15 (rama `feat/despliegue`)
 - Sustituye a: [0024](0024-alojamiento.md)
 

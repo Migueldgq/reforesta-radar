@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Forced command of the CI deploy key: the only thing that key can run on the server. Installed in
-# ~deploy/.ssh/authorized_keys as
+# Forced command of the CI deploy key: the only thing that key can run on the server. deploy/setup-server.sh installs
+# it as /usr/local/sbin/reforesta-radar-ci-deploy (root-owned) and points ~deploy/.ssh/authorized_keys at it:
 #
-#   command="/opt/reforesta-radar/deploy/ci-deploy.sh",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty ssh-ed25519 AAAA… reforesta-radar-ci
+#   command="/usr/local/sbin/reforesta-radar-ci-deploy",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty ssh-ed25519 AAAA… reforesta-radar-ci
 #
-# The client asks for `deploy <40-hex commit>`; anything else is refused. The commit must exist on origin/main after
-# a fetch (never a pull request or a fork). Then it runs deploy/deploy.sh for that commit. Guide: docs/despliegue.md.
+# The client asks for `deploy <40-hex commit>`; anything else is refused. The `deploy` user has no shell access, no
+# docker group and one sudo rule: running reforesta-radar-deploy (deploy/deploy.sh), which checks again that the
+# commit is on main and deploys it through Dokploy. Guide: docs/despliegue.md.
 set -euo pipefail
 
-APP_DIR=/opt/reforesta-radar
 request=${SSH_ORIGINAL_COMMAND:-}
 
 refuse() {
@@ -20,10 +20,5 @@ refuse() {
 [[ $request =~ ^deploy\ ([0-9a-f]{40})$ ]] || refuse "expected 'deploy <40-hex commit>'"
 sha=${BASH_REMATCH[1]}
 
-cd "$APP_DIR"
-git fetch --quiet --prune origin
-git cat-file -e "$sha^{commit}" 2>/dev/null || refuse "unknown commit $sha"
-git merge-base --is-ancestor "$sha" origin/main || refuse "$sha is not on origin/main"
-
-logger -t reforesta-radar-ci "deploying $sha"
-exec "$APP_DIR/deploy/deploy.sh" "$sha"
+logger -t reforesta-radar-ci "deploy requested: $sha"
+exec sudo -n /usr/local/sbin/reforesta-radar-deploy "$sha"
