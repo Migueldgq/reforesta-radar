@@ -128,11 +128,12 @@ fi
 
 log "Panel not routed by Traefik"
 # Dokploy routes its panel on port 80 for `Host: dokploy.docker.localhost`, which anyone on the internet can send.
-# Keep the file (Dokploy recreates the route if it is missing) but without routes: the panel is tunnel-only.
+# Keep the file (Dokploy recreates the route if it is missing) but with comments only (an empty `http: {}` makes
+# Traefik reject the whole file provider): the panel is tunnel-only.
 panel=/etc/dokploy/traefik/dynamic/dokploy.yml
 if [ ! -f "$panel" ] || grep -q 'dokploy.docker.localhost' "$panel"; then
   printf '%s\n' '# No route to the Dokploy panel: reach it through an SSH tunnel to 127.0.0.1:3000 (docs/despliegue.md).' \
-    '# Giving the panel a domain in Settings -> Web Server rewrites this file (read ADR 0039 first).' 'http: {}' > "$panel"
+    '# Giving the panel a domain in Settings -> Web Server rewrites this file (read ADR 0039 first).' > "$panel"
   echo "removed the dokploy.docker.localhost route"
 fi
 
