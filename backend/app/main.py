@@ -22,6 +22,7 @@ from app.api.state import last_ingest, read_sources, read_state
 from app.auth.accounts import bootstrap_admin
 from app.auth.csrf import csrf_middleware
 from app.auth.deps import current_user
+from app.body_limit import BodyLimitMiddleware
 from app.config import settings
 from app.db.session import make_engine
 from app.models import OpportunitiesResponse, SourcesResponse
@@ -45,6 +46,7 @@ app.add_middleware(
     CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["GET", "POST"], allow_headers=["*"]
 )
 app.middleware("http")(csrf_middleware)
+app.add_middleware(BodyLimitMiddleware)  # added last = runs first: oversized bodies never reach routing
 
 # Open: /health, /api/auth/*, /api/public/*. Everything else needs a session (admin routes check the role too).
 app.include_router(auth.router)
