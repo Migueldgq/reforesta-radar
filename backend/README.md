@@ -23,11 +23,12 @@ curl localhost:8010/api/oportunidades             # OpportunitiesResponse, same 
 
 - API: http://localhost:8010 · OpenAPI docs: http://localhost:8010/docs · Postgres: `localhost:5440` (user,
   password and database `radar`; local development only).
-- Host ports, password and ingest interval are overridable in a root `.env` (see `../.env.example`).
+- Host ports, password and daily ingest time are overridable in a root `.env` (see `../.env.example`).
   `backend/.env.example` is only for running the API or the ingest on the host with `uv run --env-file .env`.
-- Schedule: `ingest-scheduler` is part of the default `docker compose up`; it ingests on start and then every
-  `RADAR_INGEST_EVERY_S` seconds (default 8 h). For anything sturdier use the host's cron with
-  `docker compose run --rm ingest --trigger schedule`.
+- Schedule: `ingest-scheduler` (part of the default `docker compose up`) runs `python -m app.ingest.scheduler`: one
+  ingest a day at `RADAR_INGEST_AT` (default `09:00`, `RADAR_TZ`). It checks every 5 min and runs when no ingest
+  (any trigger) has succeeded since the latest 09:00, so a laptop asleep at 09:00 catches up on waking; it runs
+  right away when the database was never ingested; a failed run is retried an hour later.
 - Migrations by hand: `docker compose run --rm --entrypoint alembic ingest upgrade head`.
 
 ### Without Docker (development)
@@ -67,6 +68,7 @@ backend/
       bdns.py            BDNS connector (68 searches + a memoised detail for every candidate; retries 429 x3)
     ingest/
       __main__.py        CLI (python -m app.ingest), per-source run, summary table
+      scheduler.py       daily run at RADAR_INGEST_AT (python -m app.ingest.scheduler), is_due()
       store.py           one-transaction write: upsert, change log, gone, run records, fetch_cache
       hashing.py         content_hash / dedupe_key (byte-identical to store-pg.ts)
     api/state.py       read path: live items, source health, last ingest

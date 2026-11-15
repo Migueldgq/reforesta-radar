@@ -3,7 +3,7 @@
 #   docker compose up -d postgres api               # backend only (for `npm run dev` on :3000)
 #   docker compose run --rm ingest                  # one ingest run now (all sources)
 #   docker compose run --rm ingest --source boe,rsc # a subset
-# Ports, password and ingest interval: defaults below, overridable in a root .env (see .env.example).
+# Ports, password and daily ingest time: defaults below, overridable in a root .env (see .env.example).
 name: reforesta-radar
 
 x-backend: &backend
@@ -14,7 +14,7 @@ x-backend: &backend
     CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3010} # only for direct browser calls; /api via Next needs none
     RADAR_TZ: ${RADAR_TZ:-Europe/Madrid}
     INGEST_SOURCE_TIMEOUT_S: ${INGEST_SOURCE_TIMEOUT_S:-480}
-    RADAR_INGEST_EVERY_S: ${RADAR_INGEST_EVERY_S:-28800}
+    RADAR_INGEST_AT: ${RADAR_INGEST_AT:-09:00} # daily scheduled ingest, local time in RADAR_TZ
   depends_on:
     postgres:
       condition: service_healthy
@@ -56,14 +56,12 @@ services:
     entrypoint: ["sh", "-c", 'alembic upgrade head && exec python -m app.ingest "$$@"', "ingest"]
     command: []
 
-  # Part of the default `up`: ingests once on start, then every RADAR_INGEST_EVERY_S (8 h). A failed source
-  # keeps its previous rows; a failed run is recorded and retried at the next tick.
+  # Part of the default `up`: ingests once a day at RADAR_INGEST_AT (09:00 Madrid), checking every 5 min so a
+  # sleeping host catches up on waking; also right away if the database was never ingested (app/ingest/scheduler.py).
+  # A failed source keeps its previous rows; a failed run is recorded and retried an hour later.
   ingest-scheduler:
     <<: *backend
-    entrypoint:
-      - sh
-      - -c
-      - 'alembic upgrade head && while true; do python -m app.ingest --trigger schedule; sleep "$$RADAR_INGEST_EVERY_S"; done'
+    entrypoint: ["sh", "-c", "alembic upgrade head && exec python -m app.ingest.scheduler"]
     depends_on:
       api: # the API applies the migrations before it reports healthy
         condition: service_healthy

@@ -6,7 +6,7 @@ El backend es la app de Python en `backend/` (detalles de código, tests y cómo
 ## Arquitectura
 
 ```
-ingest-scheduler (al arrancar y cada 8 h)
+ingest-scheduler (una vez al día, a las 9:00 de Madrid)
    └─ python -m app.ingest ──► fuentes (BDNS, BOE, UE, BOCM, DOG, FB, RSC)
             │  una transacción por ejecución
             ▼
@@ -43,7 +43,7 @@ docker compose ps                   # api "healthy"; la primera ingesta tarda un
 | `web` | http://localhost:3010 (`RADAR_WEB_PORT`) | Next.js `standalone`, usuario sin privilegios. `API_URL=http://api:8000` se fija al construir la imagen (rewrites) y al ejecutar (portada). |
 | `api` | http://localhost:8010 (`RADAR_API_PORT`), docs en `/docs` | Con healthcheck sobre `/health`. |
 | `postgres` | `localhost:5440` (`RADAR_DB_PORT`) | Usuario, contraseña y base `radar` (solo desarrollo; `RADAR_DB_PASSWORD`). |
-| `ingest-scheduler` | — | Ingesta al arrancar y cada `RADAR_INGEST_EVERY_S` (28800 s = 8 h). |
+| `ingest-scheduler` | — | Una ingesta al día a las `RADAR_INGEST_AT` (09:00, hora de Madrid). Comprueba cada 5 min: si el equipo estaba dormido a esa hora, ingesta al despertar; si la base nunca se ha ingestado, ingesta en el acto. Un fallo se reintenta a la hora. |
 
 Los valores se cambian en un `.env` en la raíz (ver `.env.example`). Para el frontend en local con recarga en
 caliente: `docker compose up -d postgres api` y `npm run dev` (usa `API_URL`, por defecto `http://localhost:8010`).
@@ -64,15 +64,14 @@ si fallan todas las fuentes o la escritura.
 El backend anterior en TypeScript (rutas `src/app/api/*`, conectores y caché en `src/lib/`, `.cache/`,
 `scripts/ingest.ts`, la migración de `supabase/` y el workflow de GitHub Actions que ingestaba en Supabase
 3 veces al día) se eliminó al pasar a Python. Ya no hay ingesta en GitHub Actions ni base de datos en Supabase:
-la ingesta programada es el servicio `ingest-scheduler`. Para algo más robusto en un servidor, usar el cron del
-host con `docker compose run --rm ingest --trigger schedule`.
+la ingesta programada es el servicio `ingest-scheduler` (`backend/app/ingest/scheduler.py`).
 
 ## Riesgos conocidos
 
 | Riesgo | Salvaguarda |
 |---|---|
 | Sin copias de seguridad automáticas de Postgres | Pendiente: `pg_dump` periódico del volumen `radar-pgdata`. |
-| El bucle de `ingest-scheduler` no es un cron: si el contenedor se recrea, ingesta otra vez al arrancar | Aceptable (la ingesta es idempotente); usar el cron del host si importa la hora exacta. |
+| Equipo apagado o dormido a las 9:00 | `ingest-scheduler` comprueba cada 5 min e ingesta al despertar si no hubo ninguna ingesta correcta desde las 9:00. |
 | Una fuente cambia su HTML | Se registra en `source_runs`; sus filas anteriores siguen visibles y la fuente sale como parcial o error. |
 
 ## Siguiente tramo
