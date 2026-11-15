@@ -14,6 +14,7 @@ import { api, errorText } from "@/lib/api";
 import type { OpportunitiesResponse, Opportunity } from "@/lib/opportunity";
 import type { BoardItem, Note, PersonRef, TeamPerson } from "@/lib/team";
 import { useSession } from "@/components/auth/session";
+import { importLocalState } from "./import-local";
 import { DEFAULT_FILTERS, filtersFromUrl, noOpenHighFit, urlPinsAhora, withPlazoView, type Filters, type Triage } from "./model";
 import { applyProfileAll, DEFAULT_USER_PROFILE, isNeutral, parseProfile, type UserProfile } from "./profile";
 
@@ -346,14 +347,18 @@ export function RadarProvider({ children }: { children: ReactNode }) {
     [refreshBoard, refreshPeople, refreshSettings],
   );
 
-  // Load once, then every minute and whenever the tab comes back, so colleagues' changes show up.
+  // Load once (after the first-login import), then every minute and whenever the tab comes back, so colleagues' changes show up.
   useEffect(() => {
     let last = 0;
     const run = () => {
       last = Date.now();
       void refreshTeam();
     };
-    run();
+    // Old browser-only state goes to the team first, so the first board read already includes it.
+    void importLocalState().then((msg) => {
+      if (msg) notifyRef.current(msg);
+      run();
+    });
     const t = setInterval(() => document.visibilityState === "visible" && run(), TEAM_POLL_MS);
     const onFocus = () => Date.now() - last > 5000 && run();
     const onVis = () => document.visibilityState === "visible" && onFocus();
