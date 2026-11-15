@@ -76,7 +76,7 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0023](0023-flujo-de-git.md) | Flujo de git: Conventional Commits y PR por tanda | Aceptada | 2026-11-15 |
 | [0024](0024-alojamiento.md) | Alojamiento: VPS pequeño con Dokploy u Oracle Always Free | Propuesta | 2026-11-15 |
 | [0025](0025-servidor-mcp-de-solo-lectura.md) | Servidor MCP de solo lectura para el asistente del equipo | Sustituida por 0026 | 2026-11-15 |
-| [0026](0026-servidor-mcp-de-solo-lectura-con-dos-niveles.md) | Servidor MCP de solo lectura en `/mcp`, con acceso público y de equipo | Aceptada | 2026-11-15 |
+| [0026](0026-servidor-mcp-de-solo-lectura-con-dos-niveles.md) | Servidor MCP de solo lectura en `/mcp`, con acceso público y de equipo | Sustituida por 0035 | 2026-11-15 |
 | [0027](0027-tokens-personales-para-el-mcp.md) | Tokens personales de acceso para el servidor MCP | Aceptada | 2026-11-15 |
 | [0028](0028-plazo-estimado-de-las-convocatorias-sin-fecha.md) | Plazo estimado de las convocatorias BDNS sin fecha de cierre | Sustituida por 0029 | 2026-11-15 |
 | [0029](0029-plazo-estimado-guardado-y-marcado.md) | Plazo estimado: se guarda como fecha de cierre, marcado como estimado | Aceptada | 2026-11-15 |
@@ -85,3 +85,4 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0032](0032-reglas-de-sector-leader-y-licitaciones-de-instalaciones.md) | Asociaciones del sector, grupos LEADER y licitaciones de instalaciones | Aceptada | 2026-11-15 |
 | [0033](0033-analizar-pdf-con-la-nota-del-radar.md) | Analizar PDF: la nota del radar cuando el PDF es de una convocatoria suya | Aceptada | 2026-11-15 |
 | [0034](0034-desactivar-fuentes-por-configuracion.md) | Desactivar fuentes por configuración | Aceptada | 2026-11-15 |
+| [0035](0035-iniciar-sesion-desde-el-asistente-oauth.md) | Iniciar sesión desde el asistente (OAuth 2.1) en una segunda dirección, `/mcp/equipo` | Aceptada | 2026-11-15 |

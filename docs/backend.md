@@ -127,7 +127,9 @@ la ingesta programada es el servicio `ingest-scheduler` (`backend/app/ingest/sch
 - [ ] Quitar `RADAR_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` del `.env` tras el primer arranque; al menos dos admins.
 - [ ] Valorar una vida máxima absoluta de la sesión (hoy: 30 días desde el último uso, sin tope absoluto).
 - [ ] Copias de seguridad de Postgres ([mantenimiento.md](mantenimiento.md#copias-de-seguridad)).
-- [ ] Servidor MCP (`/mcp`): ver la lista de [mcp.md](mcp.md#antes-de-publicarlo-en-internet).
+- [ ] Servidor MCP (`/mcp`, `/mcp/equipo`) e inicio de sesión desde el asistente (`/oauth/*`, ADR 0035): ver la
+      lista de [mcp.md](mcp.md#antes-de-publicarlo-en-internet). El emisor OAuth es `RADAR_PUBLIC_URL`: tiene que ser
+      la URL https exacta que ve el navegador.
 
 ## Riesgos conocidos
 

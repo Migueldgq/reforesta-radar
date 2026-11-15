@@ -11,7 +11,7 @@ Timestamps are ISO 8601 with offset (`2026-11-15T13:18:36.655384+00:00`); dates 
 | Same origin | The browser calls `/api/*` on the web origin; Next.js rewrites it to the API (`next.config.ts`). Never call the API port from the browser. |
 | Session cookie | `radar_session`: opaque random token, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age` 30 days, `Secure` when `RADAR_COOKIE_SECURE=true` (set it behind https). The API sets and clears it; JavaScript can neither read nor needs to. Expiry is server-side, 30 days after the last use (sliding). |
 | CSRF | Every `POST`, `PUT`, `PATCH`, `DELETE` under `/api/` (login and logout included) **must send `X-Radar-CSRF: 1`**. Requests whose `Sec-Fetch-Site` is `cross-site` or `same-site` are rejected even with the header. Missing/wrong → `403 {"detail": "Petición rechazada (falta la cabecera X-Radar-CSRF o viene de otro sitio)."}`. GETs need nothing. Simplest: one `fetch` wrapper that always adds the header (also for the multipart `/api/analyze-pdf`). |
-| Who may call what | Open: `GET /health`, `/api/auth/*`, `/api/public/*`. Everything else under `/api/` needs a session (401 without). `/mcp` has its own rules (no cookie; optional `Bearer` personal token): [mcp.md](mcp.md). Admin-only routes (marked **admin** below) answer 403 to members. Members can edit everything on the board. |
+| Who may call what | Open: `GET /health`, `/api/auth/*`, `/api/public/*`. Everything else under `/api/` needs a session (401 without). `/mcp` and `/mcp/equipo` have their own rules (no cookie; `Bearer` personal token or OAuth access token): [mcp.md](mcp.md). Outside `/api/` (so no session and no CSRF rule, and they read no cookie): the OAuth discovery documents `GET /.well-known/oauth-*` and `/oauth/authorize|token|register|revoke` (ADR 0035), capped at 16 KiB per body. Admin-only routes (marked **admin** below) answer 403 to members. Members can edit everything on the board. |
 | Body size | Bodies over **1 MiB** (16 MiB on `/api/analyze-pdf`) get `413 {"detail": "La petición es demasiado grande."}` before anything else (session check included). |
 | Errors | `{"detail": "<Spanish message, ready to show>"}` with the status code. Validation errors from the schema are FastAPI's `422 {"detail": [{"loc": [...], "msg": "...", ...}]}` (English, for developers: validate in the form before sending). Exceptions: `POST /api/ingest` 409 carries more fields (below); `/api/analyze-pdf` keeps its old `{"error": "..."}` shape. |
 | 401 | `{"detail": "No has iniciado sesión o la sesión ha caducado."}` on any protected route: send the user to the login page (keep the current URL to come back). |
@@ -93,6 +93,33 @@ Personal access tokens are for the read-only MCP server at `/mcp` ([mcp.md](mcp.
 `RADAR_PUBLIC_URL/mcp`); `publicTools` says whether the public tools work without a token. Tokens are revoked whenever
 all of a person's sessions end (password change or reset, role change, deactivation) and stop working while the
 account is inactive. `lastUsedAt` is updated at most every 5 minutes.
+
+## Assistants signed in from the assistant (OAuth, ADR 0035)
+
+| Method + path | Body | 2xx | Errors |
+|---|---|---|---|
+| `POST /api/oauth/consent` | `{request}` (the `solicitud` query parameter of `/autorizar`) | `200 ConsentInfo` | `404` unknown, expired, already decided, or opened in another browser |
+| `POST /api/oauth/consent/decision` | `{request, allow: boolean}` | `200 {redirectTo}`: navigate the browser there (`window.location.assign`) | `404` as above |
+| `GET /api/me/assistants` | – | `200 AssistantsInfo` | – |
+| `DELETE /api/me/assistants/{id}` | – | `204` (its tokens stop working at once) | `404` not mine or not connected |
+
+```ts
+type AssistantKind = "conocido" /* Claude's own callback */ | "local" /* loopback: a program on this computer */ | "desconocido";
+type ConsentInfo = { assistant: string /* self-declared, sanitised */; kind: AssistantKind; redirectHost: string };
+type ConnectedAssistant = { id: number; name: string; kind: AssistantKind; redirectHost: string; createdAt: string; lastUsedAt: string | null };
+type AssistantsInfo = { assistants: ConnectedAssistant[]; teamUrl: string; publicUrl: string; signIn: boolean; publicTools: boolean };
+```
+
+- `/oauth/authorize` sends the browser to `RADAR_PUBLIC_URL/autorizar?solicitud=<id>` and sets the `radar_oauth`
+  cookie (HttpOnly, SameSite=Lax, path `/api/oauth/`, 10 minutes): the consent routes only open a request in the
+  browser that started it. The page sits behind the normal login (`/login?next=/autorizar?solicitud=…`), sends the id
+  in the JSON body, and must never be framed (`next.config.ts` sets `frame-ancestors 'none'`, `X-Frame-Options:
+  DENY`, `Referrer-Policy: no-referrer`).
+- Always show `assistant` next to `redirectHost`, and the warning for `desconocido`: the name is whatever the
+  assistant registered.
+- `signIn: false` when OAuth is off (`RADAR_MCP_OAUTH=false`, or an http `RADAR_PUBLIC_URL` with
+  `RADAR_COOKIE_SECURE=true`): show the personal-token option only.
+- Every grant of a person is revoked with their sessions (password change or reset, role change, deactivation).
 
 ## People
 
