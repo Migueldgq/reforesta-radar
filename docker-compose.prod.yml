@@ -17,7 +17,7 @@ x-prod-env: &prod-env
   CORS_ORIGINS: https://${RADAR_DOMAIN}
   # Traefik replaces any client X-Forwarded-For with the peer address, Next passes it on, and only `web` and the
   # other services of this project sit on this subnet: the API trusts it (and nothing else).
-  FORWARDED_ALLOW_IPS: ${RADAR_NET_SUBNET:-172.28.89.0/24}
+  FORWARDED_ALLOW_IPS: ${RADAR_NET_SUBNET:-172.28.90.0/24}
 
 # Memory caps so another project on the same machine cannot starve the radar (and the radar cannot starve it).
 # Measured idle: 50-100 MB per service. The ingest (scheduler, or a manual `ingest` run) is the hungry one.
@@ -110,7 +110,7 @@ networks:
   default:
     ipam:
       config:
-        - subnet: ${RADAR_NET_SUBNET:-172.28.89.0/24}
+        - subnet: ${RADAR_NET_SUBNET:-172.28.90.0/24}
   # Only `web` and Traefik: other projects on Dokploy's shared network cannot reach the radar.
   edge:
     name: reforesta-radar-edge
