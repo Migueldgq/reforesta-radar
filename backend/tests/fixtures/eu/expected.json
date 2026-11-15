@@ -30,12 +30,12 @@
     "isCompetitive": true,
     "isOngEligible": null,
     "reasons": [
-     "Programa LIFE: el instrumento europeo de referencia para naturaleza y biodiversidad.",
      "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
      "Plazo abierto: quedan 36 días."
     ],
     "warnings": [
-     "Sin encaje temático: ni el título ni la finalidad hablan de vuestras líneas de trabajo."
+     "Sin encaje temático: ni el título ni la finalidad hablan de vuestras líneas de trabajo.",
+     "Subprograma LIFE de transición a la energía limpia: es de energía, no de naturaleza ni biodiversidad."
     ],
     "daysRemaining": 36,
     "deadlineState": "abierta"

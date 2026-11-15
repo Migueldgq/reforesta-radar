@@ -8,6 +8,8 @@ tests/fixtures/<id>/expected.json: what the former TS connector returned on thos
 Items and health must be identical. Edited by hand for SCORING_VERSION 18 (ADR 0040): the EU "European City Facility"
 has no topic match (no organism bonus, "Sin encaje temático" warning), and the only BOCM item, the hospital's poultry
 supply tender, matched "aves" alone and is no longer kept: its recorded candidates hold no environmental call.
+SCORING_VERSION 19 (ADR 0042): the same LIFE call is from the clean-energy sub-programme (CET), so it loses the
+«naturaleza y biodiversidad» reason and carries the CET warning instead.
 """
 
 import json
@@ -108,3 +110,19 @@ def test_bocm_xml_url() -> None:
         bocm.bocm_xml_url(datetime(2026, 11, 3).date(), 264)
         == "https://www.bocm.es/boletin/CM_Boletin_BOCM/2026/11/03/BOCM-20261103264.xml"
     )
+
+
+@pytest.mark.parametrize(
+    ("identifier", "reason", "warning"),
+    [
+        ("LIFE-2025-SAP-NAT", eu.LIFE_REASON, None),
+        ("LIFE-2025-SAP-CLIMA", eu.LIFE_OTHER_REASON, None),
+        ("LIFE-2025-CET-EUCF", None, eu.LIFE_CET_WARNING),
+    ],
+)
+def test_life_reason_follows_the_sub_programme(identifier: str, reason: str | None, warning: str | None) -> None:
+    meta = {"frameworkProgramme": [eu.LIFE_ID], "title": ["Some LIFE call"], "type": ["1"]}
+    raw = eu.to_raw(meta, identifier, "2099-01-01")
+    assert raw is not None and raw.adjust is not None
+    assert raw.adjust.prepend_reasons == ([reason] if reason else [])
+    assert raw.adjust.append_warnings == ([warning] if warning else [])
