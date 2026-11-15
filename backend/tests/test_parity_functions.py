@@ -15,10 +15,17 @@ import pytest
 from app.config import settings
 from app.ingest.hashing import content_hash, dedupe_key
 from app.models import FitAnalysis, Opportunity
-from app.scoring.rank import FACILITY_WARNING, geographic_fit, kind_fit
+from app.scoring.rank import (
+    FACILITY_WARNING,
+    SUPPLY_TENDER_WARNING,
+    WORKS_TENDER_WARNING,
+    geographic_fit,
+    kind_fit,
+)
 from app.scoring.regions import infer_comunidad_autonoma
 from app.scoring.score import (
     LEADER_GROUPS_WARNING,
+    NO_TOPIC_WARNING,
     SECTOR_ASSOCIATIONS_WARNING,
     ScoreInput,
     score_convocatoria,
@@ -41,9 +48,18 @@ def _opp(item: dict[str, Any]) -> Opportunity:
     )
 
 
-# Rules added after the TS (SCORING_VERSION 16): a case that differs only because one of them fired carries its
-# warning, and is checked by its own tests (tests/test_scoring_rules.py) instead.
-INTENDED = (LEADER_GROUPS_WARNING, SECTOR_ASSOCIATIONS_WARNING, FACILITY_WARNING)
+# Rules added after the TS (SCORING_VERSION 16-18): a case that differs only because one of them fired carries its
+# warning, and is checked by its own tests (tests/test_scoring_rules.py) instead. v18 (ADR 0040): every call without a
+# topic match carries NO_TOPIC_WARNING (no "Coincidencia parcial" reason, no bonus for an unchecked organism), and
+# supply and works tenders name their contract.
+INTENDED = (
+    LEADER_GROUPS_WARNING,
+    SECTOR_ASSOCIATIONS_WARNING,
+    FACILITY_WARNING,
+    NO_TOPIC_WARNING,
+    SUPPLY_TENDER_WARNING,
+    WORKS_TENDER_WARNING,
+)
 
 
 def _warnings(got: Any) -> list[str]:
@@ -116,8 +132,10 @@ def test_profile_tables_match_ts() -> None:
     p = TS["profile"]
     # frozen golden at v12; v13-14 added and tuned the BDNS history signal (app/scoring/history.py), v15 the deadline
     # estimate of undated calls (score.estimated_end), v16 one estimated-deadline mechanism flagged as such (ADR 0029),
-    # v17 sector associations, LEADER groups and facility-service tenders (ADR 0032); none of them is in these tables
-    assert p["scoringVersion"] + 5 == SCORING_VERSION
+    # v17 sector associations, LEADER groups and facility-service tenders (ADR 0032), v18 ambiguous keywords and no
+    # organism bonus without a topic match (ADR 0040: KEYWORD_CONTEXT is a new table, KEYWORD_RULES is unchanged);
+    # none of them is in these tables
+    assert p["scoringVersion"] + 6 == SCORING_VERSION
     assert [{"line": g.line, "keywords": [k._asdict() for k in g.keywords]} for g in KEYWORD_RULES] == p["keywordRules"]
     assert list(ONG_POSITIVE_TERMS) == p["ongPositiveTerms"]
     assert [d._asdict() for d in DEALBREAKER_TERMS] == p["dealbreakerTerms"]

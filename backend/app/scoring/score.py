@@ -9,7 +9,14 @@ from datetime import date, datetime, timedelta
 
 from app.config import local_today, settings
 from app.models import Contract, DeadlineState, FitAnalysis, OpportunityKind, Tier, WorkLine
-from app.scoring.profile import DEALBREAKER_TERMS, KEYWORD_RULES, MANUAL_SOURCES, ONG_POSITIVE_TERMS
+from app.scoring.profile import (
+    DEALBREAKER_TERMS,
+    KEYWORD_CONTEXT,
+    KEYWORD_RULES,
+    MANUAL_SOURCES,
+    ONG_POSITIVE_TERMS,
+    Keyword,
+)
 from app.scoring.text import has_term, js_round, normalize_text
 
 DAY_S = 86400.0
@@ -66,6 +73,21 @@ _LEADER_RUNNING = re.compile(r"funcionamiento|animacion|apoyo a los grupos|gesto
 LEADER_GROUPS_WARNING = "Para los Grupos de Desarrollo Rural (LEADER) de la zona: solo ellos pueden pedirla."
 LEADER_GROUPS_PENALTY = 30
 _PERSONAS_FISICAS = re.compile("personas fisicas que desarrollan")
+
+
+NO_TOPIC_WARNING = "Sin encaje temático: ni el título ni la finalidad hablan de vuestras líneas de trabajo."
+
+
+def topic_matches(norm_text: str) -> list[tuple[WorkLine, Keyword]]:
+    """Keywords that count in this (normalised) text. An ambiguous keyword (KEYWORD_CONTEXT) counts only with one of
+    its qualifiers or next to another keyword that is not ambiguous: "aves frescas" alone is not a habitat."""
+    hits = [(g.line, kw) for g in KEYWORD_RULES for kw in g.keywords if has_term(norm_text, kw.term)]
+    specific = any(kw.term not in KEYWORD_CONTEXT for _, kw in hits)
+    return [
+        (line, kw)
+        for line, kw in hits
+        if specific or any(has_term(norm_text, q) for q in KEYWORD_CONTEXT.get(kw.term, ()))
+    ]
 
 
 class ScoreInput(Contract):
@@ -196,16 +218,16 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
     # 1. Topic fit (title + purpose text; never the organism name)
     matched_labels: dict[str, None] = {}
     topic: float = 0
-    for group in KEYWORD_RULES:
-        for kw in group.keywords:
-            if has_term(topic_text, kw.term):
-                # title hits weigh fully; purpose-only hits weigh half
-                topic += kw.weight if has_term(title_norm, kw.term) else kw.weight / 2
-                matched_lines[group.line] = None
-                matched_labels[kw.label] = None
+    for line, kw in topic_matches(topic_text):
+        # title hits weigh fully; purpose-only hits weigh half
+        topic += kw.weight if has_term(title_norm, kw.term) else kw.weight / 2
+        matched_lines[line] = None
+        matched_labels[kw.label] = None
     raw += min(topic, 42)
     if matched_labels:
         reasons.append(f"Encaje temático: {', '.join(list(matched_labels)[:4])}.")
+    else:
+        warnings.append(NO_TOPIC_WARNING)
     if any(t in organo_norm for t in ENV_ORGANISM_TERMS):
         raw += 4
 
@@ -296,8 +318,9 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
     ):
         manual_source_match = "Comunidad de Madrid (ambiental)"
     outside_manual_sources = manual_source_match is None
-    # an unknown organism (a PDF whose heading names none) is not known to be outside them: no reason, no bonus
-    if outside_manual_sources and inp.kind != "empresa" and inp.organismo.strip():
+    # an unknown organism (a PDF whose heading names none) is not known to be outside them: no reason, no bonus.
+    # Without a topic match it is no reason to look either (ADR 0040).
+    if outside_manual_sources and inp.kind != "empresa" and inp.organismo.strip() and matched_labels:
         raw += 4
         reasons.append(
             "No es de los organismos que ya revisáis a mano (Fundación Biodiversidad, MITECO, Comunidad de Madrid, "
@@ -394,9 +417,6 @@ def score_convocatoria(inp: ScoreInput, today: date | None = None) -> FitAnalysi
         score = min(score, 45)
     score = max(0, min(100, score))
 
-    if not reasons:
-        reasons.append("Coincidencia parcial con el ámbito ambiental.")
-
     return FitAnalysis(
         score=score,
         tier=tier_for(score),
@@ -478,7 +498,7 @@ def score_rsc(
     score -= sum(penalty for _, penalty in limits) + (CLOSED_RSC_PENALTY if base.deadline_state == "cerrada" else 0)
     score = max(0, score)
     checked = date.fromisoformat(verified_on)
-    reasons = [r for r in base.reasons if not r.startswith("Coincidencia parcial")]
+    reasons = base.reasons
     return FitAnalysis(
         score=score,
         tier="bajo" if score < 40 else "medio",  # a channel Reforesta does not work yet: never top tier
@@ -493,7 +513,8 @@ def score_rsc(
             f"{checked.year}.",
             "Canal RSC: hoy Reforesta no lo trabaja de forma proactiva.",
         ],
-        warnings=[*(text for text, _ in limits), *base.warnings],
+        # hand-checked focus lines stand in for the keyword match: no "sin encaje temático" warning
+        warnings=[*(text for text, _ in limits), *(w for w in base.warnings if w != NO_TOPIC_WARNING)],
         days_remaining=base.days_remaining,
         deadline_state=base.deadline_state,
     )

@@ -161,6 +161,35 @@ KEYWORD_RULES: tuple[KeywordGroup, ...] = (
     ),
 )
 
+# Keywords that also mean something unrelated ("aves frescas" for a hospital kitchen, "catástrofes naturales",
+# "ecosistema digital", the "Hàbitat3" foundation). Such a keyword counts only when the topic text also has one of its
+# qualifiers, or when another keyword (one not in this table) matched too. Same accent-free word-start matching.
+# Derived from the 15 Nov 2026 data (ADR 0040); terms not listed here were not seen matching noise on their own.
+KEYWORD_CONTEXT: dict[str, tuple[str, ...]] = {
+    "aves": (
+        "silvestre", "estepari", "rapaz", "rapaces", "migrator", "acuatica", "marinas", "amenazad", "nidific", "zepa",
+        "fauna", "ornitolog", "especies de aves", "conservacion de las aves", "proteccion de las aves",
+    ),
+    "natura": (
+        "parque natural", "parques naturales", "paraje natural", "parajes naturales", "espacio natural",
+        "entorno natural", "reserva natural", "reservas naturales", "monumento natural", "patrim. natural",
+        "patrimoni natural", "natura-ondare", "recursos naturales", "valores naturales", "aula de la naturaleza",
+        "aulas de la naturaleza", "aula de naturaleza", "interpretacion de la naturaleza", "defensa de la natura",
+        "proteccion de la naturaleza", "preservacion de la naturaleza", "cuidado de la naturaleza", "naturalizacion",
+        "naturalista", "espais naturals", "espazos naturais",
+    ),
+    "ecosistema": (
+        "ecosistemas naturales", "ecosistema natural", "ecosistemas forestales", "ecosistema forestal",
+        "ecosistemas acuaticos", "ecosistemas fluviales", "ecosistemas marinos", "ecosistemas terrestres",
+        "ecosistemas degradados", "ecosistemas agrarios", "servicios ecosistemicos",
+    ),
+    "habitat": (
+        "habitats naturales", "habitat natural", "habitats de interes", "habitat de especies", "habitats de especies",
+        "mejora de habitat", "mejora del habitat", "mejora de los habitat", "especies", "fauna",
+    ),
+    "sensibilizacion": ("naturaleza", "climatic", "entorno natural"),
+}  # fmt: skip
+
 ONG_POSITIVE_TERMS: tuple[str, ...] = (
     "sin animo de lucro",
     "sin fines de lucro",
