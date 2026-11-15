@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from pydantic import Field
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 
 from app.api.auth import Me, Password, check_password
 from app.auth import mail, throttle
@@ -22,7 +22,7 @@ from app.auth.accounts import (
 from app.auth.deps import Admin, Db, Role, User, client_ip, now, revoke_sessions, start_session
 from app.auth.passwords import hash_password_async, verify_password_async
 from app.config import settings
-from app.db.tables import invitations, users
+from app.db.tables import invitations, password_resets, users
 from app.models import Contract
 
 log = logging.getLogger("auth")
@@ -56,9 +56,19 @@ class PendingInvitation(Contract):
     created_by: int | None
 
 
+class PendingReset(Contract):
+    id: int
+    user_id: int
+    user_name: str
+    created_by: int | None  # null: self-service ("forgot password", only with e-mail)
+    created_at: str
+    expires_at: str
+
+
 class TeamResponse(Contract):
     users: list[TeamUser]
     invitations: list[PendingInvitation]  # pending only: not accepted, not revoked, not expired
+    resets: list[PendingReset]  # unused, unexpired password-reset links
 
 
 class InviteIn(Contract):
@@ -106,6 +116,11 @@ def _team_user(r) -> TeamUser:  # noqa: ANN001
                     created_at=r.created_at.isoformat(), last_login_at=_iso(r.last_login_at))  # fmt: skip
 
 
+def _pending_reset(r) -> PendingReset:  # noqa: ANN001
+    return PendingReset(id=r.id, user_id=r.user_id, user_name=r.name, created_by=r.created_by,
+                        created_at=r.created_at.isoformat(), expires_at=r.expires_at.isoformat())  # fmt: skip
+
+
 def _pending(r) -> PendingInvitation:  # noqa: ANN001
     return PendingInvitation(id=r.id, email=r.email, name=r.name, role=r.role, created_at=r.created_at.isoformat(),
                              expires_at=r.expires_at.isoformat(), created_by=r.created_by)  # fmt: skip
@@ -121,7 +136,14 @@ async def team(_: Admin, conn: Db) -> TeamResponse:
         )  # fmt: skip
         .order_by(invitations.c.created_at.desc())
     )
-    return TeamResponse(users=[_team_user(r) for r in us], invitations=[_pending(r) for r in invs])
+    resets = await conn.execute(
+        select(password_resets, users.c.name)
+        .join(users, users.c.id == password_resets.c.user_id)
+        .where(password_resets.c.used_at.is_(None), password_resets.c.expires_at > now())
+        .order_by(password_resets.c.created_at.desc())
+    )
+    return TeamResponse(users=[_team_user(r) for r in us], invitations=[_pending(r) for r in invs],
+                        resets=[_pending_reset(r) for r in resets])  # fmt: skip
 
 
 @router.post("/api/team/invitations", response_model=InviteOut, status_code=201, responses={400: {}, 409: {}})
@@ -158,11 +180,42 @@ async def revoke_invitation(invitation_id: int, admin: Admin, conn: Db) -> Respo
     return Response(status_code=204)
 
 
+@router.delete("/api/team/resets/{reset_id}", status_code=204, responses={404: {}})
+async def revoke_reset(reset_id: int, admin: Admin, conn: Db) -> Response:
+    res = await conn.execute(
+        update(password_resets)
+        .where(password_resets.c.id == reset_id, password_resets.c.used_at.is_(None))
+        .values(used_at=now())
+    )
+    if res.rowcount == 0:
+        raise HTTPException(404, detail="No hay ningún enlace de restablecimiento pendiente con ese id.")
+    log.info("reset link %d revoked by user %d", reset_id, admin.id)
+    return Response(status_code=204)
+
+
+async def revoke_links_of(conn: Db, user_id: int, own_resets: bool) -> None:
+    """Pending invitations and unused reset links the user created stop working (they lost admin or were
+    deactivated); with `own_resets`, their own unused reset links too (deactivation)."""
+    t = now()
+    await conn.execute(
+        update(invitations)
+        .where(
+            invitations.c.created_by == user_id, invitations.c.accepted_at.is_(None), invitations.c.revoked_at.is_(None)
+        )  # fmt: skip
+        .values(revoked_at=t)
+    )
+    who = password_resets.c.created_by == user_id
+    if own_resets:
+        who = or_(who, password_resets.c.user_id == user_id)
+    await conn.execute(update(password_resets).where(who, password_resets.c.used_at.is_(None)).values(used_at=t))
+
+
 @router.patch(
     "/api/team/users/{user_id}", response_model=TeamUser, responses={404: {}, 409: {"description": LAST_ADMIN}}
 )
 async def patch_user(user_id: int, body: UserPatch, admin: Admin, conn: Db) -> TeamUser:
-    """Change role and/or deactivate / reactivate. Role change and deactivation end the person's sessions."""
+    """Change role and/or deactivate / reactivate. Role change and deactivation end the person's sessions; losing
+    admin or being deactivated also cancels the links that person created."""
     # lock every active admin row: two concurrent demotions cannot both pass the "another admin remains" check
     admins = {r.id for r in await conn.execute(
         select(users.c.id).where(users.c.role == "admin", users.c.active).with_for_update())}  # fmt: skip
@@ -177,6 +230,8 @@ async def patch_user(user_id: int, body: UserPatch, admin: Admin, conn: Db) -> T
         await conn.execute(update(users).where(users.c.id == user_id).values(role=role, active=active))
         if role != target.role or not active:
             await revoke_sessions(conn, user_id)
+        if not active or role != "admin":
+            await revoke_links_of(conn, user_id, own_resets=not active)
         log.info("user %d changed by user %d: role %s->%s active %s->%s",
                  user_id, admin.id, target.role, role, target.active, active)  # fmt: skip
     row = (await conn.execute(select(users).where(users.c.id == user_id))).one()
