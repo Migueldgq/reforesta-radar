@@ -1,0 +1,61 @@
+# Reforesta Radar: Postgres + Python API + on-demand ingest (local development).
+#   docker compose up -d postgres api                          # API on http://localhost:8010 (docs at /docs)
+#   docker compose run --rm ingest                             # one ingest run (all sources)
+#   docker compose run --rm ingest --source boe,rsc            # a subset
+#   docker compose --profile scheduler up -d ingest-scheduler  # optional: ingest every RADAR_INGEST_EVERY_S
+# Ports and password: defaults below, or `docker compose --env-file backend/.env ...` (see backend/.env.example).
+name: reforesta-radar
+
+x-backend: &backend
+  build: ./backend
+  image: reforesta-radar-backend:dev
+  environment: &backend-env
+    DATABASE_URL: postgresql+asyncpg://radar:${RADAR_DB_PASSWORD:-radar}@postgres:5432/radar
+    CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    RADAR_TZ: ${RADAR_TZ:-Europe/Madrid}
+    INGEST_SOURCE_TIMEOUT_S: ${INGEST_SOURCE_TIMEOUT_S:-480}
+    RADAR_INGEST_EVERY_S: ${RADAR_INGEST_EVERY_S:-28800}
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: radar
+      POSTGRES_DB: radar
+      POSTGRES_PASSWORD: ${RADAR_DB_PASSWORD:-radar} # local development default; override via env file
+    ports:
+      - "127.0.0.1:${RADAR_DB_PORT:-5440}:5432"
+    volumes:
+      - radar-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radar -d radar"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    <<: *backend
+    ports:
+      - "127.0.0.1:${RADAR_API_PORT:-8010}:8000"
+    restart: unless-stopped
+
+  ingest:
+    <<: *backend
+    profiles: ["ingest"] # never started by `up`; `docker compose run --rm ingest [args]` targets it explicitly
+    entrypoint: ["sh", "-c", 'alembic upgrade head && exec python -m app.ingest "$$@"', "ingest"]
+    command: []
+
+  ingest-scheduler:
+    <<: *backend
+    profiles: ["scheduler"]
+    entrypoint:
+      - sh
+      - -c
+      - 'alembic upgrade head && while true; do python -m app.ingest --trigger schedule; sleep "$$RADAR_INGEST_EVERY_S"; done'
+    restart: unless-stopped
+
+volumes:
+  radar-pgdata:
