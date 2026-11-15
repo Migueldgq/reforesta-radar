@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { AlarmClock, Building2, ChevronRight, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, SlidersHorizontal, Sprout, Target } from "lucide-react";
+import { AlarmClock, Building2, ChevronRight, Database, DoorOpen, FileSearch, House, Info, ListChecks, Loader2, SlidersHorizontal, Sprout, Target, UsersRound } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AccountMenu } from "@/components/auth/AccountMenu";
-import { SessionGate } from "@/components/auth/session";
+import { SessionGate, useSession } from "@/components/auth/session";
 import { isPublicPath } from "@/lib/api";
 import { DEFAULT_FILTERS, EMPTY_DIMS, fmtFreshness, isClosed, plazoValues, type Filters } from "./model";
 import { RadarProvider, useRadar } from "./store";
@@ -43,6 +43,8 @@ const TOOLS = [
   { href: "/fuentes", label: "Fuentes", icon: Database },
   { href: "/perfil", label: "Perfil", icon: SlidersHorizontal },
 ];
+/** Only for admins (the page itself also refuses members). */
+const ADMIN_TOOLS = [{ href: "/equipo", label: "Equipo", icon: UsersRound }];
 
 type QuickKey = "abierta" | "30d" | "alto";
 const QUICK: { key: QuickKey; label: string; icon: typeof House }[] = [
@@ -88,7 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 function MobileBar() {
   const path = usePathname();
   const { refreshing } = useRadar();
-  const item = [...TOOLS, ...RADAR].find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)));
+  const item = [...TOOLS, ...ADMIN_TOOLS, ...RADAR].find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)));
   return (
     <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-sm md:hidden">
       <SidebarTrigger className="-ml-1" />
@@ -111,6 +113,7 @@ function AppSidebar() {
   const path = usePathname();
   const router = useRouter();
   const { board, data, filters, setFilters, loading } = useRadar();
+  const { isAdmin } = useSession();
   const { isMobile, setOpenMobile } = useSidebar();
   const tracking = Object.values(board).filter((t) => t.status === "estudio" || t.status === "presentar").length;
 
@@ -189,7 +192,7 @@ function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Herramientas</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>{TOOLS.map(navItem)}</SidebarMenu>
+            <SidebarMenu>{(isAdmin ? [...TOOLS, ...ADMIN_TOOLS] : TOOLS).map(navItem)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         <Collapsible defaultOpen className="group/collapsible">
