@@ -123,7 +123,7 @@ Correctness over elegance: same numbers, same Spanish strings, same order of rea
 The goldens and the `expected.json` fixtures are **frozen**: they were dumped from the TypeScript backend before it
 was deleted (the dump tools `tools/dump_ts_*.ts` and `tools/capture_*_inputs.py` went with it; see git history
 before the Python cutover). They pin the scoring as it was at parity. When you change the scoring on purpose,
-update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 18; it is
+update the affected expectations in the tests and bump `SCORING_VERSION` (`app/scoring/__init__.py`, now 19; it is
 stored in `ingest_runs.scoring_version`). A rule added after the TS leaves a warning on every call it changes; list
 that warning in `INTENDED` (`tests/test_parity_functions.py`) so both parity tests excuse those cases, and cover the
 rule in `tests/test_scoring_rules.py` (ADR 0032, ADR 0040).

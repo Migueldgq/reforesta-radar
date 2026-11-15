@@ -33,7 +33,7 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
   desactivados con una explicación, y la web reintenta sola y recarga al volver el servidor. Sin copia guardada
   muestra un estado de error. La portada se pinta sin cifras.
 - Esquema: migraciones de Alembic en `backend/alembic/` (la API las aplica al arrancar).
-- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 18) se guarda en cada `ingest_runs`; súbelo cuando
+- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 19) se guarda en cada `ingest_runs`; súbelo cuando
   cambie la puntuación.
 - Encaje temático (`score.topic_matches`): las palabras clave se buscan en el título y la finalidad, nunca en el
   organismo. Las ambiguas de `profile.KEYWORD_CONTEXT` («aves», «natura», «ecosistema», «hábitat»,

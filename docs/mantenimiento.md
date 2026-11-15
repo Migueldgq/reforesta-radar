@@ -119,7 +119,7 @@ Hay tres niveles, de menos a más técnico:
    - Fallarán a propósito los tests de paridad (`tests/test_parity_functions.py`, `tests/test_parity_golden.py`),
      que congelan la nota de la versión anterior: actualiza las expectativas afectadas (ver
      [backend/README.md](../backend/README.md#scoring-parity-with-the-typescript)).
-   - Sube `SCORING_VERSION` en `backend/app/scoring/__init__.py` (hoy 18).
+   - Sube `SCORING_VERSION` en `backend/app/scoring/__init__.py` (hoy 19).
    - Si cambias el territorio (`GeoFit`), cambia igual `GEO_FIT` en `src/lib/reforesta-profile.ts`: la vista Perfil
      de la web lo usa para sus ajustes por territorio. `tests/test_geo_fit_web_copy.py` falla si no coinciden.
    - Si cambia el comportamiento, escribe un ADR ([docs/adr/README.md](adr/README.md)).
