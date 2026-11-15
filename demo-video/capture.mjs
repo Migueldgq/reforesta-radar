@@ -72,6 +72,8 @@ const CONFIG = {
     company: /Fundación Unicaja/,
     // A real public PDF of a call that is in the radar (BDNS 923290, MITECO): the app gives it the list's own score.
     pdf: path.join(HERE, "../data/samples/miteco-convocatoria-923290.pdf"),
+    // Opened from «Descartadas por la IA» (a real «no» verdict of the AI review).
+    aiDiscarded: /^Ayuda sindicatos de trabajadores/,
     // Invited on camera (fictional; the invitation is revoked by `demo-data.mjs cleanup`).
     invite: { email: "nuria@example.org", name: "Nuria Campos" },
   },
@@ -122,6 +124,10 @@ const CONFIG = {
     inviteReady: [{ css: "[role=dialog]", text: /^Invitación lista/ }],
     inviteDone: [{ css: "[role=dialog] button", text: /^Hecho$/ }],
     perfilSection: (re) => [{ css: "main section", text: re }],
+    aiDiscarded: [{ css: "main [data-testid=descartadas-ia]" }],
+    aiDiscardedRow: (re) => [{ css: "main [data-testid=descartadas-ia] li button", text: re }],
+    aiSection: [{ css: "[role=dialog] section[aria-labelledby=ai-h]" }],
+    aiYes: [{ css: "[role=dialog] section[aria-labelledby=ai-h] button", text: /Sí encaja$/ }],
   },
 };
 
@@ -644,7 +650,8 @@ const ACTIONS = {
     await glide(page, input.x + input.width * 0.6, input.cy, 700, 1.4);
     await voiceAt(0.6);
     const no = await box(await must(page, S.perfilSection(/^Palabras que descartáis/), "Palabras que descartáis"), { scroll: false });
-    await cam({ ...region(no, 18), ceil: no.y - 8 }, { dur: 0.7 });
+    // Taller than the section and starting at its top, so the frame has no masked band above it.
+    await cam({ ...region({ x: no.x, y: no.y + 14, width: no.width, height: 354 }, 18), ceil: no.y - 8 }, { dur: 0.7 });
     await glide(page, no.x + no.width * 0.35, no.y + no.height * 0.55, 700, 1.4);
     // Territories: Madrid, Estatal, UE and the start of the rest.
     await voiceAt(0.8);
@@ -653,6 +660,33 @@ const ACTIONS = {
     const t = await box(terr, { scroll: false });
     await cam(region({ x: t.x, y: t.y, width: t.width, height: Math.min(t.height, 420) }, 18), { dur: 0.8 });
     await glide(page, t.x + t.width * 0.82, t.y + 250, 900, 1.4);
+  },
+
+  async ia(page) {
+    // The «Descartadas por la IA» block, opened before the take (PREPARE): count, what it means, each call and why.
+    const blk = await box(await must(page, S.aiDiscarded, "Descartadas por la IA"), { scroll: false });
+    headline(0);
+    await say(0);
+    // The whole block first (`ceil`: the list above it is not part of the shot), then closer on the count, the
+    // titles and the reasons (their lines end well before the block's right edge).
+    await cam({ ...region(blk, 16), ceil: blk.y - 6 }, { dur: 0 });
+    const row = await box(await must(page, S.aiDiscardedRow(CONFIG.examples.aiDiscarded), "discarded call"), { scroll: false });
+    await glide(page, row.x + row.width * 0.5, row.y + row.height + 30, 900, 1.4);
+    await voiceAt(0.25);
+    await cam({ ...region({ x: blk.x, y: blk.y, width: 900, height: blk.height }, 12), ceil: blk.y - 6 }, { dur: 0.8 });
+    await voiceAt(0.6);
+    // One of them in the detail sheet: the AI's verdict and reason, apart from the score; «Sí encaja» is only hovered.
+    await glide(page, row.x + 120, row.cy, 500, 1.4);
+    await click(page, row.x + 120, row.cy, 150);
+    const ai = await skip(() => must(page, S.aiSection, "Revisión por IA section"));
+    const sh = await sheet(page);
+    await skip(() => scroll(page, { el: ai, at: 0.3, ms: 50, within: DIALOG, speed: null }));
+    const a = await box(ai, { scroll: false });
+    headline(1);
+    await cam({ ...region({ x: sh.left + 20, y: a.y - 10, width: sh.width - 40, height: a.height + 20 }, 10), curtain: sh.left }, { dur: 0.7 });
+    const yes = await box(await must(page, S.aiYes, "Sí encaja"), { scroll: false });
+    await glide(page, yes.cx, yes.cy, 800, 1.4);
+    await sleep(1600); // time to read the reason; the button is never pressed
   },
 
   async empresas(page) {
@@ -888,6 +922,17 @@ const PREPARE = {
     await scroll(page, { dy: a.y - 14, ms: 50 });
     await sleep(400);
   },
+  // The «Descartadas por la IA» block below the list, opened (it is closed by default), in view.
+  async ia(page) {
+    const blk = await must(page, S.aiDiscarded, "Descartadas por la IA");
+    await blk.scrollIntoView();
+    await (await blk.$("button")).click();
+    await sleep(700);
+    await scroll(page, { el: blk, at: 0.12, ms: 50, speed: null });
+    mousePos = { x: CONFIG.viewport.width * 0.6, y: CONFIG.viewport.height * 0.9 };
+    await page.mouse.move(mousePos.x, mousePos.y);
+    await sleep(400);
+  },
   // An invitation left by an earlier take would already be listed: revoke it (through the page, so the privacy
   // filter applies) and reload.
   async invitar(page) {
@@ -909,6 +954,7 @@ const READY = {
   ganasteis: S.notice,
   motivos: S.drawerFit,
   perfil: S.perfilSection(/^Territorio/),
+  ia: S.aiDiscarded,
   empresas: S.empresasCard(CONFIG.examples.company),
   equipo: S.triage,
   seguimiento: S.boardReady,
