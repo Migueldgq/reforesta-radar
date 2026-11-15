@@ -84,3 +84,4 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0031](0031-programas-de-empresas-territorio-y-caducidad.md) | Programas de empresas: su territorio, su etiqueta y aviso de lista caducada | Aceptada | 2026-11-15 |
 | [0032](0032-reglas-de-sector-leader-y-licitaciones-de-instalaciones.md) | Asociaciones del sector, grupos LEADER y licitaciones de instalaciones | Aceptada | 2026-11-15 |
 | [0033](0033-analizar-pdf-con-la-nota-del-radar.md) | Analizar PDF: la nota del radar cuando el PDF es de una convocatoria suya | Aceptada | 2026-11-15 |
+| [0034](0034-desactivar-fuentes-por-configuracion.md) | Desactivar fuentes por configuración | Aceptada | 2026-11-15 |

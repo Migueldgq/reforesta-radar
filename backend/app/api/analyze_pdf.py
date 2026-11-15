@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.datastructures import UploadFile
 
-from app.api.state import iso, read_histories
+from app.api.state import disabled_sources, iso, read_histories
 from app.models import Opportunity
 from app.pdf.analyzer import PdfAnalysisResult, analyze_text, bdns_number, read_pdf
 from app.pdf.download import MAX_PDF_BYTES, BlockedUrl, LruCache, download_pdf
@@ -103,7 +103,7 @@ async def radar_call(request: Request, doc_id: int | None, bdns: str | None) -> 
                 row = (await conn.execute(CALL_BY_DOC_SQL, {"doc": json.dumps([{"docId": doc_id}])})).first()
             if row is None and bdns is not None:
                 row = (await conn.execute(CALL_BY_ID_SQL, {"id": f"bdns:{bdns}"})).first()
-            if row is None:
+            if row is None or row.data.get("source") in disabled_sources():
                 return None
             o = Opportunity.model_validate({**row.data, "firstSeenAt": iso(row.first_seen_at)})
             history = (await read_histories(conn, [o.id])).get(o.id)
