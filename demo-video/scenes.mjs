@@ -105,11 +105,12 @@ export const SCENES = [
   },
   {
     // The AI review (ADR 0041) only takes out what has nothing to do with the team; it never sets the score.
-    // Phase 2: replace this statement with a short shot of «Descartadas por la IA» once the feature is on locally.
+    // Real verdicts only: the «Descartadas por la IA» block opened, then one of them in the detail sheet with its
+    // «Revisión por IA» section and «Sí encaja» (hovered, never pressed).
     id: "ia",
-    kind: "statement",
-    duration: 3.2,
-    lines: ["Una inteligencia artificial", "*solo ayuda a descartar.*"],
+    kind: "screen",
+    route: "/",
+    headlines: ["Lo que la IA descarta, *a la vista*", "¿Se equivoca? *Sí encaja*"],
     voice: [{ text: "Una inteligencia artificial solo ayuda a descartar lo que no tiene que ver." }],
   },
   {
