@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarProvider open={open ?? cookieOpen} onOpenChange={setOpen}>
           <AppSidebar />
           <SidebarInset className="min-w-0">
-            <Header />
+            <MobileBar />
             <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">{children}</main>
           </SidebarInset>
           <DetailDrawer />
@@ -77,36 +77,26 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function Header() {
+/** Mobile only: the sidebar is an off-canvas sheet there, so its trigger has to live outside it. */
+function MobileBar() {
   const path = usePathname();
   const { refreshing } = useRadar();
+  const item = [...TOOLS, ...RADAR].find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)));
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-sm sm:px-6">
+    <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-sm md:hidden">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
-      <Crumb path={path} />
+      {item && (
+        <span className="truncate text-sm text-muted-foreground" aria-current="page">
+          {item.label}
+        </span>
+      )}
       {refreshing && (
         <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
           <Loader2 className="size-3.5 animate-spin" aria-hidden /> Actualizando…
         </span>
       )}
     </header>
-  );
-}
-
-/** Quiet "Section / Page" label; the page's own h1 carries the title. */
-function Crumb({ path }: { path: string }) {
-  const tool = TOOLS.find((n) => path.startsWith(n.href));
-  const item = tool ?? RADAR.find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)));
-  if (!item) return null;
-  return (
-    <nav aria-label="Ruta" className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-      <span>{tool ? "Herramientas" : "Radar"}</span>
-      <ChevronRight className="size-3.5 shrink-0 opacity-60" aria-hidden />
-      <span className="truncate" aria-current="page">
-        {item.label}
-      </span>
-    </nav>
   );
 }
 
@@ -165,8 +155,8 @@ function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
+        <SidebarMenu className="flex-row items-center group-data-[collapsible=icon]:flex-col">
+          <SidebarMenuItem className="min-w-0 flex-1">
             <SidebarMenuButton asChild size="lg" tooltip="Reforesta Radar">
               <Link href="/" onClick={close}>
                 <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
@@ -179,6 +169,7 @@ function AppSidebar() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          <SidebarTrigger className="size-8 shrink-0 text-muted-foreground" />
         </SidebarMenu>
       </SidebarHeader>
 
