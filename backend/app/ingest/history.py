@@ -101,7 +101,8 @@ async def run_history(engine: AsyncEngine, memo: Memo, items: list[Opportunity],
     previous = [r for r in rows if r["numero"] != r["call_numero"]]
     print(
         f"[history] saved: {sum(1 for rs in out.values() if rs)} calls with history, {len(previous)} past editions "
-        f"({sum(1 for r in previous if r['awards_count'] is not None)} with awards checked) · {requests} requests "
-        f"({throttled}× 429) · {time.monotonic() - t0:.0f} s",
+        f"({sum(1 for r in previous if r['awards_count'] is not None)} with awards checked), "
+        f"{len(numeros) - len(out)} calls not read (earlier rows kept) · {requests} requests ({throttled}× 429) · "
+        f"{time.monotonic() - t0:.0f} s",
         flush=True,
     )
