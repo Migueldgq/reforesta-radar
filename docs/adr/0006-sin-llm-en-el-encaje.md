@@ -1,6 +1,6 @@
 # 0006. Sin LLM en el encaje, por ahora
 
-- Estado: Aceptada (con condición de revisión)
+- Estado: Sustituida por 0041
 - Fecha: 2026-11-14 (03f68f1, «No usa inteligencia artificial generativa ni claves de API» en el `README.md`)
 
 ## Contexto

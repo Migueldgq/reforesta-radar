@@ -143,9 +143,8 @@ Opcional y apagada sin `GEMINI_API_KEY` ([ADR 0041](adr/0041-revision-por-ia-que
   `ingest-scheduler` ejecuta el paso de revisión una vez, y la ingesta diaria sigue con lo que quede (como mucho
   `RADAR_AI_MAX_CALLS` por ejecución). Mientras tanto esas convocatorias se ven sin veredicto, nunca con uno viejo.
   Si solo cambia el texto de una convocatoria, solo se pregunta por esa.
-- **A mano**: `docker compose run --rm ingest-scheduler python -m app.ingest.review` (o
-  `docker compose exec ingest-scheduler python -m app.ingest.review`) pide los veredictos que falten sin leer las
-  fuentes.
+- **A mano**: `docker compose exec ingest-scheduler python -m app.ingest.review` pide los veredictos que falten sin
+  leer las fuentes.
 - **Apagarla** sin quitar la clave: `RADAR_AI_REVIEW=false` y `docker compose up -d`. La app vuelve a ser exactamente
   como sin la revisión; los veredictos guardados se quedan en `ai_reviews` por si se vuelve a encender.
 

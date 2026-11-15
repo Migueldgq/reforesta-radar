@@ -6,13 +6,14 @@ El backend es la app de Python en `backend/` (detalles de código, tests y cómo
 ## Arquitectura
 
 ```
-ingest-scheduler (una vez al día, a las 9:00 de Madrid)
+ingest-scheduler (una vez al día, a las 9:00 de Madrid, y al arrancar si cambió SCORING_VERSION)
    └─ python -m app.ingest ──► fuentes (BDNS, BOE, UE, BOCM, DOG, FB, RSC)
+            │                  y, tras guardar, Google Gemini (opcional: Revisión por IA)
             │  una transacción por ejecución
             ▼
    Postgres 16: opportunities · opportunity_changes · ingest_runs · source_runs · fetch_cache · bdns_editions
                 users · sessions · invitations · password_resets · tracking · tracking_notes · org_settings ·
-                votes · ingest_requests · personal_tokens
+                votes · ingest_requests · personal_tokens · ai_reviews
             ▲  lectura / escritura del equipo
    API FastAPI (/api/oportunidades, /api/fuentes, /api/perfil, /api/analyze-pdf, /api/auth, /api/board, …, /mcp)
             ▲  rewrite /api/* (next.config.ts, API_URL)
@@ -47,6 +48,29 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
   puntos si Reforesta u ONG ambientales afines ganaron ediciones anteriores y avisa si casi nunca gana una entidad
   sin ánimo de lucro. Si falla o se agota su tiempo (`HISTORY_TIMEOUT_S`, 30 min), la ingesta sigue siendo
   correcta. Detalles en [backend/README.md](../backend/README.md).
+- `SCORING_VERSION` nueva tras desplegar: `ingest-scheduler` ve que la última ingesta correcta se puntuó con otra y
+  lanza una en el acto (`trigger = scoring`), sin esperar a las 9:00.
+
+## Revisión por IA
+
+Opcional; apagada sin `GEMINI_API_KEY` o con `RADAR_AI_REVIEW=false`, y entonces la app es exactamente la de antes
+([ADR 0041](adr/0041-revision-por-ia-que-solo-descarta.md)). Código: `app/review.py` (petición, validación, lectura)
+y `app/ingest/review.py` (el paso de la ingesta).
+
+- Qué hace: tras guardar la ingesta, a la vez que el historial BDNS, pide a Google Gemini (`RADAR_AI_MODEL`, por
+  defecto `gemini-flash-lite-latest`) un veredicto `si` / `no` / `dudoso` y un motivo de una frase para cada
+  convocatoria sin veredicto vigente (no los programas de empresas). Solo envía título, organismo, tipo y finalidad.
+  Nunca toca la nota.
+- Caché: `ai_reviews`, una fila por convocatoria con el hash del texto enviado, `PROMPT_VERSION` y el modelo; si
+  cambia cualquiera, se vuelve a preguntar (solo por esa convocatoria, o por todas si cambian instrucciones o modelo).
+- Límites: 2 peticiones a la vez, 30 s cada una, 2 reintentos tras 429/5xx con la espera que pide Google, parada tras
+  3 respuestas 429 seguidas, como mucho `RADAR_AI_MAX_CALLS` (300) por ingesta y 30 min en total. Cualquier fallo =
+  sin veredicto: la convocatoria sigue en la lista. La ingesta nunca falla por esto.
+- Lectura: `read_state` añade `aiReview` solo si el veredicto sigue vigente. `/api/oportunidades` deja fuera los `no`
+  salvo que la convocatoria esté en el tablero o tenga un voto «sirve» (`?descartadas=1` los incluye; la web los pide
+  todos y hace la misma cuenta en el navegador). `/api/public/oportunidades` deja fuera todos los `no`.
+- A mano, sin leer las fuentes: `docker compose exec ingest-scheduler python -m app.ingest.review`. Mantenimiento en
+  [mantenimiento.md](mantenimiento.md#revisión-por-ia).
 
 ## Puesta en marcha
 

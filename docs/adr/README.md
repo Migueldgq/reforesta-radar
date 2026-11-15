@@ -56,7 +56,7 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0003](0003-backend-python-fastapi-postgres-docker.md) | Backend en Python (FastAPI) y Postgres, todo en Docker | Aceptada | 2026-11-15 |
 | [0004](0004-nextjs-solo-frontend.md) | Next.js solo como frontend que reenvía `/api/*` | Aceptada | 2026-11-15 |
 | [0005](0005-puntuacion-por-reglas-explicable.md) | Puntuación por reglas, explicada punto por punto | Aceptada | 2026-11-14 |
-| [0006](0006-sin-llm-en-el-encaje.md) | Sin LLM en el encaje, por ahora | Aceptada | 2026-11-14 |
+| [0006](0006-sin-llm-en-el-encaje.md) | Sin LLM en el encaje, por ahora | Sustituida por 0041 | 2026-11-14 |
 | [0007](0007-ajustes-de-territorio-y-tipo-al-leer.md) | Ajustes de territorio y tipo al leer, con topes | Aceptada | 2026-11-14 |
 | [0008](0008-conservar-cerradas-como-proxima-edicion.md) | Conservar las convocatorias cerradas como próxima edición | Aceptada | 2026-11-14 |
 | [0009](0009-bdns-ficha-completa-de-cada-candidata.md) | BDNS: leer la ficha completa de cada candidata | Aceptada | 2026-11-15 |
@@ -91,3 +91,5 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0038](0038-pruebas-de-extremo-a-extremo-y-comprobaciones-tras-desplegar.md) | Pruebas de extremo a extremo con Playwright y comprobaciones tras desplegar | Aceptada | 2026-11-15 |
 | [0039](0039-despliegue-con-dokploy.md) | Despliegue con Dokploy en la misma VM de Oracle, con el panel solo por túnel SSH | Aceptada | 2026-11-15 |
 | [0040](0040-palabras-ambiguas-y-sin-bonificacion-sin-tema.md) | Palabras clave ambiguas y ninguna bonificación sin encaje temático | Aceptada | 2026-11-15 |
+| [0041](0041-revision-por-ia-que-solo-descarta.md) | Revisión por IA: una segunda opinión que solo descarta, nunca puntúa | Aceptada | 2026-11-15 |
+| [0042](0042-licitaciones-de-instalaciones-por-su-objeto-y-motivo-life-por-subprograma.md) | Licitaciones de instalaciones juzgadas por su objeto y motivo LIFE según el subprograma | Aceptada | 2026-11-15 |
