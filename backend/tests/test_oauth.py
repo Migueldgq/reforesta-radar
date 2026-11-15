@@ -364,7 +364,11 @@ async def test_token_refusals(engine: AsyncEngine, running: None, member: httpx.
     assert res.status_code == 200, res.text
     first = res.json()
 
-    # code reuse: refused, and the grant it produced is revoked
+    # code reuse: within REUSE_GRACE (a retry) refused but nothing revoked; later, the grant it produced is revoked
+    assert (await exchange(engine, cid, code, verifier)).json()["error"] == "invalid_grant"
+    assert (await team_status(engine, first["access_token"])).status_code == 200
+    async with engine.begin() as conn:
+        await conn.execute(update(oauth_codes).values(used_at=oauth_codes.c.used_at - timedelta(seconds=11)))
     assert (await exchange(engine, cid, code, verifier)).json()["error"] == "invalid_grant"
     assert (await team_status(engine, first["access_token"])).status_code == 401
     assert (await refresh(engine, cid, first["refresh_token"])).json()["error"] == "invalid_grant"
@@ -382,6 +386,11 @@ async def test_token_refusals(engine: AsyncEngine, running: None, member: httpx.
     _, tokens = await sign_in(engine, member, client)
     rotated = (await refresh(engine, cid, tokens["refresh_token"])).json()
     assert (await refresh(engine, other["client_id"], rotated["refresh_token"])).json()["error"] == "invalid_grant"
+    assert (await refresh(engine, cid, tokens["refresh_token"])).json()["error"] == "invalid_grant"  # a retry
+    assert (await team_status(engine, rotated["access_token"])).status_code == 200  # ...within the grace: kept
+    async with engine.begin() as conn:
+        await conn.execute(update(oauth_tokens).where(oauth_tokens.c.used_at.is_not(None))
+                           .values(used_at=oauth_tokens.c.used_at - timedelta(seconds=11)))  # fmt: skip
     assert (await refresh(engine, cid, tokens["refresh_token"])).json()["error"] == "invalid_grant"  # reuse
     assert (await team_status(engine, rotated["access_token"])).status_code == 401
     assert (await refresh(engine, cid, rotated["refresh_token"])).json()["error"] == "invalid_grant"
@@ -402,12 +411,25 @@ async def test_token_refusals(engine: AsyncEngine, running: None, member: httpx.
     assert (await refresh(engine, cid, tokens["refresh_token"])).status_code == 200  # the refresh token still works
 
 
-async def test_parallel_exchanges_of_one_code_give_one_token(engine: AsyncEngine, member: httpx.AsyncClient) -> None:
+async def test_parallel_exchanges_give_one_token_and_keep_it(engine: AsyncEngine, running: None,  # noqa: F811
+                                                              member: httpx.AsyncClient) -> None:  # fmt: skip
+    """A client retrying (or racing itself) right after the first use gets `invalid_grant` for the duplicates, and the
+    tokens the winner received keep working: the duplicates do not count as a stolen code or refresh token."""
     client = await new_client(engine)
+    cid = client["client_id"]
     verifier, challenge = pkce()
-    code = (await consent(member, request_id(await authorize(member, client["client_id"], challenge))))["code"][0]
-    results = await asyncio.gather(*(exchange(engine, client["client_id"], code, verifier) for _ in range(5)))
-    assert sorted(r.status_code for r in results) == [200, 400, 400, 400, 400]
+    code = (await consent(member, request_id(await authorize(member, cid, challenge))))["code"][0]
+    results = await asyncio.gather(*(exchange(engine, cid, code, verifier) for _ in range(12)))
+    assert sorted(r.status_code for r in results) == [200] + [400] * 11
+    assert all(r.json()["error"] == "invalid_grant" for r in results if r.status_code == 400)
+    [won] = [r.json() for r in results if r.status_code == 200]
+    assert (await team_status(engine, won["access_token"])).status_code == 200
+
+    results = await asyncio.gather(*(refresh(engine, cid, won["refresh_token"]) for _ in range(12)))
+    assert sorted(r.status_code for r in results) == [200] + [400] * 11  # never two valid pairs
+    [new] = [r.json() for r in results if r.status_code == 200]
+    assert (await team_status(engine, new["access_token"])).status_code == 200
+    assert (await refresh(engine, cid, new["refresh_token"])).status_code == 200
 
 
 async def test_revocation_paths(engine: AsyncEngine, running: None, member: httpx.AsyncClient,  # noqa: F811

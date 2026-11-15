@@ -7,9 +7,11 @@ URI, grant types), this module stores and decides.
 - /oauth/authorize never signs anyone in: it records the request (10 minutes, bound to the browser by a cookie nonce)
   and sends the browser to the web's consent page, `/autorizar?solicitud=…`, behind the normal login.
 - Code: single use, 60 s, bound to client, redirect URI, PKCE challenge, person and resource. Presenting a used code
-  again revokes the grant it produced (RFC 6749 §4.1.2).
+  again revokes the grant it produced (RFC 6749 §4.1.2), unless within REUSE_GRACE of the first use (a retry or a
+  parallel duplicate: refused, nothing revoked).
 - Access token: 1 hour, audience = the grant's resource (the team MCP URL), checked on every /mcp/equipo call.
-- Refresh token: rotated on every use. Presenting a rotated one again revokes the whole grant (reuse detection).
+- Refresh token: rotated on every use. Presenting a rotated one again revokes the whole grant (reuse detection),
+  with the same grace for a concurrent duplicate (refused; never a second pair of tokens).
   The grant (and so the refresh token) dies after REFRESH_DAYS without use.
 - A grant stops working when the person is deactivated and is revoked by `revoke_sessions` (password change or
   reset, role change, deactivation), by "Desconectar" in Mi cuenta and by /oauth/revoke.
@@ -269,8 +271,11 @@ class RadarOAuthProvider:
             if row is None or row.client_id != client.client_id:
                 return None
             if row.used_at is not None:
-                log.warning("oauth: authorization code reused, grant %d revoked", row.grant_id)
-                await revoke_grant(conn, row.grant_id)
+                # A retry or a parallel duplicate right after the first use is refused without revoking (it would
+                # take away the tokens the first request just received); later reuse looks like a stolen code.
+                if _now() - row.used_at > REUSE_GRACE:
+                    log.warning("oauth: authorization code reused, grant %d revoked", row.grant_id)
+                    await revoke_grant(conn, row.grant_id)
                 return None
             if row.revoked_at is not None or not row.active:
                 return None
@@ -351,8 +356,10 @@ class RadarOAuthProvider:
             if row is None or row.client_id != client.client_id:
                 return None
             if row.used_at is not None:
-                log.warning("oauth: rotated refresh token presented again, grant %d revoked", row.grant_id)
-                await revoke_grant(conn, row.grant_id)
+                # Same grace as codes: a concurrent duplicate gets `invalid_grant` (never a second pair of tokens).
+                if t - row.used_at > REUSE_GRACE:
+                    log.warning("oauth: rotated refresh token presented again, grant %d revoked", row.grant_id)
+                    await revoke_grant(conn, row.grant_id)
                 return None
             if row.revoked_at is not None or not row.active or row.expires_at <= t or row.grant_expires_at <= t:
                 return None
