@@ -51,9 +51,17 @@ class OpportunityDocument(Contract):
 
 
 class RscInfo(Contract):
-    why_reforesta: str
-    pitch_angle: str
-    cadence: str
+    """Facts of a private programme, checked by hand on the funder's own site (app/sources/rsc.py)."""
+
+    kind: Literal["ayuda", "premio"]  # premio: rewards finished work, does not fund a new project
+    why_reforesta: str  # why it may fit
+    limits: list[str]  # what limits it for Reforesta (also listed as fit warnings)
+    requirements: list[str]
+    territory: str | None  # where the project must take place, when the funder limits it
+    window: str  # last application window, as published
+    timing: str | None  # when the next edition may open
+    verified_on: str  # YYYY-MM-DD
+    unverified: str | None  # what could not be checked, if anything
 
 
 class OpportunityBase(Contract):

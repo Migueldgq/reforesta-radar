@@ -18,7 +18,8 @@ from app.sources.base import score_raw
 from tests.golden_reconstruct import GAPS, reconstruct, scoring_day
 
 GOLDEN: dict[str, Any] = json.loads((Path(__file__).parent / "golden" / "oportunidades.json").read_text())
-ITEMS: list[dict[str, Any]] = GOLDEN["items"]
+# RSC items are excluded: the hand-checked list in app/sources/rsc.py replaced the TS one (tested in test_sources).
+ITEMS: list[dict[str, Any]] = [i for i in GOLDEN["items"] if i["source"] != "rsc"]
 
 # Items whose TS fit cannot be reproduced from the API fields alone (inputs missing from the API output, see
 # GAPS). Keep this list explicit: a new mismatch fails the test until it is explained here.

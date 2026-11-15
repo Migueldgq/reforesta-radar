@@ -1,5 +1,8 @@
-"""RSC: hand-curated private / CSR programmes (ports of src/lib/rsc-opportunities.ts and rscItems() in
-src/lib/aggregate.ts). No network: the list lives here and is edited by hand.
+"""RSC: private programmes (foundations and companies) that fund environmental projects of Spanish non-profits.
+
+No network: the list lives here and is edited by hand. Every fact was checked on the funder's own site or bases on
+`VERIFIED_ON`; amounts and dates are copied as published. When an edition ends, update its window and dates (the
+deadline state comes from them, like any call). This is the only copy of the list: the web app reads it from the API.
 """
 
 from typing import Literal, NamedTuple
@@ -7,103 +10,217 @@ from typing import Literal, NamedTuple
 from app.models import RscInfo, SourceHealth, WorkLine
 from app.sources.base import FetchResult, RawOpportunity, RscScoreInput, Source, SourceContext
 
+VERIFIED_ON = "2026-11-15"
+
+
+class Limit(NamedTuple):
+    text: str  # shown as a warning and under "Qué lo limita"
+    penalty: int  # points off the curated score
+
 
 class RscProgramme(NamedTuple):
     id: str
     entity: str
     program: str
-    type: Literal["Fundación privada", "Programa RSC", "Convocatoria mixta"]
+    kind: Literal["ayuda", "premio"]
     focus: list[WorkLine]
-    typical_amount: str
-    cadence: str
+    url: str  # the programme's own page
+    bases_url: str | None
+    amount: str  # as published
+    opens_at: str  # last window, YYYY-MM-DD
+    deadline: str
+    window: str  # last window, in words
+    timing: str | None  # when the next edition may open
+    about: str  # what it funds, from the source
+    beneficiarios: list[str]
+    requirements: list[str]
+    territory: str | None
     why_reforesta: str
-    pitch_angle: str
-    url: str
+    limits: list[Limit]
+    unverified: str | None = None
 
 
 RSC_PROGRAMMES: tuple[RscProgramme, ...] = (
     RscProgramme(
-        id="rsc-iberdrola",
-        entity="Fundación Iberdrola España",
-        program="Programa Social & Biodiversidad (Convocatoria anual de ayudas)",
-        type="Fundación privada",
+        id="rsc-unicaja-medioambiente",
+        entity="Fundación Unicaja",
+        program="Convocatoria de proyectos de Medio Ambiente",
+        kind="ayuda",
+        focus=["conservacion", "restauracion", "educacion"],
+        url="https://www.fundacionunicaja.com/convocatoria-medio-ambiente/",
+        bases_url="https://www.fundacionunicaja.com/wp-content/uploads/2026/11/Bases-Convocatoria-Medio-Ambiente.pdf",
+        amount="Entre 10.000 € y 100.000 € por proyecto",
+        opens_at="2026-11-05",
+        deadline="2026-12-04",
+        window="Del 5 nov al 4 dic 2026, hasta las 14:00. Resuelve antes del 12 feb 2027.",
+        timing=None,
+        about="Financia proyectos que conserven y restauren la biodiversidad y el patrimonio natural de Andalucía y "
+        "la provincia de Ciudad Real, y proyectos de educación y sensibilización ambiental.",
+        beneficiarios=["Entidades públicas o privadas con domicilio en España"],
+        requirements=[
+            "Entidad legalmente constituida y con domicilio en España.",
+            "El proyecto se hace en Andalucía o en la provincia de Ciudad Real.",
+            "Una sola propuesta por entidad, de 12 meses como máximo.",
+            "Incluir una actividad en la que pueda participar el voluntariado de Fundación Unicaja.",
+        ],
+        territory="Andalucía o provincia de Ciudad Real",
+        why_reforesta="Financia conservación y restauración de bosques y espacios naturales, y educación ambiental: "
+        "lo mismo que hace Reforesta.",
+        limits=[
+            Limit(
+                "Solo proyectos en Andalucía o en la provincia de Ciudad Real: Reforesta tendría que trabajar allí.",
+                8,
+            )
+        ],
+    ),
+    RscProgramme(
+        id="rsc-ibercaja-medioambiente",
+        entity="Fundación Ibercaja",
+        program="Convocatoria Sostenibilidad y Protección del Medioambiente",
+        kind="ayuda",
         focus=["restauracion", "conservacion", "educacion"],
-        typical_amount="20.000 € – 40.000 € por proyecto",
-        cadence="Convocatoria anual (primer trimestre)",
-        why_reforesta="Financian proyectos de conservación de biodiversidad, restauración de hábitats y educación "
-        "ambiental ejecutados por entidades sin ánimo de lucro.",
-        pitch_angle="Proponer restauración de riberas o mejora de hábitat de aves/anfibios con métricas claras de "
-        "hectáreas recuperadas y voluntariado corporativo.",
-        url="https://www.fundacioniberdrolaespana.org/",
+        url="https://www.fundacionibercaja.es/convocatorias/convocatoria-2026-sostenibilidad-y-proteccion-del-"
+        "medioambiente/",
+        bases_url="https://www.fundacionibercaja.es/resources/activities/documents/1780390157-1780390156732.pdf",
+        amount="Hasta 20.000 €; la ayuda nunca supera lo que aporta la entidad",
+        opens_at="2026-06-02",
+        deadline="2026-06-30",
+        window="Del 2 al 30 jun 2026, hasta las 12:00. En 2025 el plazo se amplió hasta el 28 oct.",
+        timing="Fecha variable: en 2025 cerró en octubre; en 2026, en junio",
+        about="Apoya proyectos de entidades sin ánimo de lucro en conservación de la biodiversidad y espacios "
+        "naturales (gestión forestal sostenible, restauración), economía circular, sostenibilidad rural y "
+        "educación ambiental.",
+        beneficiarios=["Asociaciones y fundaciones sin ánimo de lucro"],
+        requirements=[
+            "Asociación o fundación inscrita en su registro hace al menos 2 años.",
+            "Al menos 2 años de experiencia demostrada en medio ambiente.",
+            "Poner al menos tanto dinero como se pide: la ayuda nunca supera lo que aporta la entidad.",
+            "Tener cuenta en Ibercaja Banco al firmar el convenio.",
+            "Un proyecto por entidad, en España, de 12 meses como máximo.",
+        ],
+        territory=None,
+        why_reforesta="Es de ámbito nacional y entre sus líneas están la gestión forestal sostenible, la "
+        "restauración de espacios naturales y la educación ambiental.",
+        limits=[
+            Limit("Cofinanciación: Reforesta debe aportar al menos lo mismo que pide (máximo 20.000 €).", 3),
+            Limit("Hay que tener cuenta en Ibercaja Banco para firmar el convenio.", 2),
+        ],
     ),
     RscProgramme(
-        id="rsc-montemadrid",
-        entity="Fundación Montemadrid & CaixaBank",
-        program="Convocatoria de Medioambiente y Desarrollo Sostenible",
-        type="Fundación privada",
-        focus=["conservacion", "educacion", "restauracion"],
-        typical_amount="10.000 € – 35.000 €",
-        cadence="Anual (Comunidad de Madrid y alrededores)",
-        why_reforesta="Encaje geográfico directo con el histórico de Reforesta en Madrid y Sierra de Guadarrama; "
-        "prioridad a ONG locales con trayectoria.",
-        pitch_angle="Control de especies invasoras (ailanto) y creación de charcas para tritones/anfibios con "
-        "participación ciudadana.",
-        url="https://www.fundacionmontemadrid.es/",
+        id="rsc-bbva-futuro",
+        entity="BBVA Asset Management",
+        program="Convocatoria Solidaria BBVA Futuro",
+        kind="ayuda",
+        focus=["restauracion"],
+        url="https://www.bbva.com/es/es/sostenibilidad/bbva-asset-management-repartira-un-millon-de-euros-en-"
+        "proyectos-solidarios-y-priorizara-los-de-reforestacion/",
+        bases_url=None,
+        amount="Medioambiente: un premio de 72.000 € y cuatro de 32.000 € (edición 2026)",
+        opens_at="2026-01-16",
+        deadline="2026-02-16",
+        window="Del 16 ene al 16 feb 2026 (octava edición).",
+        timing="La edición anterior abrió en enero de 2026",
+        about="Donaciones a proyectos sociales y medioambientales desarrollados en España. En 2026 dio prioridad a "
+        "la restauración, la reforestación y la prevención de incendios, y a las zonas quemadas en 2025.",
+        beneficiarios=["Por comprobar en las bases"],
+        requirements=[
+            "Proyecto desarrollado en España.",
+            "En medioambiente, prioridad a reforestación, restauración y prevención de incendios.",
+        ],
+        territory=None,
+        why_reforesta="En 2026 priorizó la reforestación y la recuperación de zonas quemadas: el núcleo del trabajo "
+        "de Reforesta.",
+        limits=[Limit("Requisitos de la entidad sin comprobar: leed las bases antes de preparar nada.", 4)],
+        unverified="No hemos podido leer las bases (bloquean la descarga automática): los datos salen de la nota de "
+        "prensa de BBVA. Quién puede presentarse está sin comprobar.",
     ),
     RscProgramme(
-        id="rsc-endesa",
-        entity="Endesa / Fundación Endesa",
-        program="Premios y alianzas de Biodiversidad y Ecosistemas",
-        type="Programa RSC",
+        id="rsc-endesa-biodiversidad",
+        entity="Fundación Endesa",
+        program="Convocatoria de ayudas a proyectos de Biodiversidad",
+        kind="ayuda",
         focus=["conservacion", "restauracion"],
-        typical_amount="15.000 € – 60.000 € (patrocinio o convenio)",
-        cadence="Continuo / Anual",
-        why_reforesta="Reforesta ya tiene experiencia en mejora de hábitat de aves con empresas de energía: caso de "
-        "éxito replicable.",
-        pitch_angle="Ofrecer paquete llave en mano: mejora de hábitat avifauna + plantación autóctona bajo "
-        "líneas/entornos rurales con reporte de impacto.",
-        url="https://www.fundacionendesa.org/",
+        url="https://www.fundacionendesa.org/es/biodiversidad/convocatoria-proyectos-biodiversidad",
+        bases_url="https://www.fundacionendesa.org/content/dam/fundacion-endesa-com/biodiversidad/ii-convocatoria-"
+        "de-biodiversidad/Bases%20Convocatoria%20Biodiversidad.pdf",
+        amount="100.000 € por proyecto (dos proyectos, uno por categoría)",
+        opens_at="2026-09-15",
+        deadline="2026-10-16",
+        window="Del 15 sep al 16 oct 2026 (II edición). La I edición fue del 15 sep al 27 oct de 2025.",
+        timing="Suele abrir en septiembre",
+        about="Financia proyectos de conservación de especies en peligro de extinción o vulnerables en España.",
+        beneficiarios=["Entidades privadas sin ánimo de lucro registradas en España"],
+        requirements=[
+            "Entidad privada sin ánimo de lucro registrada en España, con la conservación en sus estatutos.",
+            "Al menos dos ejercicios completos de actividad en proyectos de conservación.",
+            "Cuentas de los dos últimos años auditadas por un auditor externo.",
+            "La especie del proyecto debe estar en un catálogo de especies amenazadas (estatal o autonómico).",
+            "Fundación Endesa paga al menos el 60 % del coste; el proyecto dura un año.",
+        ],
+        territory=None,
+        why_reforesta="Solo encaja si Reforesta mejora el hábitat de una especie catalogada como amenazada.",
+        limits=[
+            Limit("Exige cuentas de los dos últimos años auditadas por un auditor externo.", 6),
+            Limit(
+                "Solo especies de un catálogo de especies amenazadas; no paga proyectos que sean solo de educación "
+                "o sensibilización.",
+                6,
+            ),
+        ],
     ),
     RscProgramme(
-        id="rsc-repsol",
-        entity="Fundación Repsol (Motor Verde)",
-        program="Reforestación y sumideros de carbono en España",
-        type="Programa RSC",
-        focus=["restauracion", "agroambiental"],
-        typical_amount="Convenio por hectárea plantada",
-        cadence="Ventanilla abierta para propietarios y entidades ejecutoras",
-        why_reforesta="Buscan socios técnicos sobre el terreno con acuerdos de custodia del territorio y capacidad de "
-        "plantación en zonas quemadas.",
-        pitch_angle="Presentar cartera de terrenos municipales/privados con acuerdos de custodia listos para "
-        "reforestar.",
-        url="https://www.fundacionrepsol.com/",
+        id="rsc-fbbva-premio-biodiversidad",
+        entity="Fundación BBVA",
+        program="Premios Biodiversidad: Premio Biodiversidad España",
+        kind="premio",
+        focus=["conservacion", "restauracion", "educacion"],
+        url="https://www.biophilia-fbbva.es/premios/xxi-premios-biodiversidad/",
+        bases_url="https://www.biophilia-fbbva.es/wp-content/uploads/sites/3/2025/12/bases-xxi-premios-"
+        "biodiversidad.pdf",
+        amount="250.000 € (conservación en España) · 80.000 € (educación y comunicación ambiental en España)",
+        opens_at="2026-01-30",
+        deadline="2026-04-30",
+        window="Del 30 ene al 30 abr 2026 (XXI edición).",
+        timing="La edición anterior abrió en enero de 2026",
+        about="Premia proyectos de conservación de hábitats, especies o ecosistemas en España ya terminados y con "
+        "resultados, y trabajos de educación y comunicación ambiental.",
+        beneficiarios=["Entidades sin ánimo de lucro con sede en España"],
+        requirements=[
+            "Entidad sin ánimo de lucro con sede en España, constituida antes de 2024.",
+            "Proyecto ya terminado (antes del 31 dic 2025 en la XXI edición) con resultados medibles.",
+            "La propia entidad puede presentar su candidatura.",
+        ],
+        territory=None,
+        why_reforesta="Si Reforesta tiene una restauración terminada con resultados medidos, o un programa de "
+        "educación ambiental, puede presentarlo.",
+        limits=[Limit("Es un premio a trabajo ya terminado, no dinero para un proyecto nuevo.", 8)],
     ),
     RscProgramme(
-        id="rsc-lacaixa",
-        entity="Fundación ”la Caixa”",
-        program="Convocatorias Territoriales (Medioambiente e inclusión)",
-        type="Fundación privada",
-        focus=["educacion", "restauracion"],
-        typical_amount="15.000 € – 50.000 €",
-        cadence="Anual por comunidad autónoma",
-        why_reforesta="Valoran proyectos ambientales que incorporen empleo verde, voluntariado o educación ambiental "
-        "con colectivos vulnerables.",
-        pitch_angle="Combinar educación ambiental + brigadas o talleres de plantación inclusivos en parques "
-        "regionales.",
-        url="https://fundacionlacaixa.org/",
-    ),
-    RscProgramme(
-        id="rsc-santander",
-        entity="Banco Santander (Santander España)",
-        program="Convocatoria Santander Sostenible / Proyectos medioambientales",
-        type="Programa RSC",
-        focus=["restauracion", "educacion", "agroambiental"],
-        typical_amount="10.000 € – 30.000 €",
-        cadence="Anual",
-        why_reforesta="Canal directo para ONGs españolas con proyectos medibles en reforestación y programas "
-        "agroambientales.",
-        pitch_angle="Programa agroambiental con agricultores + apadrinamiento de árboles con seguimiento anual.",
-        url="https://www.bancosantander.es/",
+        id="rsc-prezero-sumate",
+        entity="PreZero",
+        program="Súmate: convocatoria de ayudas a proyectos sociales y medioambientales",
+        kind="ayuda",
+        focus=["educacion"],
+        url="https://prezero.com/es/sumate-prezero",
+        bases_url=None,
+        amount="Sin cifra fija: lo que donan los empleados, duplicado por la empresa, se reparte entre un máximo de "
+        "10 proyectos",
+        opens_at="2026-09-01",
+        deadline="2026-10-04",
+        window="Del 1 sep al 4 oct 2026 (V convocatoria).",
+        timing="La edición anterior abrió en septiembre de 2026",
+        about="Apoya proyectos de ONG y fundaciones, sobre todo de inclusión sociolaboral y de concienciación "
+        "medioambiental (incluida la educación ambiental). Los empleados votan los ganadores.",
+        beneficiarios=["Organizaciones privadas sin ánimo de lucro registradas en España"],
+        requirements=[
+            "Organización privada sin ánimo de lucro con domicilio en España, inscrita hace al menos 1 año.",
+            "El proyecto incluye voluntariado abierto al personal de PreZero.",
+            "Se ejecuta en 12 meses; ganan los proyectos que votan los empleados.",
+        ],
+        territory=None,
+        why_reforesta="Pide voluntariado y prioriza la concienciación ambiental: encaja con jornadas de plantación "
+        "con voluntarios.",
+        limits=[Limit("Importe incierto: depende de lo que done la plantilla.", 4)],
     ),
 )
 
@@ -114,8 +231,8 @@ RSC_HEALTH = SourceHealth(
     status="ok",
     count=0,
     url="",
-    note="Lista curada a mano de programas privados que financian proyectos ambientales de ONG en España "
-    "(sin plazo fijo).",
+    note="Lista hecha a mano de programas privados que financian proyectos ambientales de ONG en España, "
+    "comprobada en la web de cada entidad el 15 nov 2026.",
 )
 
 
@@ -129,14 +246,35 @@ def to_raw(r: RscProgramme) -> RawOpportunity:
         organismo=r.entity,
         region="Estatal",
         nivel_admin="Privada",
-        deadline_text=r.cadence,
-        amount_text=r.typical_amount,
-        tipo=r.type,
-        beneficiarios=["Entidades sin ánimo de lucro"],
+        opens_at=r.opens_at,
+        deadline=r.deadline,
+        deadline_text=r.window,
+        amount_text=r.amount,
+        tipo="Premio" if r.kind == "premio" else "Ayuda a proyectos",
+        beneficiarios=r.beneficiarios,
         url=r.url,
-        summary=r.why_reforesta,
-        rsc=RscInfo(why_reforesta=r.why_reforesta, pitch_angle=r.pitch_angle, cadence=r.cadence),
-        score_input=RscScoreInput(titulo=r.program, focus=r.focus, why_reforesta=r.why_reforesta),
+        bases_url=r.bases_url,
+        summary=r.about,
+        rsc=RscInfo(
+            kind=r.kind,
+            why_reforesta=r.why_reforesta,
+            limits=[lim.text for lim in r.limits],
+            requirements=r.requirements,
+            territory=r.territory,
+            window=r.window,
+            timing=r.timing,
+            verified_on=VERIFIED_ON,
+            unverified=r.unverified,
+        ),
+        score_input=RscScoreInput(
+            titulo=r.program,
+            focus=r.focus,
+            about=r.about,
+            opens_at=r.opens_at,
+            deadline=r.deadline,
+            limits=[(lim.text, lim.penalty) for lim in r.limits],
+            verified_on=VERIFIED_ON,
+        ),
     )
 
 
