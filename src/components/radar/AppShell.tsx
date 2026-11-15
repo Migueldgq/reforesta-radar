@@ -25,6 +25,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SessionGate } from "@/components/auth/session";
+import { isPublicPath } from "@/lib/api";
 import { DEFAULT_FILTERS, EMPTY_DIMS, fmtFreshness, isClosed, plazoValues, type Filters } from "./model";
 import { RadarProvider, useRadar } from "./store";
 import { DetailDrawer } from "./Drawer";
@@ -59,20 +61,23 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Sidebar state persists in shadcn's `sidebar_state` cookie; read it on the client only.
   const cookieOpen = useSyncExternalStore(noop, () => !document.cookie.includes("sidebar_state=false"), () => true);
   const [open, setOpen] = useState<boolean | null>(null);
-  if (path.startsWith("/landing")) return <RadarProvider>{children}</RadarProvider>;
+  // Public pages (landing, login, links with a token) never load team data.
+  if (isPublicPath(path)) return children;
   return (
-    <RadarProvider>
-      <TooltipProvider delayDuration={300}>
-        <SidebarProvider open={open ?? cookieOpen} onOpenChange={setOpen}>
-          <AppSidebar />
-          <SidebarInset className="min-w-0">
-            <MobileBar />
-            <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">{children}</main>
-          </SidebarInset>
-          <DetailDrawer />
-        </SidebarProvider>
-      </TooltipProvider>
-    </RadarProvider>
+    <SessionGate>
+      <RadarProvider>
+        <TooltipProvider delayDuration={300}>
+          <SidebarProvider open={open ?? cookieOpen} onOpenChange={setOpen}>
+            <AppSidebar />
+            <SidebarInset className="min-w-0">
+              <MobileBar />
+              <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">{children}</main>
+            </SidebarInset>
+            <DetailDrawer />
+          </SidebarProvider>
+        </TooltipProvider>
+      </RadarProvider>
+    </SessionGate>
   );
 }
 

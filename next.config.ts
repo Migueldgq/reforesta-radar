@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
     // answers 413 itself past that, so leave room for the file plus multipart overhead.
     proxyClientMaxBodySize: "16mb",
   },
+  async headers() {
+    // Invitation and reset links carry a one-time token in the path: keep it out of any Referer.
+    const noReferrer = [{ key: "Referrer-Policy", value: "no-referrer" }];
+    return [
+      { source: "/invitacion/:token*", headers: noReferrer },
+      { source: "/restablecer/:token*", headers: noReferrer },
+    ];
+  },
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${API_URL}/api/:path*` }];
   },
