@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publishes or hides the Dokploy panel at https://panel.miguelddev.com (ADR 0042, docs/despliegue.md). Installed by
+# Publishes or hides the Dokploy panel at https://panel.miguelddev.com (ADR 0043, docs/despliegue.md). Installed by
 # deploy/setup-server.sh as /usr/local/sbin/reforesta-panel; runs as root:
 #
 #   sudo reforesta-panel status    # is the route installed? how many panel users have 2FA?

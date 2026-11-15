@@ -17,7 +17,7 @@ Internet ──▶ cortafuegos de Oracle (lista de seguridad de la VCN: 22, 80, 
          ──▶ web :3000 (Next.js; reenvía /api/*, /mcp*, /oauth/*, /.well-known/oauth-* a la API)
          ──▶ api :8000 (FastAPI) ──▶ postgres :5432
              ingest-scheduler (carga diaria a las 9:00, hora de Madrid)
-Panel de Dokploy :3000 ── desde el propio servidor (túnel SSH); y, si se publica (ADR 0042),
+Panel de Dokploy :3000 ── desde el propio servidor (túnel SSH); y, si se publica (ADR 0043),
                           Traefik :443 solo para panel.miguelddev.com
 ```
 
@@ -81,7 +81,7 @@ y abre <http://localhost:3300> (el 3000 local lo usa `npm run dev`). Cierra el t
 
 ### El panel con dominio (`panel.miguelddev.com`)
 
-[ADR 0042](adr/0042-panel-de-dokploy-con-dominio-publico.md) (propuesta). Más cómodo (entra desde el móvil), pero
+[ADR 0043](adr/0043-panel-de-dokploy-con-dominio-publico.md) (propuesta). Más cómodo (entra desde el móvil), pero
 **el panel equivale a root en la máquina** (controla Docker): quien entre controla el servidor y todos los proyectos.
 Un interruptor en el servidor, `reforesta-panel` (`deploy/panel.sh`, instalado por `setup-server.sh`):
 
@@ -102,7 +102,7 @@ Let's Encrypt en segundos. `private` lo borra. El radar no se corta en ningún c
 3. En el servidor: `cd /opt/reforesta-radar && sudo git pull` (si aún no tiene este cambio),
    `sudo ./deploy/setup-server.sh` (instala `reforesta-panel`) y `sudo reforesta-panel public`.
 4. Desde fuera: `PANEL_URL=https://panel.miguelddev.com deploy/smoke.sh https://reforesta-radar.miguelddev.com`, y
-   entra en el panel. En el ADR 0042, estado «Aceptada».
+   entra en el panel. En el ADR 0043, estado «Aceptada».
 
 **Qué hace la ruta:** solo `Host: panel.miguelddev.com`, solo por https (en http, 301 a https); cualquier otro
 nombre, la IP sola o `dokploy.docker.localhost` dan 404. Certificado del resolvedor `letsencrypt` de siempre (cuenta
@@ -490,5 +490,5 @@ Ubuntu 24.04 con acceso SSH y `sudo`. Abre 80 y 443 en la lista de seguridad de 
 
 5. **Datos:** el primer administrador del radar (arriba) o restaurar una copia («Restaurar de verdad»); la clave de
    despliegue («Rotar la clave de despliegue»). Comprueba con `deploy/smoke.sh https://<dominio>`.
-6. **El panel con dominio** (opcional, ADR 0042): con 2FA ya activado en el panel, `sudo reforesta-panel public`
+6. **El panel con dominio** (opcional, ADR 0043): con 2FA ya activado en el panel, `sudo reforesta-panel public`
    («El panel con dominio», arriba). Si el dominio del panel cambia, cámbialo en `deploy/traefik-panel.yml`.

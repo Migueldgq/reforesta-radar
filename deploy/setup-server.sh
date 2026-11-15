@@ -137,7 +137,7 @@ if [ ! -f "$panel" ] || grep -q 'dokploy.docker.localhost' "$panel"; then
   echo "removed the dokploy.docker.localhost route"
 fi
 
-log "Panel switch (reforesta-panel public|private|status, ADR 0042)"
+log "Panel switch (reforesta-panel public|private|status, ADR 0043)"
 # The panel stays private unless someone runs `reforesta-panel public` (which requires 2FA on every panel user). If it
 # is already public, refresh its route from this checkout.
 install -m 755 "$APP_DIR/deploy/panel.sh" /usr/local/sbin/reforesta-panel
