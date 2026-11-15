@@ -41,6 +41,14 @@ export function loginUrl(next?: string): string {
   return n === "/" ? "/login" : `/login?next=${encodeURIComponent(n)}`;
 }
 
+/**
+ * Full page load, on purpose: after signing in or out the app must start from scratch (fresh session
+ * check, no state from the previous user), which a client-side navigation would not give.
+ */
+export function hardNavigate(path: string) {
+  window.location.assign(path);
+}
+
 let redirecting = false;
 
 function toLogin() {
