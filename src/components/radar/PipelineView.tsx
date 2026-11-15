@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { daysLeft, fmtDate, tidy, TRIAGE_LABELS, type Triage } from "./model";
 import { useRadar, type TriageEntry } from "./store";
-import { DeadlineChip, ScoreChip, TriageSelect } from "./ui";
+import { Deadline, ScoreChip, TriageSelect } from "./ui";
 
 /* ---------- Seguimiento ---------- */
 
@@ -285,8 +285,8 @@ function TrackCard({
         </h3>
         <p className="truncate text-xs text-muted-foreground">{tidy(o.organismo)}</p>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {row.o ? <DeadlineChip o={row.o} /> : <span className="text-xs text-muted-foreground">Ya no aparece en las fuentes</span>}
+      <div className="flex flex-wrap items-start gap-1.5">
+        {row.o ? <Deadline o={row.o} /> : <span className="text-xs text-muted-foreground">Ya no aparece en las fuentes</span>}
         {row.o && <ScoreChip fit={row.o.fit} size="sm" />}
       </div>
       <div className="flex items-center justify-between gap-2">

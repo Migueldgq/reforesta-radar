@@ -51,9 +51,17 @@ class OpportunityDocument(Contract):
 
 
 class RscInfo(Contract):
-    why_reforesta: str
-    pitch_angle: str
-    cadence: str
+    """Facts of a private programme, checked by hand on the funder's own site (app/sources/rsc.py)."""
+
+    kind: Literal["ayuda", "premio"]  # premio: rewards finished work, does not fund a new project
+    why_reforesta: str  # why it may fit
+    limits: list[str]  # what limits it for Reforesta (also listed as fit warnings)
+    requirements: list[str]
+    territory: str | None  # where the project must take place, when the funder limits it
+    window: str  # last application window, as published
+    timing: str | None  # when the next edition may open
+    verified_on: str  # YYYY-MM-DD
+    unverified: str | None  # what could not be checked, if anything
 
 
 class OpportunityBase(Contract):
@@ -82,9 +90,61 @@ class OpportunityBase(Contract):
     rsc: RscInfo | None = Field(default=None, exclude_if=_absent_if_none)
 
 
+class EditionAwards(Contract):
+    """Who won one past edition, reduced to counts (never beneficiary names: some are natural persons)."""
+
+    count: int
+    non_profit: int  # NIF starting with G (associations, foundations)
+    importe: float | None
+
+
+class HistoryEdition(Contract):
+    year: int  # year the edition was registered in BDNS
+    numero: str
+    url: str
+    opened_at: str | None  # YYYY-MM-DD: start of applications, else journal extract date, else BDNS registration
+    closes_at: str | None
+    window: str | None  # "10 días hábiles", "30 días naturales"...
+    match: float | None = None  # title similarity (Jaccard) with the current call: 0.5-1.0
+    awards: EditionAwards | None  # None: not checked (BDNS has awards only from 2022)
+
+
+class TypicalOpening(Contract):
+    from_: int = Field(alias="from")  # month 1-12
+    to: int
+    text: str  # ready Spanish phrase: "Suele abrir entre marzo y abril"
+    irregular: bool
+
+
+class ReforestaWin(Contract):
+    year: int
+    importe: float | None
+
+
+class AwardsSummary(Contract):
+    editions: list[int]  # years of the past editions the counts come from (the last 2 with awards)
+    total: int
+    non_profit: int
+    non_profit_share: float
+    by_class: dict[str, int]  # sinAnimo, empresa, ayuntamiento, publico, persona, cooperativa, ...
+    won_by_reforesta: list[ReforestaWin]  # every checked past edition
+    peers: list[str]  # curated environmental NGOs among the winners of the checked past editions
+
+
+class History(Contract):
+    """Previous editions of a BDNS call (newest first; the current call is not listed) and who won them."""
+
+    editions: list[HistoryEdition]
+    typical_opening: TypicalOpening | None
+    typical_window: str | None
+    awards: AwardsSummary | None
+
+
 class Opportunity(OpportunityBase):
     fit: FitAnalysis
     first_seen_at: str | None = Field(default=None, exclude_if=_absent_if_none)  # ISO; Postgres store only
+    # BDNS only, attached at read time from bdns_editions (never part of the stored item or its content hash)
+    history: History | None = Field(default=None, exclude_if=_absent_if_none)
 
 
 class SourceHealth(Contract):

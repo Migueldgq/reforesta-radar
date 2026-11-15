@@ -1,0 +1,116 @@
+[
+{
+"descripcion": "MINISTERIO PARA LA TRANSICIÓN ECOLÓGICA Y EL RETO DEMOGRÁFICO",
+"id": 30,
+"children": [
+{
+"descripcion": "AGENCIA ESTATAL DE METEOROLOGÍA (AEMET)",
+"id": 63
+},
+{
+"descripcion": "CONFEDERACIÓN HIDROGRÁFICA DEL CANTÁBRICO, O.A.",
+"id": 1990
+},
+{
+"descripcion": "CONFEDERACIÓN HIDROGRÁFICA DEL DUERO",
+"id": 1850
+},
+{
+"descripcion": "CONFEDERACIÓN HIDROGRÁFICA DEL EBRO",
+"id": 1851
+},
+{
+"descripcion": "CONFEDERACIÓN HIDROGRÁFICA DEL GUADALQUIVIR",
+"id": 1852
+},
+{
+"descripcion": "CONFEDERACIÓN HIDROGRÁFICA DEL GUADIANA",
+"id": 1853
+},
+{
+"descripcion": "CONFEDERACIÓN HIDROGRÁFICA DEL JÚCAR",
+"id": 1987
+},
+{
+"descripcion": "CONFEDERACIÓN HIDROGRÁFICA DEL MIÑO-SIL",
+"id": 1988
+},
+{
+"descripcion": "CONFEDERACIÓN HIDROGRÁFICA DEL SEGURA, O.A.",
+"id": 1989
+},
+{
+"descripcion": "CONFEDERACIÓN HIDROGRÁFICA DEL TAJO",
+"id": 1991
+},
+{
+"descripcion": "DIRECCIÓN GENERAL DE BIODIVERSIDAD, BOSQUES Y DESERTIFICACIÓN",
+"id": 6430
+},
+{
+"descripcion": "DIRECCIÓN GENERAL DE CALIDAD Y EVALUACIÓN AMBIENTAL",
+"id": 1724
+},
+{
+"descripcion": "DIRECCIÓN GENERAL DE LA COSTA Y EL MAR",
+"id": 6681
+},
+{
+"descripcion": "DIRECCIÓN GENERAL DE POLÍTICA ENERGÉTICA Y MINAS",
+"id": 1985
+},
+{
+"descripcion": "DIRECCIÓN GENERAL DE POLÍTICAS CONTRA LA DESPOBLACIÓN",
+"id": 6493
+},
+{
+"descripcion": "DIRECCIÓN GENERAL DE SERVICIOS",
+"id": 6489
+},
+{
+"descripcion": "DIRECCIÓN GENERAL DEL AGUA",
+"id": 1723
+},
+{
+"descripcion": "FUNDACIÓN BIODIVERSIDAD",
+"id": 466
+},
+{
+"descripcion": "FUNDACIÓN CIUDAD DE LA ENERGÍA - CIUDEN",
+"id": 5553
+},
+{
+"descripcion": "INSTITUTO PARA LA DIVERSIFICACIÓN Y AHORRO DE LA ENERGÍA (IDAE)",
+"id": 1941
+},
+{
+"descripcion": "INSTITUTO PARA LA TRANSICIÓN JUSTA, O.A.",
+"id": 711
+},
+{
+"descripcion": "MANCOMUNIDAD DE LOS CANALES DEL TAIBILLA",
+"id": 1992
+},
+{
+"descripcion": "OFICINA ESPAÑOLA DEL CAMBIO CLIMÁTICO",
+"id": 719
+},
+{
+"descripcion": "ORGANISMO AUTÓNOMO PARQUES NACIONALES",
+"id": 557
+},
+{
+"descripcion": "SECRETARÍA DE ESTADO DE ENERGÍA",
+"id": 6862
+},
+{
+"descripcion": "SECRETARÍA DE ESTADO DE MEDIO AMBIENTE",
+"id": 716
+},
+{
+"descripcion": "SUBSECRETARÍA PARA LA TRANSICIÓN ECOLÓGICA Y EL RETO DEMOGRÁFICO",
+"id": 4644
+}
+]
+}
+]

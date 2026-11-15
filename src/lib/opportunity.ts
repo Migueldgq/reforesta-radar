@@ -23,9 +23,47 @@ export interface Opportunity {
   basesUrl: string | null;
   documents: OpportunityDocument[];
   summary: string | null;     // 1-3 sentences: purpose / finalidad if known
-  rsc?: { whyReforesta: string; pitchAngle: string; cadence: string };
+  rsc?: RscInfo;              // private programmes only (source "rsc")
   fit: FitAnalysis;           // existing type in src/lib/types.ts
   firstSeenAt?: string;       // ISO; only with the Postgres store (first ingest that saw it)
+  history?: History | null;   // BDNS only: previous editions and who won them (null/absent when unknown)
+}
+/** Facts of a private programme, checked by hand on the funder's own site (backend/app/sources/rsc.py). */
+export interface RscInfo {
+  kind: "ayuda" | "premio"; // premio: rewards finished work, does not fund a new project
+  whyReforesta: string;
+  limits: string[];         // what limits it for Reforesta (also in fit.warnings)
+  requirements: string[];
+  territory: string | null; // where the project must take place, when the funder limits it
+  window: string;           // last application window, as published
+  timing: string | null;    // when the next edition may open
+  verifiedOn: string;       // YYYY-MM-DD
+  unverified: string | null; // what could not be checked
+}
+/** Previous editions of a BDNS call (newest first; the current one is not listed). Never names natural persons. */
+export interface History {
+  editions: HistoryEdition[];
+  typicalOpening: { from: number; to: number; text: string; irregular: boolean } | null; // text: ready Spanish phrase
+  typicalWindow: string | null; // "10 días hábiles"
+  awards: AwardsSummary | null;
+}
+export interface HistoryEdition {
+  year: number;
+  numero: string;
+  url: string;              // BDNS page of that edition
+  openedAt: string | null;  // YYYY-MM-DD
+  closesAt: string | null;
+  window: string | null;    // "10 días hábiles"
+  awards: { count: number; nonProfit: number; importe: number | null } | null; // null: not checked
+}
+export interface AwardsSummary {
+  editions: number[];       // years the counts come from
+  total: number;
+  nonProfit: number;
+  nonProfitShare: number;
+  byClass: Record<string, number>; // sinAnimo, empresa, ayuntamiento, publico, persona, cooperativa, ...
+  wonByReforesta: { year: number; importe: number | null }[];
+  peers: string[];          // environmental NGOs among the winners
 }
 export interface OpportunitiesResponse {
   items: Opportunity[]; sources: SourceHealth[]; fetchedAt: string; cached: boolean;

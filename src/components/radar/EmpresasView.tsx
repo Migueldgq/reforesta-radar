@@ -1,20 +1,148 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
-import { useMemo } from "react";
+import { ArrowUpRight, BadgeCheck, FileText, MapPin, TriangleAlert } from "lucide-react";
+import { useMemo, type ReactNode } from "react";
+import type { Opportunity } from "@/lib/opportunity";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fmtEuros } from "./model";
-import { ScoreChip, TriageSelect } from "./ui";
+import { fmtDayShort, fmtEuros, parseDay } from "./model";
+import { Deadline, ScoreChip, TriageSelect } from "./ui";
 import { useRadar } from "./store";
 
 const STEPS = [
-  "Elegid dos o tres programas de la lista: arriba están los que más se parecen a lo que hacéis.",
+  "Elegid dos o tres programas: arriba están los abiertos y los que mejor encajan.",
   "Marcadlos «En estudio» para que aparezcan en Seguimiento y nadie los pierda de vista.",
-  "Escribid un primer correo corto usando el ángulo sugerido de cada programa.",
+  "Antes de preparar nada, abrid las bases: aquí solo hay un resumen de los requisitos.",
 ];
+
+/** "15 nov 2026" */
+function fmtChecked(s: string): string {
+  const t = parseDay(s);
+  return t == null ? s : `${fmtDayShort(t)} ${new Date(t).getUTCFullYear()}`;
+}
+
+function List({ items }: { items: string[] }) {
+  return (
+    <ul className="space-y-1">
+      {items.map((x) => (
+        <li key={x} className="flex gap-2 leading-relaxed">
+          <span className="mt-[0.6em] size-1 shrink-0 rounded-full bg-muted-foreground/60" aria-hidden />
+          <span>{x}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Label({ children }: { children: ReactNode }) {
+  return <h4 className="text-xs font-medium text-muted-foreground">{children}</h4>;
+}
+
+function ProgrammeCard({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
+  const r = o.rsc;
+  const amount = o.amountText ?? fmtEuros(o.budget) ?? "Importe variable";
+  const title = o.titulo.startsWith(`${o.organismo} — `) ? o.titulo.slice(o.organismo.length + 3) : o.titulo;
+  return (
+    <Card className="gap-5 p-5 shadow-none">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0 flex-1 basis-64 space-y-1">
+          <p className="text-xs text-muted-foreground">{o.organismo}</p>
+          <h3 className="text-base leading-snug font-medium">
+            <button type="button" onClick={onOpen} className="cursor-pointer text-left hover:underline">
+              {title}
+            </button>
+          </h3>
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {o.tipo && <Badge variant="outline">{o.tipo}</Badge>}
+            {r?.territory && (
+              <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-900 [&>svg]:size-3.5">
+                <MapPin aria-hidden />
+                Solo {r.territory}
+              </Badge>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-start gap-3">
+          <Deadline o={o} />
+          <ScoreChip fit={o.fit} size="sm" />
+        </div>
+      </div>
+
+      <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+        <div className="space-y-0.5">
+          <dt className="text-xs text-muted-foreground">{r?.kind === "premio" ? "Dotación del premio" : "Importe"}</dt>
+          <dd className="leading-relaxed">{amount}</dd>
+        </div>
+        {r && (
+          <div className="space-y-0.5">
+            <dt className="text-xs text-muted-foreground">Último plazo</dt>
+            <dd className="leading-relaxed">{r.window}</dd>
+          </div>
+        )}
+      </dl>
+
+      {r ? (
+        <>
+          <div className="grid gap-5 md:grid-cols-2 md:gap-8">
+            <div className="space-y-1">
+              <Label>Por qué puede encajar</Label>
+              <p className="leading-relaxed">{r.whyReforesta}</p>
+            </div>
+            {r.limits.length > 0 && (
+              <div className="space-y-1">
+                <Label>Qué lo limita</Label>
+                <List items={r.limits} />
+              </div>
+            )}
+          </div>
+          <div className="space-y-1">
+            <Label>Requisitos</Label>
+            <List items={r.requirements} />
+          </div>
+          {r.unverified && (
+            <div className="space-y-1.5">
+              <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-900 [&>svg]:size-3.5">
+                <TriangleAlert aria-hidden />
+                Sin comprobar
+              </Badge>
+              <p className="text-sm leading-relaxed text-muted-foreground">{r.unverified}</p>
+            </div>
+          )}
+        </>
+      ) : (
+        o.summary && <p className="leading-relaxed">{o.summary}</p>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <TriageSelect o={o} />
+          {r && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <BadgeCheck className="size-3.5 text-primary" aria-hidden />
+              Comprobado el {fmtChecked(r.verifiedOn)}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {o.basesUrl && (
+            <Button asChild variant="ghost" size="sm">
+              <a href={o.basesUrl} target="_blank" rel="noreferrer">
+                <FileText aria-hidden /> Ver bases
+              </a>
+            </Button>
+          )}
+          <Button asChild variant="outline" size="sm">
+            <a href={o.url} target="_blank" rel="noreferrer">
+              Abrir convocatoria <ArrowUpRight aria-hidden />
+            </a>
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 export function EmpresasView() {
   const { data, loading, error, reload, triageOf, openDetail } = useRadar();
@@ -26,11 +154,14 @@ export function EmpresasView() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="space-y-1">
+      <div className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">Empresas y fundaciones</h1>
         <p className="max-w-3xl text-muted-foreground">
-          El canal corporativo: programas de RSC y fundaciones privadas. Hoy está a cero; el objetivo es cerrar las 2–4 primeras empresas. Aquí no se espera a
-          una convocatoria, se les escribe.
+          Programas de fundaciones y empresas que financian proyectos ambientales de ONG en España. El canal está a cero; el objetivo es cerrar las 2–4
+          primeras empresas.
+        </p>
+        <p className="max-w-3xl text-muted-foreground">
+          Esta lista no es automática: la hacemos a mano y comprobamos cada dato en la web de la entidad. Cada ficha dice cuándo se comprobó.
         </p>
       </div>
 
@@ -78,68 +209,15 @@ export function EmpresasView() {
             </p>
           </div>
           <ul className="space-y-3">
-            {items.map((o) => {
-              const amount = o.amountText ?? fmtEuros(o.budget) ?? "Importe variable";
-              return (
-                <li key={o.id}>
-                  <Card className="gap-5 p-5 shadow-none">
-                    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                      <div className="min-w-0 space-y-1">
-                        <p className="text-xs text-muted-foreground">{o.organismo}</p>
-                        <h3 className="text-base leading-snug font-medium">
-                          <button type="button" onClick={() => openDetail(o.id)} className="cursor-pointer text-left hover:underline">
-                            {o.titulo.startsWith(`${o.organismo} — `) ? o.titulo.slice(o.organismo.length + 3) : o.titulo}
-                          </button>
-                        </h3>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        {o.tipo && <Badge variant="outline">{o.tipo}</Badge>}
-                        <ScoreChip fit={o.fit} size="sm" />
-                      </div>
-                    </div>
-
-                    <dl className="flex flex-wrap gap-x-8 gap-y-2">
-                      <div>
-                        <dt className="text-xs text-muted-foreground">Importe orientativo</dt>
-                        <dd className="tabular-nums">{amount}</dd>
-                      </div>
-                      {o.rsc?.cadence && (
-                        <div>
-                          <dt className="text-xs text-muted-foreground">Cuándo</dt>
-                          <dd>{o.rsc.cadence}</dd>
-                        </div>
-                      )}
-                    </dl>
-
-                    {o.rsc ? (
-                      <div className="grid gap-4 md:grid-cols-2 md:gap-8">
-                        <div className="space-y-1">
-                          <h4 className="text-xs font-medium text-muted-foreground">Por qué encaja con Reforesta</h4>
-                          <p className="leading-relaxed">{o.rsc.whyReforesta}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <h4 className="text-xs font-medium text-muted-foreground">Ángulo para el primer contacto</h4>
-                          <p className="leading-relaxed">{o.rsc.pitchAngle}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      o.summary && <p className="leading-relaxed">{o.summary}</p>
-                    )}
-
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-4">
-                      <TriageSelect o={o} />
-                      <Button asChild variant="outline" size="sm">
-                        <a href={o.url} target="_blank" rel="noreferrer">
-                          Abrir web <ExternalLink aria-hidden />
-                        </a>
-                      </Button>
-                    </div>
-                  </Card>
-                </li>
-              );
-            })}
+            {items.map((o) => (
+              <li key={o.id}>
+                <ProgrammeCard o={o} onOpen={() => openDetail(o.id)} />
+              </li>
+            ))}
           </ul>
-          <p className="text-xs text-muted-foreground">Los importes son orientativos, sacados de ediciones anteriores. Confirmadlos en la web de cada programa.</p>
+          <p className="text-xs text-muted-foreground">
+            Importes y plazos copiados de la web o las bases de cada entidad. Pueden cambiar en la próxima edición: confirmadlos antes de presentar nada.
+          </p>
         </section>
       )}
     </div>

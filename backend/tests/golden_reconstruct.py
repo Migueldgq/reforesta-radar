@@ -15,7 +15,6 @@ from app.config import settings
 from app.scoring.score import FitAdjust, ScoreInput
 from app.sources.base import RawOpportunity
 from app.sources.eu import EN_TOPIC
-from app.sources.rsc import RSC_PROGRAMMES, to_raw
 
 GOLDEN = Path(__file__).parent / "golden"
 # Raw BDNS fields captured once from the TS memo + BDNS API (frozen) (descripcionLeng, objetivos, bases, abierto...).
@@ -69,10 +68,6 @@ def reconstruct(item: dict[str, Any]) -> tuple[RawOpportunity, str]:
     common = {k: v for k, v in item.items() if k != "fit"}
     adjust: FitAdjust | None = None
     gap = src
-
-    if src == "rsc":
-        prog = next(p for p in RSC_PROGRAMMES if f"rsc:{p.id}" == item["id"])
-        return to_raw(prog), "rsc"
 
     if src == "bdns":
         lite = _warning(fit, "Ficha BDNS no cargada")

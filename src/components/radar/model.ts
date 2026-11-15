@@ -82,6 +82,7 @@ export function isClosed(o: Opportunity): boolean {
 
 /** Closed competitive grant open to non-profits: likely to come back, so it is a lead for the next edition (mirrors scoring.ts). */
 export function isNextEdition(o: Opportunity): boolean {
+  if (isClosed(o) && o.rsc) return true; // the closed private programmes in the list have all run several editions
   return isClosed(o) && o.kind === "subvencion" && o.fit.isCompetitive && o.fit.isOngEligible !== false;
 }
 
@@ -123,6 +124,28 @@ export function fmtEuros(n: number | null): string | null {
     return `${(n / 1_000_000).toLocaleString("es-ES", { maximumFractionDigits: 1 })} M€`;
   }
   return new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+}
+
+/** "a, b y c" */
+export function joinEs(xs: string[]): string {
+  return xs.length < 2 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`;
+}
+
+/** Past editions Reforesta won (newest first); empty when unknown. */
+export function reforestaWins(o: Opportunity): { year: number; importe: number | null }[] {
+  return o.history?.awards?.wonByReforesta ?? [];
+}
+
+/**
+ * When the next edition usually opens, short enough for the list's date note.
+ * Keeps the API's own wording; a "Convocatoria irregular: no sale…" phrase keeps only what follows the colon.
+ */
+export function openingNote(o: Opportunity): string | null {
+  const t = o.history?.typicalOpening?.text?.trim() ?? o.rsc?.timing ?? undefined;
+  if (!t) return null;
+  const i = t.indexOf(": ");
+  const s = i >= 0 ? t.slice(i + 2) : t;
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export function fmtAgo(iso: string | null): string {
@@ -314,12 +337,29 @@ export function withPlazoView(f: Filters, v: PlazoView): Filters {
   return { ...f, hideClosed: v === "ahora", dims: { ...f.dims, plazo } };
 }
 
+/** Open or opening soon, with a known closing date ("Sin fecha fija" calls are often old and already closed). */
+function isDatedOpen(o: Opportunity): boolean {
+  return !isClosed(o) && daysLeft(o) != null;
+}
+
+/** No dated open call fits well, but some next editions do. Judged on every call, never on the current filters. */
+export function noOpenHighFit(items: Opportunity[]): boolean {
+  const alto = items.filter((o) => o.fit.tier === "alto");
+  return !alto.some(isDatedOpen) && alto.some(isNextEdition);
+}
+
 /* ---------- Filters <-> URL query (shareable links) ---------- */
 
 const URL_DIMS: Dim[] = ["plazo", "kind", "source", "organismo", "region", "workLine", "tier", "budget", "triage"];
 
-export function filtersToQuery(f: Filters): string {
+/** `vista=ahora` pins "Para pedir ahora" when the home would otherwise open on "Próximas ediciones". */
+export function urlPinsAhora(): boolean {
+  return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("vista") === "ahora";
+}
+
+export function filtersToQuery(f: Filters, pinAhora = false): string {
   const p = new URLSearchParams();
+  if (pinAhora) p.set("vista", "ahora");
   if (f.q.trim()) p.set("q", f.q.trim());
   for (const d of URL_DIMS) if (f.dims[d].length) p.set(d, f.dims[d].join("|"));
   if (!f.hideClosed) p.set("cerradas", "1");

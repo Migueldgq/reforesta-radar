@@ -1,0 +1,21 @@
+{
+ "codigoBDNS": "825309",
+ "organo": {
+  "nivel1": "AUTONOMICA",
+  "nivel2": "COMUNIDAD DE MADRID",
+  "nivel3": "CONSEJERÍA DE MEDIO AMBIENTE, AGRICULTURA E INTERIOR"
+ },
+ "fechaRecepcion": "2025-04-07",
+ "descripcion": "SUBVENCIÓN ENTIDADES SIN ÁNIMO DE LUCRO PROYECTOS AMBIENTALES 2025",
+ "fechaInicioSolicitud": null,
+ "fechaFinSolicitud": null,
+ "textInicio": "DÍA SIGUIENTE A LA PUBLICACIÓN DE LA CONVOCATORIA EN FORMA DE EXTRACTO",
+ "textFin": "10 DÍAS HÁBILES DESDE EL INICIO DEL PLAZO DE SOLICITUD",
+ "tipoConvocatoria": "Concurrencia competitiva - canónica",
+ "abierto": false,
+ "anuncios": [
+  {
+   "datPublicacion": "2025-04-15"
+  }
+ ]
+}

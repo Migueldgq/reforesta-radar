@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { daysLeft, fmtEuros, parseDay, tidy, TRIAGE_ORDER, type Triage } from "./model";
+import { daysLeft, fmtEuros, reforestaWins, tidy, TRIAGE_ORDER, type Triage } from "./model";
 import { useRadar } from "./store";
-import { DeadlineChip, EmptyState, ScoreChip, TriageSelect } from "./ui";
+import { Deadline, EmptyState, ScoreChip, TriageSelect, WonMarker } from "./ui";
 
 export const KIND_SHORT: Record<OpportunityKind, string> = {
   subvencion: "Subvención",
@@ -62,8 +62,6 @@ function compare(a: Opportunity, b: Opportunity, col: Col, triageOf: (id: string
       return TRIAGE_ORDER.indexOf(triageOf(a.id)) - TRIAGE_ORDER.indexOf(triageOf(b.id));
   }
 }
-
-const fmtDate = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[]; onClear: () => void; resetKey: string }) {
   const { triageOf, openDetail } = useRadar();
@@ -120,21 +118,23 @@ export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[
       </div>
     );
 
+  // Columns follow the table's own width (the sidebar may be open or not), not the viewport.
+  // Lowest priority goes first: Tipo, Fuente, Importe, Territorio; below 41rem, cards.
   return (
-    <div className="rounded-lg border">
-      {/* Tablet / desktop */}
-      <div className="hidden md:block">
+    <div className="@container rounded-lg border">
+      {/* Wide container: table */}
+      <div className="hidden @min-[41rem]:block">
         <Table className="table-fixed">
           <caption className="sr-only">Convocatorias filtradas. Pulsa una fila para ver el detalle.</caption>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              {th("score", "Encaje", "w-[68px] pl-2")}
+              {th("score", "Encaje", "w-[84px] pl-2 pr-0")}
               {th("titulo", "Convocatoria")}
-              {th("kind", "Tipo", "hidden w-[100px] xl:table-cell")}
-              {th("source", "Fuente", "w-[104px]")}
-              {th("region", "Territorio", "hidden w-[112px] lg:table-cell")}
+              {th("kind", "Tipo", "hidden w-[100px] @min-[67rem]:table-cell")}
+              {th("source", "Fuente", "hidden w-[104px] @min-[60.5rem]:table-cell")}
+              {th("region", "Territorio", "hidden w-[112px] @min-[48rem]:table-cell")}
               {th("deadline", "Plazo", "w-[132px]")}
-              {th("budget", "Importe", "w-[96px]", "right")}
+              {th("budget", "Importe", "hidden w-[96px] @min-[54rem]:table-cell", "right")}
               {th("triage", "Seguimiento", "w-[148px] pr-4")}
             </TableRow>
           </TableHeader>
@@ -146,8 +146,8 @@ export function ResultsTable({ items, onClear, resetKey }: { items: Opportunity[
         </Table>
       </div>
 
-      {/* Mobile: cards */}
-      <ul className="divide-y md:hidden">
+      {/* Narrow container: cards */}
+      <ul className="divide-y @min-[41rem]:hidden">
         {rows.map((o) => (
           <MobileCard key={o.id} o={o} onOpen={() => openDetail(o.id)} />
         ))}
@@ -181,8 +181,8 @@ function Amount({ o }: { o: Opportunity }) {
 }
 
 function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
-  const d = parseDay(o.deadline);
   const title = tidy(o.titulo);
+  const amount = fmtEuros(o.budget);
   return (
     <TableRow onClick={onOpen} className="cursor-pointer">
       <TableCell className="py-3 pl-4">
@@ -199,27 +199,35 @@ function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
           className="block w-full cursor-pointer rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <span className="line-clamp-2 leading-snug font-medium break-words">{title}</span>
-          <span className="mt-0.5 block truncate text-xs text-muted-foreground">{tidy(o.organismo)}</span>
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+            {/* What the hidden columns would show */}
+            {reforestaWins(o).length > 0 && (
+              <>
+                <WonMarker o={o} className="align-[-2px]" /> ·{" "}
+              </>
+            )}
+            <span className="@min-[60.5rem]:hidden">{o.sourceLabel} · </span>
+            <span className="@min-[48rem]:hidden">{o.region} · </span>
+            {amount && <span className="@min-[54rem]:hidden">{amount} · </span>}
+            {tidy(o.organismo)}
+          </span>
         </button>
       </TableCell>
-      <TableCell className="hidden py-3 xl:table-cell">
+      <TableCell className="hidden py-3 @min-[67rem]:table-cell">
         <Badge variant="outline" className="font-normal">
           {KIND_SHORT[o.kind]}
         </Badge>
       </TableCell>
-      <TableCell className="truncate py-3 text-muted-foreground" title={o.sourceLabel}>
+      <TableCell className="hidden truncate py-3 text-muted-foreground @min-[60.5rem]:table-cell" title={o.sourceLabel}>
         {o.sourceLabel}
       </TableCell>
-      <TableCell className="hidden truncate py-3 text-muted-foreground lg:table-cell" title={o.region}>
+      <TableCell className="hidden truncate py-3 text-muted-foreground @min-[48rem]:table-cell" title={o.region}>
         {o.region}
       </TableCell>
       <TableCell className="py-3">
-        <div className="flex flex-col items-start gap-1">
-          <DeadlineChip o={o} />
-          {d != null && <span className="pl-0.5 text-xs text-muted-foreground tabular-nums">{fmtDate.format(d).replace(".", "")}</span>}
-        </div>
+        <Deadline o={o} />
       </TableCell>
-      <TableCell className="py-3 text-right whitespace-normal">
+      <TableCell className="hidden py-3 text-right whitespace-normal @min-[54rem]:table-cell">
         <Amount o={o} />
       </TableCell>
       <TableCell className="py-3 pr-4" onClick={(e) => e.stopPropagation()}>
@@ -241,8 +249,9 @@ function MobileCard({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
           <span className="line-clamp-3 leading-snug font-medium">{tidy(o.titulo)}</span>
         </button>
         <p className="truncate text-xs text-muted-foreground">{tidy(o.organismo)}</p>
+        <WonMarker o={o} className="flex w-fit" />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-0.5">
-          <DeadlineChip o={o} />
+          <Deadline o={o} />
           <span className="text-sm">
             <Amount o={o} />
           </span>

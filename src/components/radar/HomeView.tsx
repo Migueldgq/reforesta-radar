@@ -1,6 +1,6 @@
 "use client";
 
-import { AlarmClock, Check, ChevronDown, DoorOpen, Loader2, Repeat, Target, TriangleAlert } from "lucide-react";
+import { AlarmClock, ArrowRight, Check, ChevronDown, DoorOpen, Loader2, Repeat, Target, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { isNeutral } from "./profile";
@@ -20,6 +20,7 @@ import {
   KIND_LABELS,
   matches,
   NO_LINE,
+  noOpenHighFit,
   parseDay,
   PLAZO_KEYS,
   PLAZO_LABELS,
@@ -122,11 +123,15 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
   const [more, setMore] = useState(false);
   const hay = useMemo(() => new Map(items.map((o) => [o.id, haystackOf(o)])), [items]);
 
-  // Keep the filters in the URL so links can be shared.
+  // Same rule the store uses to open on "Próximas ediciones": the whole radar, not the filtered list.
+  const quiet = useMemo(() => noOpenHighFit(items), [items]);
+
+  // Keep the filters in the URL so links can be shared. While the default is "Próximas ediciones",
+  // choosing "Para pedir ahora" is marked too, so a reload stays there.
   useEffect(() => {
-    const q = filtersToQuery(filters);
+    const q = filtersToQuery(filters, quiet && plazoViewOf(filters) === "ahora");
     if (window.location.pathname === "/" && window.location.search !== q) window.history.replaceState(null, "", `/${q}`);
-  }, [filters]);
+  }, [filters, quiet]);
 
   const subset = useMemo(
     () => (skip: Skip) => items.filter((o) => matches(o, filters, triageOf(o.id), hay.get(o.id)!, skip)),
@@ -305,7 +310,9 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
               ))}
             </TabsList>
           </Tabs>
-          {view === "ahora" && altoOpen === 0 && altoNext > 0 && (
+          {quiet && view !== "todas" ? (
+            <QuietNotice view={view} onSwitch={() => setView(view === "ahora" ? "ediciones" : "ahora")} />
+          ) : view === "ahora" && altoOpen === 0 && altoNext > 0 && (
             <p className="text-sm text-muted-foreground">
               Hoy no hay convocatorias abiertas de encaje alto.{" "}
               <button
@@ -325,6 +332,38 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
         </div>
       </section>
     </div>
+  );
+}
+
+/** Shown while no open call fits well: explains why the home opens on the next editions and links both tabs. */
+function QuietNotice({ view, onSwitch }: { view: "ahora" | "ediciones"; onSwitch: () => void }) {
+  const link = "inline-flex cursor-pointer items-center gap-1 font-medium text-primary underline-offset-4 hover:underline";
+  if (view === "ediciones")
+    return (
+      <Alert role="status">
+        <Repeat aria-hidden />
+        <AlertDescription>
+          <p>
+            Ahora mismo no hay convocatorias abiertas con encaje alto. Te enseñamos las que mejor encajan y suelen repetirse
+            cada año, para prepararlas con tiempo.
+          </p>
+          <button type="button" onClick={onSwitch} className={link}>
+            Ver las abiertas
+          </button>
+        </AlertDescription>
+      </Alert>
+    );
+  return (
+    <Alert role="status">
+      <Target aria-hidden />
+      <AlertDescription>
+        <p>Ahora mismo ninguna convocatoria abierta con fecha de cierre tiene encaje alto.</p>
+        <button type="button" onClick={onSwitch} className={link}>
+          Las mejores están en Próximas ediciones
+          <ArrowRight className="size-3.5" aria-hidden />
+        </button>
+      </AlertDescription>
+    </Alert>
   );
 }
 

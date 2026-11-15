@@ -19,6 +19,8 @@ export interface LandingData {
   challengeSamples: { id: string; label: string; o: Opportunity | null }[];
   weeks: { start: number; count: number }[];
   weeksLater: number;
+  /** Private programmes (hand-checked RSC list), best fit first. */
+  companies: Opportunity[];
 }
 
 const TIMEOUT_MS = 4000;
@@ -64,6 +66,7 @@ function summarize(items: Opportunity[], sources: SourceHealth[], fetchedAt: str
     ],
     weeks,
     weeksLater,
+    companies: byScore.filter((o) => o.kind === "empresa").slice(0, 3),
   };
 }
 

@@ -1,13 +1,14 @@
 """Read-time adjustments and ranking (port of geographicFit / kindFit in scoring.ts and rank / cleanItems in
-aggregate.ts). Pure: stored items keep their BASE fit; these run on every response, so a change to the
-tables applies without re-ingesting.
+aggregate.ts), plus the BDNS history signal (app/scoring/history.py). Pure: stored items keep their BASE fit; these
+run on every response, so a change to the tables applies without re-ingesting.
 """
 
 import re
 
 from app.models import FitAnalysis, Opportunity
+from app.scoring.history import history_adjust
 from app.scoring.profile import KEYWORD_RULES, GeoFit, KindFit
-from app.scoring.score import tier_for
+from app.scoring.score import FitAdjust, apply_adjust, tier_for
 from app.scoring.text import has_term, normalize_text
 
 LOCAL_PREFIX = re.compile(r"^(ayuntamiento|ajuntament|concello|udala|ayto\.?)\s+(de\s+|del\s+|d'\s*)?", re.IGNORECASE)
@@ -113,8 +114,21 @@ def kind_fit(o: Opportunity) -> FitAnalysis:
 
 
 def adjusted_fit(o: Opportunity) -> FitAnalysis:
-    """Geographic fit, then actionability by kind, on top of the stored base fit."""
-    return kind_fit(o.model_copy(update={"fit": geographic_fit(o)}))
+    """Geographic fit, then actionability by kind, on top of the stored base fit; then the history of a BDNS call.
+
+    The history delta goes on the base fit, so the territorial and kind caps still bound it; its cap is applied last
+    (a ceiling on the displayed score, which geographic bonuses must not lift) and its reasons go first.
+    """
+    adj = history_adjust(o.history)
+    if adj is None:
+        return kind_fit(o.model_copy(update={"fit": geographic_fit(o)}))
+    base = apply_adjust(o.fit, FitAdjust(delta=adj.delta, append_warnings=adj.append_warnings))
+    based = o.model_copy(update={"fit": base})
+    fit = kind_fit(based.model_copy(update={"fit": geographic_fit(based)}))
+    score = max(0, min(100, fit.score, 100 if adj.cap is None else adj.cap))
+    return fit.model_copy(
+        update={"score": score, "tier": tier_for(score), "reasons": [*adj.prepend_reasons, *fit.reasons]}
+    )
 
 
 def rank(items: list[Opportunity]) -> list[Opportunity]:

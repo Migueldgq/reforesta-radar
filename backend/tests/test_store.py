@@ -89,4 +89,4 @@ async def test_failed_or_partial_source_never_deletes_rows(engine: AsyncEngine) 
     res = await _ingest(engine, _run("ok", _items(1, " (2027)")))
     assert vars(res.per_source["rsc"]) == {"new": 0, "changed": 1, "unchanged": 0, "gone": 2}
     assert res.changed_fields == {"titulo": 1}
-    assert await _live(engine) == {"rsc:rsc-iberdrola"}
+    assert await _live(engine) == {f"rsc:{RSC_PROGRAMMES[0].id}"}

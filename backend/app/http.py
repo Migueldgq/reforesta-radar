@@ -30,6 +30,8 @@ class Http:
             transport=transport,
         )
         self._sem = asyncio.Semaphore(concurrency or settings.http_concurrency)
+        self.requests = 0  # attempts sent (retries included), for progress logs
+        self.throttled = 0  # of which answered 429
 
     async def __aenter__(self) -> Self:
         return self
@@ -51,6 +53,7 @@ class Http:
             try:
                 async with self._sem:  # waiting for a slot does not count towards the timeout
                     async with asyncio.timeout(timeout):
+                        self.requests += 1
                         res = await self._client.request(method, url, headers=headers, content=content)
                         body = res.text
             except TimeoutError:
@@ -62,6 +65,8 @@ class Http:
                     return None
                 await _backoff(attempt)
                 continue
+            if res.status_code == 429:
+                self.throttled += 1
             if (res.status_code == 429 or res.status_code >= 500) and attempt < retries:
                 await _backoff(attempt)
                 continue

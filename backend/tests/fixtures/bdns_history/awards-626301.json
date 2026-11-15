@@ -1,0 +1,84 @@
+{
+"content": [
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G79275632 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 64689.28,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G02701092 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 16737.95,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G80428204 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 50532.31,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G83122838 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 8860,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G80053465 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 42930,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G13598545 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 39990.96,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G86433836 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 30000,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G28795961 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 36349.5,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G78616893 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 80000,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G78456118 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 30000,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G86795002 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 26000,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G78456118 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 50000,
+"numeroConvocatoria": "626301"
+},
+{
+"fechaConcesion": "2022-10-31",
+"beneficiario": "G78291788 ENTIDAD (NOMBRE RETIRADO)",
+"importe": 23910,
+"numeroConvocatoria": "626301"
+}
+],
+"totalElements": 13,
+"last": true
+}

@@ -15,7 +15,7 @@ from sqlalchemy import case, delete, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from app.db.tables import fetch_cache, ingest_runs, opportunities, opportunity_changes, source_runs
+from app.db.tables import bdns_editions, fetch_cache, ingest_runs, opportunities, opportunity_changes, source_runs
 from app.ingest.hashing import content_hash, dedupe_key, stable_json
 from app.models import Opportunity, SourceHealth
 from app.sources.memo import PersistedMemo
@@ -256,28 +256,7 @@ async def write_ingest(
                 for r in runs
             ],
         )
-        for part in _chunks(memo):
-            stmt = pg_insert(fetch_cache).values(
-                [
-                    {
-                        "key": m.key,
-                        "value": m.value,
-                        "expires_at": datetime.fromtimestamp(m.expires_at, UTC),
-                        "updated_at": now,
-                    }
-                    for m in part
-                ]  # fmt: skip
-            )
-            await conn.execute(
-                stmt.on_conflict_do_update(
-                    index_elements=[fetch_cache.c.key],
-                    set_={
-                        "value": stmt.excluded.value,
-                        "expires_at": stmt.excluded.expires_at,
-                        "updated_at": stmt.excluded.updated_at,
-                    },  # fmt: skip
-                )
-            )
+        await upsert_fetch_cache(conn, memo, now)
         # Keep the memo table bounded: drop entries expired for more than 30 days.
         await conn.execute(delete(fetch_cache).where(fetch_cache.c.expires_at < now - timedelta(days=30)))
         result.run_id = run_id
@@ -287,6 +266,46 @@ async def write_ingest(
         return await body(None)
     async with engine.begin() as conn:  # one transaction; rolled back on any error
         return await body(conn)
+
+
+async def upsert_fetch_cache(conn: AsyncConnection, memo: list[PersistedMemo], now: datetime) -> None:
+    for part in _chunks(memo):
+        stmt = pg_insert(fetch_cache).values(
+            [
+                {
+                    "key": m.key,
+                    "value": m.value,
+                    "expires_at": datetime.fromtimestamp(m.expires_at, UTC),
+                    "updated_at": now,
+                }
+                for m in part
+            ]  # fmt: skip
+        )
+        await conn.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[fetch_cache.c.key],
+                set_={
+                    "value": stmt.excluded.value,
+                    "expires_at": stmt.excluded.expires_at,
+                    "updated_at": stmt.excluded.updated_at,
+                },  # fmt: skip
+            )
+        )
+
+
+async def write_history(
+    engine: AsyncEngine, rows_by_call: dict[str, list[dict[str, Any]]], memo: list[PersistedMemo]
+) -> None:
+    """History step (app/ingest/history.py), its own transaction: replace the bdns_editions rows of every call it
+    read (an empty list clears them) and save its memo entries. Calls it could not read are not in `rows_by_call`."""
+    now = datetime.now(UTC)
+    async with engine.begin() as conn:
+        for part in _chunks(list(rows_by_call), 2000):
+            await conn.execute(delete(bdns_editions).where(bdns_editions.c.call_numero.in_(part)))
+        rows = [{**r, "fetched_at": now} for rs in rows_by_call.values() for r in rs]
+        for part in _chunks(rows):
+            await conn.execute(insert(bdns_editions), part)
+        await upsert_fetch_cache(conn, memo, now)
 
 
 async def record_failed_run(

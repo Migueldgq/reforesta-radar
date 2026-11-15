@@ -23,11 +23,15 @@ from app.sources.memo import Memo
 
 
 class RscScoreInput(Contract):
-    """Input of scoreRsc (hand-curated private programmes)."""
+    """Input of score_rsc (hand-checked private programmes)."""
 
     titulo: str
     focus: list[WorkLine]
-    why_reforesta: str
+    about: str  # what the programme funds, from its source (topic matching)
+    opens_at: str | None
+    deadline: str | None
+    limits: list[tuple[str, int]]  # (warning, score penalty)
+    verified_on: str
 
 
 class RawOpportunity(OpportunityBase):
@@ -39,7 +43,9 @@ def score_raw(raw: RawOpportunity, today: date | None = None) -> Opportunity:
     """Base fit for one connector item (what the TS connectors computed inline)."""
     inp = raw.score_input
     if isinstance(inp, RscScoreInput):
-        fit = score_rsc(inp.titulo, inp.focus, inp.why_reforesta, today)
+        fit = score_rsc(
+            inp.titulo, inp.focus, inp.about, inp.opens_at, inp.deadline, inp.limits, inp.verified_on, today
+        )
     else:
         fit = apply_adjust(score_convocatoria(inp, today), raw.adjust)
     return Opportunity(**{k: getattr(raw, k) for k in OpportunityBase.model_fields}, fit=fit)

@@ -59,12 +59,34 @@ async def test_boe_fetch_maps_and_scores_like_ts(monkeypatch: pytest.MonkeyPatch
     assert {m.key for m in memo.persisted_since(0)} == {"boe:day:20261026", "boe:notice:BOE-B-2026-34894"}
 
 
-async def test_rsc_items_match_ts_output() -> None:
+async def test_rsc_programmes_carry_checked_facts_and_real_deadlines() -> None:
     result = await RscSource().fetch(SourceContext(http=None, memo=Memo()))  # type: ignore[arg-type]
     assert len(result.items) == 6
+    by_id = {}
     for raw in result.items:
         o = score_raw(raw, NOW.date())
-        assert o.model_copy(update={"fit": adjusted_fit(o)}).to_json() == GOLDEN[raw.id]
+        fit = adjusted_fit(o)
+        by_id[raw.id] = (o, fit)
+        assert o.rsc is not None and o.rsc.verified_on == "2026-11-15" and o.rsc.requirements
+        assert o.url.startswith("https://") and o.opens_at and o.deadline
+        assert "Programa privado comprobado en la web de la entidad el 15 nov 2026." in fit.reasons
+        assert set(o.rsc.limits) <= set(fit.warnings)
+        assert 40 <= fit.score <= 66 and fit.tier == "medio"
+
+    unicaja, fit = by_id["rsc:rsc-unicaja-medioambiente"]
+    assert (fit.deadline_state, fit.days_remaining) == ("abierta", 19)
+    assert unicaja.rsc and unicaja.rsc.territory == "Andalucía o provincia de Ciudad Real"
+    assert any("Andalucía" in w for w in fit.warnings)
+    closed = [f for i, (_, f) in by_id.items() if i != "rsc:rsc-unicaja-medioambiente"]
+    assert all(f.deadline_state == "cerrada" for f in closed)
+    assert all(fit.score > f.score for f in closed)  # the open call ranks first
+
+    endesa = by_id["rsc:rsc-endesa-biodiversidad"][1]
+    assert endesa.score == min(f.score for _, f in by_id.values())
+    assert any("auditadas" in w for w in endesa.warnings) and any("amenazadas" in w for w in endesa.warnings)
+    bbva = by_id["rsc:rsc-bbva-futuro"][0]
+    assert bbva.rsc and bbva.rsc.unverified and bbva.bases_url is None
+    assert by_id["rsc:rsc-fbbva-premio-biodiversidad"][0].rsc.kind == "premio"  # type: ignore[union-attr]
 
 
 async def test_http_retries_5xx_then_succeeds() -> None:

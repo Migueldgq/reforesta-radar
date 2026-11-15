@@ -1,4 +1,4 @@
-"""Table definitions (SQLAlchemy Core). Schema owner: alembic/versions/0001_init.py.
+"""Table definitions (SQLAlchemy Core). Schema owner: alembic/versions/ (0001 init, 0002 + 0003 bdns_editions).
 
 Same tables and columns as supabase/migrations/0001_init.sql, so data and semantics carry over:
 rows hold the BASE opportunity (connector output + base fit); geographic and kind fit are applied at read time.
@@ -102,4 +102,30 @@ fetch_cache = Table(
     Column("value", JSONB, nullable=False),
     Column("expires_at", TSTZ, nullable=False),
     Column("updated_at", TSTZ, nullable=False, server_default=text("now()")),
+)
+
+# Previous editions of current BDNS calls (app/sources/bdns_history.py), one row per (call, edition); the current
+# edition itself is a row too (numero == call_numero). Past editions are never opportunities. Award columns hold
+# counts only: never beneficiary names (some winners are natural persons).
+bdns_editions = Table(
+    "bdns_editions",
+    metadata,
+    Column("call_numero", Text, nullable=False),  # the current call (opportunity id "bdns:<call_numero>")
+    Column("numero", Text, nullable=False),
+    Column("organ_ids", Text, nullable=False),  # resolved BDNS organ id(s), comma-separated
+    Column("title", Text, nullable=False),
+    Column("published_at", Date, nullable=False),  # BDNS registration (fechaRecepcion)
+    Column("opened_at", Date),
+    Column("closes_at", Date),
+    Column("window_text", Text),
+    Column("awards_count", Integer),  # null: awards not checked
+    Column("awards_by_class", JSONB),  # {"sinAnimo": 19, "empresa": 2, ...}
+    Column("awards_importe", Numeric),
+    Column("awards_first", Date),
+    Column("awards_last", Date),
+    Column("reforesta_importe", Numeric),  # set when Reforesta (G80428204) won this edition
+    Column("peer_hits", JSONB),  # NIFs of curated environmental NGOs among the winners
+    Column("match", Numeric),  # title Jaccard with the current call (null for the current edition)
+    Column("fetched_at", TSTZ, nullable=False, server_default=text("now()")),
+    PrimaryKeyConstraint("call_numero", "numero"),
 )

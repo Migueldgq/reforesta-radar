@@ -17,9 +17,8 @@ from app.ingest.hashing import content_hash, dedupe_key
 from app.models import FitAnalysis, Opportunity
 from app.scoring.rank import geographic_fit, kind_fit
 from app.scoring.regions import infer_comunidad_autonoma
-from app.scoring.score import ScoreInput, score_convocatoria, score_rsc
+from app.scoring.score import ScoreInput, score_convocatoria
 from app.scoring.text import normalize_text
-from app.sources.rsc import RSC_PROGRAMMES
 
 GOLDEN = Path(__file__).parent / "golden"
 TS: dict[str, Any] = json.loads(gzip.decompress((GOLDEN / "ts_functions.json.gz").read_bytes()))
@@ -61,13 +60,6 @@ def test_geographic_and_kind_fit_match_ts() -> None:
     assert not bad, f"{len(bad)}/{len(pairs)} mismatches; first: {bad[0]}"
 
 
-def test_score_rsc_matches_ts() -> None:
-    by_id = {p.id: p for p in RSC_PROGRAMMES}
-    for case in TS["rsc"]:
-        p = by_id[case["id"]]
-        assert score_rsc(p.program, p.focus, p.why_reforesta, TODAY).to_json() == _fit(case["fit"])
-
-
 def test_infer_comunidad_autonoma_matches_ts() -> None:
     bad = [
         c for c in TS["ccaa"] if infer_comunidad_autonoma(c["regiones"], c["organismo"], c["nivelAdmin"]) != c["result"]
@@ -82,11 +74,12 @@ def test_normalize_text_matches_ts() -> None:
 @pytest.fixture(scope="module")
 def golden_items() -> dict[str, Opportunity]:
     data = json.loads((GOLDEN / "oportunidades.json").read_text())
-    return {i["id"]: Opportunity.model_validate(i) for i in data["items"]}
+    # RSC items use the former TS shape of `rsc`; the hand-checked list replaced them (see test_sources)
+    return {i["id"]: Opportunity.model_validate(i) for i in data["items"] if i["source"] != "rsc"}
 
 
 def test_content_hash_and_dedupe_key_match_ts(golden_items: dict[str, Opportunity]) -> None:
-    for case in TS["hashes"]:
+    for case in (c for c in TS["hashes"] if c["id"] in golden_items):
         o = golden_items[case["id"]]
         assert content_hash(o) == case["contentHash"], case["id"]
         assert dedupe_key(o) == case["dedupeKey"], case["id"]
@@ -106,7 +99,8 @@ def test_profile_tables_match_ts() -> None:
     )
 
     p = TS["profile"]
-    assert p["scoringVersion"] == SCORING_VERSION
+    # frozen golden at v12; v13-14 added and tuned the BDNS history signal (app/scoring/history.py), not in these tables
+    assert p["scoringVersion"] + 2 == SCORING_VERSION
     assert [{"line": g.line, "keywords": [k._asdict() for k in g.keywords]} for g in KEYWORD_RULES] == p["keywordRules"]
     assert list(ONG_POSITIVE_TERMS) == p["ongPositiveTerms"]
     assert [d._asdict() for d in DEALBREAKER_TERMS] == p["dealbreakerTerms"]
@@ -134,18 +128,3 @@ def test_profile_tables_match_ts() -> None:
         "offTopicCap": KindFit.off_topic_cap,
         "universityCap": KindFit.university_cap,
     } == kind
-    assert [
-        {
-            "id": r.id,
-            "entity": r.entity,
-            "program": r.program,
-            "type": r.type,
-            "focus": r.focus,
-            "typicalAmount": r.typical_amount,
-            "cadence": r.cadence,
-            "whyReforesta": r.why_reforesta,
-            "pitchAngle": r.pitch_angle,
-            "url": r.url,
-        }
-        for r in RSC_PROGRAMMES
-    ] == p["rscOpportunities"]

@@ -1,13 +1,16 @@
-"""Read path (port of readState in store-pg.ts and readDb in aggregate.ts)."""
+"""Read path (port of readState in store-pg.ts and readDb in aggregate.ts), plus the history of BDNS calls."""
 
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from app.models import Opportunity, SourceHealth
+from app.db.tables import bdns_editions
+from app.models import History, Opportunity, SourceHealth
 from app.sources import SOURCE_ORDER
+from app.sources.bdns_history import EditionRow, build_history, from_db
 
 INGEST_STALE = timedelta(hours=36)  # one daily ingest missed, with margin
 
@@ -68,10 +71,32 @@ async def last_ingest(conn: AsyncConnection) -> tuple[str | None, bool]:
     return (iso(last) if last else None), stale
 
 
+async def read_histories(conn: AsyncConnection, ids: list[str]) -> dict[str, History]:
+    """`history` of each BDNS opportunity id that has previous editions in bdns_editions."""
+    numeros = [i.removeprefix("bdns:") for i in ids if i.startswith("bdns:")]
+    rows: dict[str, list[EditionRow]] = defaultdict(list)
+    if numeros:
+        for r in await conn.execute(select(bdns_editions).where(bdns_editions.c.call_numero.in_(numeros))):
+            rows[r.call_numero].append(from_db(r))
+    out = {}
+    for n, rs in rows.items():
+        if (h := build_history(rs)) is not None:
+            out[f"bdns:{n}"] = h
+    return out
+
+
 async def read_state(conn: AsyncConnection) -> State:
     items = [
         Opportunity.model_validate({**r.data, "firstSeenAt": iso(r.first_seen_at)})
         for r in await conn.execute(ITEMS_SQL)
+    ]
+    histories = await read_histories(conn, [o.id for o in items])
+    # a call that is a previous edition of another live call is shown only inside that call's history
+    superseded = {f"bdns:{e.numero}" for h in histories.values() for e in h.editions}
+    items = [
+        o.model_copy(update={"history": histories[o.id]}) if o.id in histories else o
+        for o in items
+        if o.id not in superseded
     ]
     sources = await read_sources(conn)
     last, stale = await last_ingest(conn)

@@ -25,6 +25,8 @@ class Settings:
     http_concurrency: int = field(default_factory=lambda: int(os.getenv("HTTP_CONCURRENCY", "8")))
     # Whole-source budget in a batch ingest run (TS scripts/ingest.ts: 8 min).
     ingest_source_timeout_s: float = field(default_factory=lambda: float(os.getenv("INGEST_SOURCE_TIMEOUT_S", "480")))
+    # Budget of the BDNS history step that runs after the ingest is stored (app.ingest.history); cold start ~10-20 min.
+    history_timeout_s: float = field(default_factory=lambda: float(os.getenv("HISTORY_TIMEOUT_S", "1800")))
     # Local time (RADAR_TZ) of the daily scheduled ingest (app.ingest.scheduler).
     ingest_at: str = field(default_factory=lambda: os.getenv("RADAR_INGEST_AT", "09:00"))
 

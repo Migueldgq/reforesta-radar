@@ -310,24 +310,57 @@ def apply_adjust(fit: FitAnalysis, adj: FitAdjust | None) -> FitAnalysis:
     )
 
 
-def score_rsc(titulo: str, focus: list[WorkLine], why_reforesta: str, today: date | None = None) -> FitAnalysis:
-    """Fit for hand-curated private (RSC) programmes."""
-    base = score_convocatoria(ScoreInput(titulo=titulo, organismo="", extra_text=why_reforesta, kind="empresa"), today)
+CLOSED_RSC_PENALTY = 4
+_MONTHS_SHORT = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+
+
+def score_rsc(
+    titulo: str,
+    focus: list[WorkLine],
+    about: str,
+    opens_at: str | None,
+    deadline: str | None,
+    limits: list[tuple[str, int]],
+    verified_on: str,
+    today: date | None = None,
+) -> FitAnalysis:
+    """Fit for hand-checked private (RSC) programmes: a curated 52-66 range, minus each limit's penalty, minus
+    CLOSED_RSC_PENALTY while the last window is closed (an open one ranks first).
+
+    The deadline state comes from the last published window, like any call; `limits` are (warning, penalty).
+    """
+    base = score_convocatoria(
+        ScoreInput(
+            titulo=titulo,
+            organismo="",
+            extra_text=about,
+            kind="empresa",
+            fecha_inicio_solicitud=opens_at,
+            fecha_fin_solicitud=deadline,
+        ),
+        today,
+    )
     lines = list(dict.fromkeys([*focus, *base.work_lines]))
     score = max(52, min(66, 46 + len(lines) * 4 + js_round(base.score / 10)))
+    score -= sum(penalty for _, penalty in limits) + (CLOSED_RSC_PENALTY if base.deadline_state == "cerrada" else 0)
+    score = max(0, score)
+    checked = date.fromisoformat(verified_on)
+    reasons = [r for r in base.reasons if not r.startswith("Coincidencia parcial")]
     return FitAnalysis(
         score=score,
-        tier="medio",
+        tier="bajo" if score < 40 else "medio",  # a channel Reforesta does not work yet: never top tier
         work_lines=lines,
         outside_manual_sources=True,
         manual_source_match=None,
         is_competitive=True,
         is_ong_eligible=True,
         reasons=[
-            "Programa privado seleccionado a mano: financia proyectos ambientales de ONG en España.",
+            *reasons,
+            f"Programa privado comprobado en la web de la entidad el {checked.day} {_MONTHS_SHORT[checked.month - 1]} "
+            f"{checked.year}.",
             "Canal RSC: hoy Reforesta no lo trabaja de forma proactiva.",
         ],
-        warnings=["Sin plazo fijo publicado: confirmar calendario en la web de la entidad."],
-        days_remaining=None,
-        deadline_state="sin_fecha",
+        warnings=[*(text for text, _ in limits), *base.warnings],
+        days_remaining=base.days_remaining,
+        deadline_state=base.deadline_state,
     )

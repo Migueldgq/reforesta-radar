@@ -18,7 +18,7 @@ El cuello de botella no es escribir, es **encontrar y decidir**. El radar ataca 
 | Revisan siempre las mismas 4 fuentes | Lee 7 fuentes y marca con **«No es de los organismos que ya revisáis a mano»** lo que no habrían visto. En la foto del 15/11/2026, 497 de 528 resultados vienen de fuera de MITECO, Fundación Biodiversidad, Comunidad de Madrid y Agenda 2030. |
 | Leer decenas de páginas para saber si encaja | Cada resultado trae una puntuación de 0 a 100 con sus **motivos** y sus **avisos** en frases cortas («Concurrencia competitiva…», «Dirigida a ayuntamientos…»). Las bases en PDF se resumen en una ficha. |
 | Las convocatorias anuales se pasan de fecha | Las convocatorias competitivas que cerraron en los últimos 12 meses **se conservan a propósito** como aviso de «próxima edición», para preparar la siguiente con tiempo. |
-| El canal de empresas (RSC) está a cero | Vista **Empresas** con programas privados seleccionados a mano, el motivo de encaje y un ángulo para el primer contacto. |
+| El canal de empresas (RSC) está a cero | Vista **Empresas** con programas privados comprobados a mano en la web de cada entidad: importe, plazo, requisitos, por qué puede encajar y qué lo limita. |
 
 Relación con los tres criterios de evaluación:
 
@@ -42,7 +42,7 @@ Relación con los tres criterios de evaluación:
 
 **Seguimiento.** Tablero con cuatro columnas: En estudio, A presentar, Presentada y Descartada. Las tarjetas se mueven arrastrándolas. Destaca la siguiente convocatoria que cierra. El estado se guarda en el navegador (ver limitaciones).
 
-**Empresas.** Programas de RSC y fundaciones privadas (6 a día de hoy): por qué encajan con Reforesta, importe orientativo, calendario y ángulo para la propuesta. Incluye una guía de tres pasos: elegir tres, marcarlas «En estudio», preparar una página por empresa.
+**Empresas.** Programas de fundaciones y empresas (6 a día de hoy, comprobados en la web de cada entidad el 15 nov 2026): importe y plazo tal como los publican, requisitos, territorio si lo limitan, por qué puede encajar y qué lo limita, con enlaces a la convocatoria y a las bases. Si una convocatoria está abierta sale como cualquier otra (con los días que quedan); si está cerrada, como próxima edición. Incluye una guía de tres pasos: elegir dos o tres, marcarlas «En estudio», leer las bases antes de preparar nada.
 
 **Analizar PDF.** Sube unas bases (hasta 15 MB) o usa los dos PDF de ejemplo del reto (`data/samples/`). Extrae el texto en el servidor y devuelve una ficha: por qué encaja, qué vigilar, quién puede pedirla, dinero, plazos y requisitos, con la misma puntuación que el resto del radar.
 
@@ -62,7 +62,7 @@ Foto del **15/11/2026 a las 01:42** (hora peninsular), tomada del endpoint `/api
 | **Fundación Biodiversidad** | Buscador de convocatorias y ficha de cada una. | HTML | 10 (todas cerradas, como referencia) |
 | **BOCM** (Comunidad de Madrid) | Sumarios de los últimos 21 días y el texto de cada anuncio candidato. | XML oficial + HTML | 1 |
 | **DOG** (Galicia) | Secciones I–III y VI de los últimos 45 días. | HTML | 0 |
-| **RSC · empresas y fundaciones** | Lista seleccionada a mano en `backend/app/sources/rsc.py`. | Datos en el código | 6 |
+| **RSC · empresas y fundaciones** | Lista hecha a mano en `backend/app/sources/rsc.py`, comprobada en la web de cada entidad. | Datos en el código | 6 |
 | **Total** (tras quitar duplicados) | | | **528** |
 
 Resumen de esa foto: 30 abiertas, 20 que abren próximamente, 165 cerradas (próxima edición) y 313 sin fecha publicada. Por encaje: 20 alto, 97 medio, 411 bajo. Una fuente con 0 resultados no está rota: significa que ese día no publicó nada con encaje ambiental (la nota de la vista Fuentes lo detalla).
@@ -136,7 +136,7 @@ fuentes ──► ingesta (diaria, 9:00) ──► Postgres ◄── API (FastA
 - **Plazos de la BDNS.** Muchas convocatorias no publican fecha exacta, solo «20 días hábiles desde la publicación». En la foto del 15/11/2026, 311 de los 481 resultados de la BDNS no tienen fecha de cierre. En 89 casos la fecha se estima y lleva el aviso «confirmar en el extracto oficial».
 - **Fichas BDNS incompletas.** Solo se descarga la ficha completa de las 230 convocatorias más prometedoras de cada consulta. El resto se muestra con los datos de la búsqueda y un aviso; puede faltar plazo, tipo o beneficiarios.
 - **El seguimiento es de cada navegador.** El tablero se guarda en el navegador (`localStorage`): no se comparte entre el equipo ni entre dispositivos.
-- **Importes de empresas orientativos.** Los importes y calendarios de la lista RSC son aproximados, no están verificados con cada entidad y hay que confirmarlos en su web.
+- **Lista de empresas hecha a mano.** Los datos de la lista RSC se comprobaron en la web de cada entidad el 15 nov 2026, pero no se actualizan solos: al cerrar o abrir una edición hay que cambiarlos en `backend/app/sources/rsc.py`. Las bases de BBVA Futuro no se pudieron leer y su ficha lo indica.
 - **LIFE.** Ahora mismo no hay ninguna convocatoria LIFE de naturaleza abierta. La única LIFE abierta (European City Facility) es de transición energética y va dirigida a municipios. La mayoría de los fondos europeos que aparecen son de Horizon Europe, para consorcios de investigación.
 - **Las reglas se pueden equivocar.** La puntuación busca palabras, no entiende el texto: puede dar nota alta a algo que no encaja o pasar por alto una convocatoria redactada de forma poco habitual. Por eso siempre muestra sus motivos.
 - **Fuentes frágiles.** Los boletines leídos en HTML (DOG, Fundación Biodiversidad) dejan de funcionar si cambian su web. Si una fuente falla, la vista Fuentes lo indica y se siguen mostrando sus últimos datos buenos.
