@@ -87,6 +87,7 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0034](0034-desactivar-fuentes-por-configuracion.md) | Desactivar fuentes por configuración | Aceptada | 2026-11-15 |
 | [0035](0035-iniciar-sesion-desde-el-asistente-oauth.md) | Iniciar sesión desde el agente de IA (OAuth 2.1) en una segunda dirección, `/mcp/equipo` | Aceptada | 2026-11-15 |
 | [0036](0036-locucion-del-video-con-elevenlabs.md) | Locución del vídeo de demo con ElevenLabs, una frase por archivo | Aceptada | 2026-11-15 |
-| [0037](0037-despliegue-en-oracle-con-caddy-y-github-actions.md) | Despliegue en Oracle Cloud Always Free con Caddy, copias diarias y GitHub Actions | Aceptada | 2026-11-15 |
+| [0037](0037-despliegue-en-oracle-con-caddy-y-github-actions.md) | Despliegue en Oracle Cloud Always Free con Caddy, copias diarias y GitHub Actions | Sustituida por 0039 | 2026-11-15 |
 | [0038](0038-pruebas-de-extremo-a-extremo-y-comprobaciones-tras-desplegar.md) | Pruebas de extremo a extremo con Playwright y comprobaciones tras desplegar | Aceptada | 2026-11-15 |
+| [0039](0039-despliegue-con-dokploy.md) | Despliegue con Dokploy en la misma VM de Oracle, con el panel solo por túnel SSH | Aceptada | 2026-11-15 |
 | [0040](0040-palabras-ambiguas-y-sin-bonificacion-sin-tema.md) | Palabras clave ambiguas y ninguna bonificación sin encaje temático | Aceptada | 2026-11-15 |
