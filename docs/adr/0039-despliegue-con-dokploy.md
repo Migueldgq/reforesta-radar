@@ -1,6 +1,7 @@
 # 0039. Despliegue con Dokploy en la misma VM de Oracle, con el panel solo por túnel SSH
 
-- Estado: Aceptada; el punto «El panel no se publica», sustituido por [0043](0043-panel-de-dokploy-con-dominio-publico.md)
+- Estado: Aceptada; el punto «El panel no se publica», sustituido por [0043](0043-panel-de-dokploy-con-dominio-publico.md);
+  el comando de la app, por [0044](0044-despliegue-sin-corte.md)
 - Fecha: 2026-11-15 (rama `feat/dokploy`)
 - Sustituye a: [0037](0037-despliegue-en-oracle-con-caddy-y-github-actions.md)
 

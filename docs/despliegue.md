@@ -134,12 +134,17 @@ si el dominio o Traefik fallan. Desde fuera sigue cerrado (`DOCKER-USER` y la li
 4. `reforesta-radar-deploy` comprueba que el commit está en `main` (en un espejo del repositorio,
    `/var/lib/reforesta-radar/repo.git`) y que ya tiene el formato de Dokploy, lo deja en la copia de Dokploy y le pide
    por su API (en `127.0.0.1:3000`) que **reconstruya sin clonar** («redeploy»). Dokploy construye las imágenes y
-   arranca; la API aplica `alembic upgrade head` al arrancar. El script espera a que Dokploy termine, a que los cuatro
-   servicios estén sanos y a que `/login` y el emisor OAuth respondan a través de Traefik. Si algo falla (un
-   contenedor «unhealthy», la construcción, el sitio), **vuelve solo al commit anterior** de la misma forma y el
-   workflow sale en rojo.
-5. El workflow comprueba desde fuera `https://<dominio>/login` y que el emisor OAuth es exactamente la URL pública.
-6. Después ejecuta `deploy/smoke.sh <URL pública>` (del commit desplegado): comprobaciones de solo lectura desde fuera
+   sustituye `api` y `web` **sin corte** ([abajo](#despliegue-sin-corte), ADR 0044): arranca la versión nueva al lado
+   de la vieja y solo quita la vieja cuando la nueva está sana. La API nueva aplica `alembic upgrade head` antes de
+   escuchar. El script espera a que Dokploy termine, a que los cuatro servicios estén sanos y a que `/login` y el
+   emisor OAuth respondan a través de Traefik. Si algo falla (un contenedor «unhealthy», la construcción, el sitio),
+   **vuelve solo al commit anterior** de la misma forma y el workflow sale en rojo.
+5. Mientras tanto, el workflow pregunta cada medio segundo por `/landing`, `/login` y `/api/public/oportunidades`
+   desde fuera (`deploy/probe.sh`); cualquier respuesta que no sea 2xx/3xx sale como aviso amarillo en el resumen del
+   run («Requests failed during the deploy»), sin ponerlo en rojo. Si aparece, algo ha roto el despliegue sin corte:
+   mira [Si un despliegue corta](#si-un-despliegue-corta).
+6. El workflow comprueba desde fuera `https://<dominio>/login` y que el emisor OAuth es exactamente la URL pública.
+7. Después ejecuta `deploy/smoke.sh <URL pública>` (del commit desplegado): comprobaciones de solo lectura desde fuera
    (`/login` con el nombre de la app, `/api/board` → 401 sin sesión, `/api/public/oportunidades` con datos, `POST /mcp`
    público → 200, `POST /mcp/equipo` → 401 con `resource_metadata`, emisor OAuth, http → https y HSTS, y que
    `Host: dokploy.docker.localhost` no llega al panel). No crea
@@ -149,6 +154,58 @@ si el dominio o Traefik fallan. Desde fuera sigue cerrado (`DOCKER-USER` y la li
    `deploy/smoke.sh https://reforesta-radar.miguelddev.com`.
 
 Tarda 1-2 minutos desde que CI termina (con la caché de construcción del servidor).
+
+### Despliegue sin corte
+
+[ADR 0044](adr/0044-despliegue-sin-corte.md). Antes, cada despliegue paraba `web` y `api` y los volvía a crear: unos
+segundos de 404 (Traefik sin `web`) y 12-14 s de errores en la API. Ahora los visitantes no lo notan (medido en
+producción: cero respuestas fallidas en dos despliegues con imágenes nuevas, uno sin cambios y la prueba de vuelta
+atrás; abajo, lo que aún puede cortar).
+
+**Cómo va.** El comando de la app en Dokploy (lo pone `reforesta-radar-deploy`; `dokploy_command` en
+`deploy/deploy.sh`) encadena cuatro `docker compose`:
+
+1. `build`: construye las imágenes. Nada se para.
+2. `up -d --no-recreate --wait`: crea lo que falte (un servidor nuevo) sin tocar lo que ya corre.
+3. `up -d --no-recreate --scale api=2 --scale web=2 --wait api web`: arranca un segundo `api` y un segundo `web` con
+   las imágenes nuevas, al lado de los viejos, y espera a que estén sanos. La API nueva aplica las migraciones antes de
+   escuchar, mientras la vieja sigue sirviendo. Si no llegan a sanos, se queda aquí: los viejos no se han tocado.
+4. `up -d --remove-orphans`: vuelve a uno de cada; Compose quita primero el contenedor desfasado (el viejo). Recrea
+   `ingest-scheduler` (para el viejo y luego arranca el nuevo: nunca hay dos) y solo toca `postgres` si cambia su
+   propia definición.
+
+Por eso los contenedores cambian de número en cada despliegue (`<app>-api-7`, `<app>-web-6`…); `postgres` e
+`ingest-scheduler` siguen en `-1`. Para dar con uno: `docker ps --filter label=com.docker.compose.service=api`.
+
+**Por qué nadie ve el cambio.**
+- Traefik solo manda tráfico a un `web` sano (healthcheck de Docker) y, además, comprueba cada segundo `/healthz` de
+  cada `web` (`src/app/healthz/route.ts`).
+- El `web` viejo, al recibir SIGTERM (`scripts/web-start.sh`), sigue sirviendo 3 s (Traefik añade el nuevo), luego su
+  `/healthz` responde 503 y Traefik deja de mandarle peticiones, 3 s más para acabar las que tiene, y Next se cierra
+  (`RADAR_DRAIN_SECONDS=6`). Sin el 503, Traefik seguía enviándole peticiones hasta que Docker lo mataba a los 30 s y
+  luego marcaba su dirección ya inexistente (medido: 502 y peticiones colgadas 10 s).
+- Si aun así una conexión a un `web` es rechazada, el middleware `retry` de Traefik la repite en el otro (solo errores
+  de red antes de cualquier respuesta, nunca un código HTTP).
+- `web` llega a la API por el nombre `api`, que mientras hay dos contenedores resuelve a los dos. Uvicorn, al pararse,
+  deja de aceptar conexiones y acaba las peticiones en curso (hasta 30 s, `stop_grace_period`), y Docker quita su
+  dirección del nombre al pararse. En las pruebas ninguna petición a la API falló en ese cambio.
+
+**Regla para las migraciones: compatibles con la versión anterior.** Durante unos segundos la API vieja trabaja con la
+base ya migrada (y si la versión nueva falla, la vuelta atrás no deshace la migración). Una migración puede añadir
+tablas, columnas que admitan nulos o tengan valor por defecto, e índices; no puede borrar ni renombrar algo que la
+versión en marcha use, ni añadir un `NOT NULL` sin valor por defecto. Para eso, en dos despliegues: primero el código
+que deja de usarlo, después la migración que lo quita.
+
+**Lo que aún corta** (en ese despliegue, no después):
+- **Cambiar una etiqueta `traefik.*` de `web`** (`docker-compose.prod.yml`): mientras conviven el `web` viejo y el
+  nuevo, Traefik ve el router definido dos veces de forma distinta y lo descarta (log: «HTTP router defined multiple
+  times with different configurations»). Medido: unos 6 s de 404 en todo el sitio. Haz esos cambios cuando haya poco
+  uso.
+- Cambiar `postgres` (versión, configuración): se recrea y la API falla mientras arranca, como antes.
+- Una API nueva que escucha pero responde errores recibe parte del tráfico desde que arranca hasta que la vuelta
+  atrás la quita (Docker la añade al nombre `api` en cuanto arranca, sana o no).
+- Una petición que dure más de 30 s en el contenedor que se va (p. ej. un análisis de PDF muy lento) se corta.
+- Una carga diaria en curso en `ingest-scheduler` se interrumpe si se despliega a la vez (como antes).
 
 ¿Por qué no el «deploy» de Dokploy? Clona la cabeza de una rama: no puede desplegar un commit concreto, y si `main`
 avanzara entre el CI verde y el clon desplegaría un commit sin comprobar. El despliegue automático de Dokploy (webhook)
@@ -170,16 +227,41 @@ sudo reforesta-radar-deploy <commit>
 ```
 
 Al final enseña el commit en marcha y el estado de cada servicio. Para reconstruir sin cambiar de commit, el botón
-**Rebuild** del panel (no **Deploy**) hace lo mismo que el script sin las comprobaciones.
+**Rebuild** del panel (no **Deploy**) hace lo mismo que el script sin las comprobaciones (también sin corte: usa el
+mismo comando). No edites el comando de la app en el panel (**Advanced → Command**): el script lo vuelve a poner en
+cada despliegue.
+
+Para ver si un despliegue a mano corta, deja la sonda corriendo desde tu ordenador mientras tanto y párala con Ctrl+C
+al acabar (resume respuestas por código y el corte más largo):
+
+```bash
+deploy/probe.sh https://reforesta-radar.miguelddev.com
+```
+
+**Probar una rama antes de fusionarla** (cambios del propio despliegue, como ADR 0044): el script solo acepta commits
+de `RADAR_DEPLOY_BRANCH`. Cámbiala un momento y devuélvela a `main` al acabar (comprueba antes con
+`gh run list --workflow deploy.yml` que no hay un despliegue de GitHub en marcha; el script además toma un cerrojo):
+
+```bash
+sudo sed -i 's/^RADAR_DEPLOY_BRANCH=.*/RADAR_DEPLOY_BRANCH=<rama>/' /etc/reforesta-radar/deploy.env
+sudo reforesta-radar-deploy <commit de la rama>
+sudo sed -i 's/^RADAR_DEPLOY_BRANCH=.*/RADAR_DEPLOY_BRANCH=main/' /etc/reforesta-radar/deploy.env
+```
+
+Si lo que cambia es `deploy/deploy.sh`, instálalo antes desde la rama (`sudo install -m 755 deploy.sh
+/usr/local/sbin/reforesta-radar-deploy`); tras fusionar, `cd /opt/reforesta-radar && sudo git pull && sudo
+./deploy/setup-server.sh` deja el servidor igual que `main`.
 
 ### Volver a una versión anterior
 
-- Si el despliegue falla, la vuelta atrás es automática (probada: un commit con el healthcheck de `web` roto volvió
-  solo al anterior en unos 3 minutos, con `web` fuera de servicio mientras tanto).
+- Si el despliegue falla, la vuelta atrás es automática y sin corte (probada el 2026-11-15: un commit con el
+  healthcheck de `web` roto; los contenedores viejos siguieron sirviendo todo el rato, el script quitó el `web` nuevo
+  «unhealthy», volvió al commit anterior y salió con error en 3,5 minutos, sin ninguna petición fallida). Tarda: un
+  `web` nuevo roto tarda unos 105 s en contar como «unhealthy» (30 s de arranque y 5 fallos cada 15 s).
 - Si la versión nueva arranca pero tiene un fallo: **Actions → Deploy → Run workflow** con el `sha` del commit
   bueno (tiene que estar en `main`), o `sudo reforesta-radar-deploy <commit>` en el servidor. Reconstruye ese commit.
 - Las migraciones no se deshacen solas. Se escriben para que la versión anterior siga funcionando con la base
-  nueva; si una no lo permite, hay que restaurar una copia (abajo).
+  nueva ([la regla](#despliegue-sin-corte)); si una no lo permite, hay que restaurar una copia (abajo).
 - Commits de antes de Dokploy (sin `reforesta-radar-edge` en `docker-compose.prod.yml`) se rechazan: arrancarían
   Caddy en puertos que ya tiene Traefik.
 
@@ -259,10 +341,13 @@ certificado desde fuera.
 
 ## Ver qué pasa
 
+`api` y `web` cambian de número en cada despliegue: búscalos por servicio.
+
 ```bash
+c() { sudo docker ps -q --filter label=com.docker.compose.project=<app> --filter label=com.docker.compose.service=$1; }
 sudo docker ps --format 'table {{.Names}}\t{{.Status}}'          # estado y healthchecks
-sudo docker logs --tail 100 -f <app>-api-1                        # API (una línea por petición, con la IP real del cliente)
-sudo docker logs --tail 100 <app>-ingest-scheduler-1              # carga diaria
+sudo docker logs --tail 100 -f $(c api)                           # API (una línea por petición, con la IP real del cliente)
+sudo docker logs --tail 100 $(c ingest-scheduler)                 # carga diaria
 sudo docker logs --tail 50 dokploy-traefik                        # errores de Traefik y certificados
 sudo docker stats --no-stream                                     # CPU y memoria por contenedor
 df -h / && free -h                                                # disco y memoria del servidor
@@ -270,6 +355,29 @@ journalctl -t reforesta-radar-deploy -t reforesta-radar-ci -n 20  # despliegues 
 ```
 
 Los logs de despliegue de Dokploy están en el panel (app → **Deployments**) y en `/etc/dokploy/logs/<app>/`.
+
+### Si un despliegue corta
+
+El aviso «Requests failed during the deploy» del workflow (o `deploy/probe.sh` a mano) dice qué rutas fallaron, con
+qué código y cuánto duró. Para ver qué pasó en el servidor en ese momento:
+
+```bash
+# Qué contenedor arrancó, se dio por sano, recibió SIGTERM y murió, con la hora (UTC)
+sudo docker events --since 30m --until 0s --filter label=com.docker.compose.project=<app> --filter type=container \
+  --format '{{.Time}} {{.Action}} {{.Actor.Attributes.name}}' | grep -v exec_
+sudo docker logs --since 30m dokploy-traefik       # «defined multiple times»: cambió una etiqueta de web (arriba)
+```
+
+- **404 en todo el sitio unos segundos**: Traefik se quedó sin router. Lo normal es un cambio de etiquetas `traefik.*`
+  de `web` (esperado una vez). Si no hubo ninguno, mira que el `web` nuevo llegó a sano antes de que se parara el viejo.
+- **502 o peticiones colgadas en las páginas**: Traefik mandó peticiones a un `web` que ya se iba. Comprueba que el
+  `web` viejo murió unos 6 s después de su `kill` (no a los 30 s: entonces Next no pudo cerrar) y que `/healthz`
+  responde (`curl https://<dominio>/healthz` → `ok`).
+- **500 solo en `/api/…`**: Next no llegó a la API. Mira los logs del `web` en marcha (`Failed to proxy`) y si la API
+  vieja tardó en pararse.
+- **El despliegue se queda en el paso 3** (Dokploy: «container … is unhealthy»): la versión nueva no arranca bien; el
+  script vuelve solo a la anterior. Si alguna vez quedan dos `api` o dos `web` (un despliegue cortado a medias), el
+  siguiente despliegue quita los que no están sanos; con los dos sanos no hace falta tocar nada.
 
 **Qué se registra.** Traefik no guarda log de accesos (solo errores). La única línea por petición es la de la API:
 IP del cliente, método, ruta **sin cadena de consulta** (`backend/app/access_log.py`), código. Nunca cabeceras
@@ -309,12 +417,14 @@ sudo docker exec $PG dropdb -U radar radar_check
 
 ```bash
 A=<app>
-sudo docker stop $A-web-1 $A-api-1 $A-ingest-scheduler-1
+c() { sudo docker ps -aq --filter label=com.docker.compose.project=$A --filter label=com.docker.compose.service=$1; }
+WEB=$(c web) API=$(c api) SCHED=$(c ingest-scheduler)   # api y web cambian de número en cada despliegue
+sudo docker stop $WEB $API $SCHED
 sudo docker exec $A-postgres-1 dropdb -U radar --force radar
 sudo docker exec $A-postgres-1 createdb -U radar -O radar radar
 sudo cat /var/backups/reforesta-radar/radar-AAAAMMDDTHHMMSSZ.dump \
   | sudo docker exec -i $A-postgres-1 pg_restore -U radar -d radar --no-owner --exit-on-error
-sudo docker start $A-api-1 && sleep 15 && sudo docker start $A-web-1 $A-ingest-scheduler-1
+sudo docker start $API && sleep 15 && sudo docker start $WEB $SCHED
 ```
 
 ### Copia fuera del servidor (Object Storage de Oracle)
@@ -363,7 +473,7 @@ copias locales, su comprobación y la restauración no dependen del panel. Por e
 En un servidor sin cuentas (la contraseña se genera y se enseña **una sola vez**; cámbiala al entrar en Mi cuenta):
 
 ```bash
-sudo docker exec -it <app>-api-1 python -m app.users create-admin tu@correo.org --name "Tu Nombre" --generate
+sudo docker exec -it $(sudo docker ps -q --filter label=com.docker.compose.project=<app> --filter label=com.docker.compose.service=api) python -m app.users create-admin tu@correo.org --name "Tu Nombre" --generate
 ```
 
 Después, entra en `https://<dominio>/login` e invita al resto desde **Equipo → Invitar** (copia el enlace y mándalo
@@ -413,8 +523,9 @@ Para eso está Dokploy. Para añadir uno:
 
 Límites del radar (`docker-compose.prod.yml`, comprobados con `docker inspect`): `web` 768 MB, `api` 1 GB,
 `postgres` 1 GB, `ingest-scheduler` 1,5 GB (la carga diaria es lo que más usa), con reservas de 128-256 MB. En total
-4,3 GB como máximo: quedan unos 6 GB para otros proyectos y Dokploy. Con muchos proyectos, la CPU (2 núcleos) se nota
-antes que la memoria, sobre todo al construir imágenes en el servidor.
+4,3 GB como máximo: quedan unos 6 GB para otros proyectos y Dokploy. Durante un despliegue hay unos segundos dos `web` y
+dos `api` (ADR 0044): 1,8 GB más de límite, unos 200 MB más de uso real. Con muchos proyectos, la CPU (2 núcleos) se
+nota antes que la memoria, sobre todo al construir imágenes en el servidor.
 
 **Reclamación por inactividad.** Oracle puede reclamar una VM Always Free inactiva (ver abajo). Más proyectos la hacen
 menos «inactiva», pero no lo garantizan: la regla mira los percentiles de CPU, red y memoria de 7 días.
@@ -469,7 +580,8 @@ Ubuntu 24.04 con acceso SSH y `sudo`. Abre 80 y 443 en la lista de seguridad de 
    - **General → Provider: Git**: URL `https://github.com/Migueldgq/reforesta-radar.git`, rama `main`, Compose Path
      `./docker-compose.yml`. **Auto Deploy apagado.**
    - **Advanced → Command**: `compose -p <app> -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans`
-     (`<app>` es el «App Name» que Dokploy le dio, arriba en la app).
+     (`<app>` es el «App Name» que Dokploy le dio, arriba en la app). Sirve para este primer arranque; el primer
+     `reforesta-radar-deploy` lo cambia por el del [despliegue sin corte](#despliegue-sin-corte).
    - **Environment**: `RADAR_DOMAIN=<dominio>` y `RADAR_DB_PASSWORD=<openssl rand -hex 32>`.
    - Sin **Domains**, sin **Isolated Deployments**. Pulsa **Deploy** esta única vez (clona la rama).
    - Lo mismo por API, desde el servidor, con la clave: `project.create`, `compose.create`
