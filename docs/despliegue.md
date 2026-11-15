@@ -30,7 +30,7 @@ del proyecto. Ningún servicio del radar publica puertos.
 | Dokploy | v0.31.2 (servicios de Swarm `dokploy` y `dokploy-postgres`, contenedor `dokploy-traefik`); datos en `/etc/dokploy` y en los volúmenes `dokploy` y `dokploy-postgres` |
 | La app | Proyecto «Reforesta Radar» → app compose «Radar» (`<app>`). Su copia del repositorio: `/etc/dokploy/compose/<app>/code` (solo root) |
 | Ficheros de compose | `docker-compose.yml` + `docker-compose.prod.yml` (comando propio de la app, abajo) |
-| Secretos | En el entorno de la app en Dokploy (`RADAR_DOMAIN`, `RADAR_DB_PASSWORD`), que Dokploy escribe en `code/.env` al desplegar. Nunca en git |
+| Secretos | En el entorno de la app en Dokploy (`RADAR_DOMAIN`, `RADAR_DB_PASSWORD` y, opcional, `GEMINI_API_KEY`), que Dokploy escribe en `code/.env` al desplegar. Nunca en git |
 | Configuración del servidor | `/etc/reforesta-radar/deploy.env` (app, id, dominio, rama; sin secretos), `/etc/reforesta-radar/dokploy-api-key` (600), `/etc/reforesta-radar/backup.env` (600, opcional) |
 | Proxy | Traefik: `deploy/traefik.yml` → `/etc/dokploy/traefik/traefik.yml`; certificados en `/etc/dokploy/traefik/dynamic/acme.json`; rutas del radar en las etiquetas de `web` (`docker-compose.prod.yml`) |
 | Base de datos | volumen `<app>_radar-pgdata` |
@@ -185,6 +185,22 @@ La primera vez, además, hay que crear el entorno `production` en GitHub y sus v
 ssh ubuntu@<IP> 'echo "<IP> $(cut -d" " -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)"' \
   | gh variable set DEPLOY_KNOWN_HOSTS --env production -R Migueldgq/reforesta-radar
 ```
+
+## Revisión por IA (opcional)
+
+Apagada mientras no haya clave ([ADR 0041](adr/0041-revision-por-ia-que-solo-descarta.md)). Para encenderla:
+
+1. Crea una clave de la API de Gemini en Google AI Studio (el nivel gratuito basta para la carga diaria).
+2. En el panel, app «Radar» → **Environment**: añade `GEMINI_API_KEY=<la clave>` y guarda. Opcionales, con estos
+   valores por defecto: `RADAR_AI_REVIEW=true` (con `false` se apaga sin borrar la clave),
+   `RADAR_AI_MODEL=gemini-flash-lite-latest`, `RADAR_AI_MAX_CALLS=300`.
+3. Redespliega (Deploy en el panel, o `sudo reforesta-radar-deploy <commit en marcha>`). Al arrancar,
+   `ingest-scheduler` pide los veredictos que falten (en sus logs, `[review] …`); después, cada ingesta diaria solo
+   pregunta por lo nuevo o lo cambiado.
+
+La clave solo vive en el entorno de Dokploy y en `code/.env` (solo root); `docker-compose.yml` y
+`docker-compose.prod.yml` solo pasan el nombre de la variable. Para apagarla, `RADAR_AI_REVIEW=false` (o quita la
+clave) y redespliega.
 
 ## Cambiar el dominio
 

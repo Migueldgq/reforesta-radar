@@ -36,6 +36,12 @@ HORIZON_WARNING = (
     "demostración, no como líder."
 )
 LIFE_REASON = "Programa LIFE: el instrumento europeo de referencia para naturaleza y biodiversidad."
+# LIFE has four sub-programmes, named in the call identifier (LIFE-2025-SAP-NAT, LIFE-2025-CET-EUCF…). Only "NAT" is
+# nature and biodiversity; clean energy ("CET") is not Reforesta's field at all (ADR 0042).
+LIFE_OTHER_REASON = "Programa LIFE: el programa europeo de medio ambiente y acción por el clima."
+LIFE_CET_WARNING = (
+    "Subprograma LIFE de transición a la energía limpia: es de energía, no de naturaleza ni biodiversidad."
+)
 LOCAL_WARNING = "Dirigida principalmente a municipios / autoridades locales."
 
 # English topic terms -> Spanish equivalents understood by the scorer. JS regex \b is ASCII-only: re.ASCII.
@@ -153,7 +159,11 @@ def to_raw(m: dict[str, Any], identifier: str, deadline: str) -> RawOpportunity 
         delta, cap = -12, 58
         warnings.append(HORIZON_WARNING)
     elif is_life:
-        prepend.append(LIFE_REASON)
+        parts = identifier.upper().split("-")
+        if "CET" in parts:
+            warnings.append(LIFE_CET_WARNING)
+        else:
+            prepend.append(LIFE_REASON if "NAT" in parts else LIFE_OTHER_REASON)
     if _LOCAL_RE.search(title_lc):
         warnings.append(LOCAL_WARNING)
 

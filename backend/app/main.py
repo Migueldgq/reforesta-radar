@@ -34,6 +34,7 @@ from app.db.session import make_engine
 from app.mcp.http import endpoint as mcp_endpoint
 from app.models import OpportunitiesResponse, SourcesResponse
 from app.oauth.routes import routes as oauth_routes
+from app.review import hidden_by_ai, kept_ids
 from app.scoring.rank import rank
 
 log = logging.getLogger(__name__)
@@ -86,15 +87,21 @@ async def health(request: Request) -> dict[str, str]:
     return {"status": "ok", "database": "ok"}
 
 
-async def _opportunities(request: Request) -> OpportunitiesResponse:
+async def _opportunities(request: Request, descartadas: bool, team: bool) -> OpportunitiesResponse:
+    """`descartadas`: also the calls the «Revisión por IA» took out of the list. The team view never hides a call the
+    team has acted on; the public one knows nothing of the team, so it hides every "no"."""
     try:
         async with _engine(request).connect() as conn:
             state = await read_state(conn)
+            items = rank(state.items)
+            if not descartadas and any(o.ai_review for o in items):
+                kept = await kept_ids(conn) if team else set()
+                items = [o for o in items if not hidden_by_ai(o, kept)]
     except Exception as e:
         log.exception("postgres read failed")
         raise HTTPException(503, detail=f"Base de datos no disponible ({type(e).__name__}).") from e
     return OpportunitiesResponse(
-        items=rank(state.items),
+        items=items,
         sources=state.sources,
         ingest=state.ingest,
         fetched_at=state.last_ingest_at or "1970-01-01T00:00:00.000Z",
@@ -108,18 +115,22 @@ async def _opportunities(request: Request) -> OpportunitiesResponse:
 
 
 @app.get("/api/oportunidades", response_model=OpportunitiesResponse, dependencies=signed_in, responses=no_session)
-async def oportunidades(request: Request, response: Response) -> OpportunitiesResponse:
-    """Stored base items with geographic + kind fit applied, ranked. Same shape as the TS route."""
+async def oportunidades(request: Request, response: Response, descartadas: bool = False) -> OpportunitiesResponse:
+    """Stored base items with geographic + kind fit applied, ranked. Same shape as the TS route. Without
+    `descartadas=1`, the calls the «Revisión por IA» said "no" to are left out unless the team has acted on them."""
     response.headers["Cache-Control"] = "private, max-age=30, stale-while-revalidate=300"
-    return await _opportunities(request)
+    return await _opportunities(request, descartadas, team=True)
 
 
 @app.get("/api/public/oportunidades", response_model=OpportunitiesResponse, tags=["public"])
-async def public_oportunidades(request: Request, response: Response) -> OpportunitiesResponse:
+async def public_oportunidades(
+    request: Request, response: Response, descartadas: bool = False
+) -> OpportunitiesResponse:
     """For the public landing: the same ranked catalogue of public calls as /api/oportunidades. It is built only
-    from the ingested public sources (no user, board, vote or team-profile data ever goes into it)."""
+    from the ingested public sources (no user, board, vote or team-profile data ever goes into it), so without
+    `descartadas=1` every call the «Revisión por IA» said "no" to is left out."""
     response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
-    return await _opportunities(request)
+    return await _opportunities(request, descartadas, team=False)
 
 
 @app.get("/api/fuentes", response_model=SourcesResponse, dependencies=signed_in, responses=no_session)

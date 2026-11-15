@@ -23,6 +23,13 @@ FACILITY_SERVICE = re.compile(
     r"\b(servicios? de (vigilancia|seguridad|limpieza)|suministros?\b|mantenimiento (de|del) (las |los |el )?"
     r"(instalaciones|edificios?|equipos|vehiculos|sistemas|ascensores|climatizacion))"
 )
+# Where the object starts ("Objeto: …", "contrato de: …") and where the name of the centre it serves begins
+# ("… de las instalaciones del Centro Nacional de Educación Ambiental"): only the object in between can give a topic.
+_OBJECT_START = re.compile(r"\b(objeto|contrato de)\b")
+_FACILITY_NAME = re.compile(
+    r"\b(de|del|en|para)\s+((el|la|los|las)\s+)?(centros?|edificios?|sedes?|instalaciones|dependencias|oficinas)\b.*",
+    re.DOTALL,
+)
 TENDER_WARNING = "Licitación: es un contrato de servicios; exige solvencia técnica y oferta económica."
 # Supplies and works are not services: the warning names the contract the object starts with (ADR 0040), e.g.
 # "contrato de: Suministro de…" but not "servicio de mantenimiento y suministro de…".
@@ -107,6 +114,16 @@ def _title_topic(titulo: str) -> int:
     return sum(kw.weight for _, kw in topic_matches(normalize_text(titulo)))
 
 
+def facility_tender(title_norm: str) -> bool:
+    """A tender to run a building (FACILITY_SERVICE) whose topic comes only from the centre's name: without that name
+    the object has no topic of its own. "Suministro de planta forestal para reforestación" is not one."""
+    if not FACILITY_SERVICE.search(title_norm):
+        return False
+    m = _OBJECT_START.search(title_norm)
+    obj = _FACILITY_NAME.sub("", title_norm[m.end() :] if m else title_norm)
+    return sum(kw.weight for _, kw in topic_matches(obj)) < KindFit.min_title_topic
+
+
 def kind_fit(o: Opportunity) -> FitAnalysis:
     """Actionability by kind: a grant Reforesta can apply to outranks tenders, bulletin notices and research."""
     fit = o.fit
@@ -120,7 +137,7 @@ def kind_fit(o: Opportunity) -> FitAnalysis:
         warnings.append(tender_warning(title_norm))
         if weak_topic:
             score = min(score, KindFit.off_topic_cap)
-        elif FACILITY_SERVICE.search(title_norm):
+        elif facility_tender(title_norm):
             score = min(score, KindFit.off_topic_cap)
             warnings.append(FACILITY_WARNING)
     elif o.kind == "boletin" and not (CALL_IN_TITLE.search(title_norm) and GRANT_IN_TITLE.search(title_norm)):
@@ -153,7 +170,7 @@ def kind_ceiling(o: Opportunity) -> int | None:
     caps: list[int] = []
     if o.kind == "licitacion":
         caps.append(KindFit.tender_cap)
-        if weak_topic or FACILITY_SERVICE.search(title_norm):
+        if weak_topic or facility_tender(title_norm):
             caps.append(KindFit.off_topic_cap)
     elif o.kind == "boletin" and not (CALL_IN_TITLE.search(title_norm) and GRANT_IN_TITLE.search(title_norm)):
         caps.append(KindFit.bulletin_cap)

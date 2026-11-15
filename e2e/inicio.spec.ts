@@ -1,7 +1,12 @@
 import type { Page } from "@playwright/test";
 import { drawer, expect, expectNoCrash, test } from "./fixtures";
 
-/** Inicio, read-only, as the member `miembro`. Data: backend/tests/e2e_seed.py (12 opportunities, 2 sources). */
+/**
+ * Inicio as the member `miembro`. Data: backend/tests/e2e_seed.py (12 opportunities, 2 sources, plus one call the
+ * «Revisión por IA» discarded). Serial: the «Sí encaja» test brings that call back for the whole team (and then undoes
+ * it), which would change the counts the other tests here check.
+ */
+test.describe.configure({ mode: "serial" });
 
 const list = (page: Page) => page.getByRole("region", { name: "Convocatorias" });
 const total = (page: Page, n: number) => list(page).getByText(new RegExp(`^${n} convocatorias?$`));
@@ -85,5 +90,68 @@ test("a deep link ?c=<id> opens that call's drawer, and closing it clears the li
   await page.keyboard.press("Escape");
   await expect(drawer(page)).toHaveCount(0);
   await expect(page).not.toHaveURL(/[?&]c=/);
+  await expectNoCrash(page);
+});
+
+/* ---------- «Revisión por IA» (seeded verdicts; no model is called) ---------- */
+
+const discardedControl = (page: Page) => list(page).getByRole("button", { name: /^Descartadas por la IA/ });
+
+test("the calls the AI review discarded are apart, with its reason", async ({ as, run }) => {
+  const page = await as("miembro");
+  await openInicio(page);
+  const title = run.seed.titles[run.seed.discarded];
+  await expect(list(page).getByRole("table")).not.toContainText(title);
+  await expect(discardedControl(page)).toHaveText(/Descartadas por la IA\s*1/);
+  await discardedControl(page).click();
+  const apart = page.getByTestId("descartadas-ia");
+  await expect(apart).toContainText("Revisión por IA: Es voluntariado social, no ambiental.");
+  await apart.getByRole("button", { name: title }).click();
+
+  const review = drawer(page).getByRole("region", { name: "Revisión por IA" });
+  await expect(review).toContainText("No encaja");
+  await expect(review).toContainText("Es voluntariado social, no ambiental.");
+  await expect(review).toContainText("No cambia la nota. Por eso no sale en la lista.");
+  await expect(review.getByRole("button", { name: "Sí encaja" })).toBeVisible();
+  await expectNoCrash(page);
+});
+
+test("a doubtful verdict is a chip in the list and a section in the drawer", async ({ as, run }) => {
+  const page = await as("miembro");
+  await openInicio(page);
+  await list(page).getByRole("tab", { name: /Todas/ }).click();
+  const row = list(page).getByRole("row").filter({ hasText: "Revisión por IA: dudosa" });
+  await expect(row).toHaveCount(1);
+  await row.getByRole("button").first().click();
+  const review = drawer(page).getByRole("region", { name: "Revisión por IA" });
+  await expect(review).toContainText("Dudosa");
+  await expect(page).toHaveURL(new RegExp(`[?&]c=${encodeURIComponent(run.seed.doubt)}`));
+  // the rules' reasons stay apart, under «¿Encaja?»
+  await expect(drawer(page).getByRole("region", { name: "¿Encaja?" })).not.toContainText("Revisión por IA");
+});
+
+test("«Sí encaja» brings a discarded call back to the list, and removing the vote takes it out again", async ({ as, run }) => {
+  const page = await as("miembro");
+  await page.goto(`/?c=${encodeURIComponent(run.seed.discarded)}`);
+  const review = drawer(page).getByRole("region", { name: "Revisión por IA" });
+  await review.getByRole("button", { name: "Sí encaja" }).click();
+  await expect(review).toContainText("Sigue en la lista porque alguien del equipo votó «Nos sirve».");
+  await expect(drawer(page).getByRole("button", { name: "Nos sirve", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(page.getByText(/^13 oportunidades de 2 fuentes/)).toBeVisible();
+  await expect(list(page).getByRole("table")).toContainText(run.seed.titles[run.seed.discarded]);
+  await expect(discardedControl(page)).toHaveCount(0);
+
+  // a fresh page agrees (the vote is the team's, saved by the API)
+  await page.reload();
+  await expect(page.getByText(/^13 oportunidades de 2 fuentes/)).toBeVisible();
+
+  // undo, so the seeded data is as it was
+  await page.goto(`/?c=${encodeURIComponent(run.seed.discarded)}`);
+  await drawer(page).getByRole("button", { name: "Quitar mi voto" }).click();
+  await expect(drawer(page).getByRole("region", { name: "Revisión por IA" }).getByRole("button", { name: "Sí encaja" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByText(/^12 oportunidades de 2 fuentes/)).toBeVisible();
+  await expect(discardedControl(page)).toHaveText(/Descartadas por la IA\s*1/);
   await expectNoCrash(page);
 });

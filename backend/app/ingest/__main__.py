@@ -5,7 +5,9 @@ Port of scripts/ingest.ts.
 
 --dry-run fetches and prints the diff against the database without writing (if the database is unreachable it
 diffs against an empty one). Exit code 1 only if every source failed or the database write failed. After the write,
-the BDNS history step (app/ingest/history.py) reads previous editions of the best BDNS calls; it never fails the run.
+the BDNS history step (app/ingest/history.py) reads previous editions of the best BDNS calls and, at the same time,
+the «Revisión por IA» step (app/ingest/review.py, off without GEMINI_API_KEY) asks about calls without a current
+verdict; neither ever fails the run.
 """
 
 import argparse
@@ -22,6 +24,7 @@ from app.config import settings
 from app.db.session import make_engine
 from app.http import Http
 from app.ingest.history import run_history
+from app.ingest.review import run_review
 from app.ingest.store import (
     IngestResult,
     SourceDiff,
@@ -192,9 +195,14 @@ async def main(argv: list[str] | None = None) -> int:
             return 1
         print_summary(runs, res, t0, args.dry_run)
         bdns = next((r for r in runs if r.health.id == "bdns" and r.health.status != "error"), None)
-        if bdns is not None and engine is not None and not args.dry_run:
-            # after the commit above: a failure or timeout here never fails the run (run_history never raises)
-            await run_history(engine, memo, bdns.items, settings.history_timeout_s)
+        if engine is not None and not args.dry_run:
+            # after the commit above: a failure or timeout here never fails the run (neither step ever raises).
+            # The review reads what is stored, so a call's history from this run may land after its verdict: it does
+            # not matter, the verdict only looks at the call's own text.
+            steps = [run_review(engine)]
+            if bdns is not None:
+                steps.append(run_history(engine, memo, bdns.items, settings.history_timeout_s))
+            await asyncio.gather(*steps)
         if status == "error":
             print("[ingest] every source failed", file=sys.stderr)
             return 1

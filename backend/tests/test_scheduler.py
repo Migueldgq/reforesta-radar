@@ -50,3 +50,11 @@ def test_failed_attempt_is_retried_after_an_hour() -> None:
 def test_last_ok_in_utc_is_compared_by_instant() -> None:
     # Postgres returns UTC: 08:05 UTC is 09:05 in Madrid (CET), after the slot
     assert not is_due(at(15, 10), AT, last_ok=datetime(2026, 11, 15, 8, 5, tzinfo=ZoneInfo("UTC")))
+
+
+def test_a_new_scoring_version_is_due_at_once() -> None:
+    # deployed at 15:00 with new rules: no waiting for tomorrow's 09:00
+    assert is_due(at(15, 15), AT, last_ok=at(15, 9, 2), old_scoring=True)
+    # a failed run with the new rules is retried after an hour, not in a loop
+    tried = at(15, 15)
+    assert not is_due(tried + timedelta(minutes=30), AT, last_ok=at(15, 9, 2), last_attempt=tried, old_scoring=True)

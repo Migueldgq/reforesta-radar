@@ -133,9 +133,9 @@ def test_profile_tables_match_ts() -> None:
     # frozen golden at v12; v13-14 added and tuned the BDNS history signal (app/scoring/history.py), v15 the deadline
     # estimate of undated calls (score.estimated_end), v16 one estimated-deadline mechanism flagged as such (ADR 0029),
     # v17 sector associations, LEADER groups and facility-service tenders (ADR 0032), v18 ambiguous keywords and no
-    # organism bonus without a topic match (ADR 0040: KEYWORD_CONTEXT is a new table, KEYWORD_RULES is unchanged);
-    # none of them is in these tables
-    assert p["scoringVersion"] + 6 == SCORING_VERSION
+    # organism bonus without a topic match (ADR 0040: KEYWORD_CONTEXT is a new table, KEYWORD_RULES is unchanged),
+    # v19 facility tenders judged on their object and honest LIFE reasons (ADR 0042); none of them is in these tables
+    assert p["scoringVersion"] + 7 == SCORING_VERSION
     assert [{"line": g.line, "keywords": [k._asdict() for k in g.keywords]} for g in KEYWORD_RULES] == p["keywordRules"]
     assert list(ONG_POSITIVE_TERMS) == p["ongPositiveTerms"]
     assert [d._asdict() for d in DEALBREAKER_TERMS] == p["dealbreakerTerms"]

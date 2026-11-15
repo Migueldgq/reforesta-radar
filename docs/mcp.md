@@ -3,8 +3,9 @@
 El radar es también un **servidor MCP de solo lectura**: el agente de IA que ya usas (Claude Code, Claude Desktop,
 claude.ai, Cursor u otro compatible con [MCP](https://modelcontextprotocol.io)) puede buscar convocatorias, leer
 fichas e historial y responder cosas como «¿qué hay abierto para charcas en Madrid y qué nos falta para pedirlo?». El
-agente razona; el radar solo le da datos. No hay ninguna llamada a un modelo de IA de nuestro lado y el agente
-no puede cambiar nada. Decisiones: [ADR 0026](adr/0026-servidor-mcp-de-solo-lectura-con-dos-niveles.md),
+agente razona; el radar solo le da datos. Responder al agente no llama a ningún modelo de IA de nuestro lado (la
+«Revisión por IA» opcional se hace al cargar los datos, [ADR 0041](adr/0041-revision-por-ia-que-solo-descarta.md))
+y el agente no puede cambiar nada. Decisiones: [ADR 0026](adr/0026-servidor-mcp-de-solo-lectura-con-dos-niveles.md),
 [ADR 0027](adr/0027-tokens-personales-para-el-mcp.md) y [ADR 0035](adr/0035-iniciar-sesion-desde-el-asistente-oauth.md).
 Guía paso a paso para el equipo, sin tecnicismos: [guia-agente-ia.md](guia-agente-ia.md).
 
@@ -113,8 +114,8 @@ Todas son de solo lectura (anotadas `readOnlyHint`) y devuelven JSON compacto (t
 
 | Herramienta | Qué devuelve | Pregunta de ejemplo |
 |---|---|---|
-| `buscar_convocatorias` | Filas compactas: título, organismo, territorio, estado, cierre y días restantes, cuándo suele abrir, importe, nota, 1-2 motivos, url oficial. Filtros: texto (alternativas con `\|`), estado, territorio, línea de trabajo, fuente, organismo, nota mínima, cierra antes de, tipo; orden por encaje, cierre o recientes; 20 por página (máx. 50) con `desde`. | «¿Qué hay abierto para charcas o anfibios en Madrid?» |
-| `ver_convocatoria` | La ficha de la web: motivos y avisos de la nota, fechas, importe, beneficiarios, documentos, programa (empresas) e historial BDNS (cuándo suele abrir, plazo habitual, quién ganó por tipo de entidad, si Reforesta ganó y cuánto, ONG afines). Con token: estado en el tablero, asignada, notas y votos. | «¿Cuándo suele abrir la de proyectos ambientales de la Comunidad de Madrid y la ha ganado Reforesta?» |
+| `buscar_convocatorias` | Filas compactas: título, organismo, territorio, estado, cierre y días restantes, cuándo suele abrir, importe, nota, 1-2 motivos, la revisión por IA si la hay (`revisionIA`), url oficial. Filtros: texto (alternativas con `\|`), estado, territorio, línea de trabajo, fuente, organismo, nota mínima, cierra antes de, tipo; orden por encaje, cierre o recientes; 20 por página (máx. 50) con `desde`. Como la web, deja fuera las que la revisión por IA descartó (`descartadasPorIA` dice cuántas; `incluir_descartadas` las incluye). | «¿Qué hay abierto para charcas o anfibios en Madrid?» |
+| `ver_convocatoria` | La ficha de la web: motivos y avisos de la nota, fechas, importe, beneficiarios, documentos, programa (empresas), historial BDNS (cuándo suele abrir, plazo habitual, quién ganó por tipo de entidad, si Reforesta ganó y cuánto, ONG afines) y la revisión por IA (`revisionIA`, `descartadaPorIA`). Con token: estado en el tablero, asignada, notas y votos. | «¿Cuándo suele abrir la de proyectos ambientales de la Comunidad de Madrid y la ha ganado Reforesta?» |
 | `programas_empresas` | Programas de fundaciones y empresas comprobados a mano: requisitos, límites, territorio, última ventana, fecha de comprobación (`verifiedOn`) y lo no comprobado. | «¿Qué fundaciones financian reforestación?» |
 | `tablero_equipo` | **Solo con token.** Recuento por estado y filas con asignada, cierre, nº de notas y la última nota; filtros por estado y persona. | «¿Qué tenemos en estudio y quién lo lleva?» |
 | `fuentes` | Estado de cada fuente en la última carga y hora de la última carga correcta. | «¿De cuándo son los datos?» |

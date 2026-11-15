@@ -62,6 +62,16 @@ export function territoryOf(o: Pick<Opportunity, "region" | "rsc">): string {
   return o.rsc?.territory || o.region;
 }
 
+/* ---------- «Revisión por IA» (ADR 0041) ---------- */
+
+/**
+ * Out of the default list: the AI review said "no" and the team has not acted on the call (`kept`: on the board or
+ * voted «Nos sirve», which is what «Sí encaja» does). Same rule as the API (backend/app/review.py `hidden_by_ai`).
+ */
+export function hiddenByAi(o: Pick<Opportunity, "id" | "aiReview">, kept: Set<string>): boolean {
+  return o.aiReview?.verdict === "no" && !kept.has(o.id);
+}
+
 /* ---------- Dates ---------- */
 
 const DAY = 86_400_000;

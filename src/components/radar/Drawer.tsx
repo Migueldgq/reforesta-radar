@@ -2,7 +2,7 @@
 
 import { ArrowUpRight, Award, Check, CircleAlert, CircleCheck, FileText, Link2, Loader2, ScanSearch, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
 import { Fragment, useMemo, useState, type FormEvent } from "react";
-import type { AwardsSummary, History, Opportunity, OpportunityDocument } from "@/lib/opportunity";
+import type { AiReview, AwardsSummary, History, Opportunity, OpportunityDocument } from "@/lib/opportunity";
 import type { PdfAnalysisResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { fmtWhenShort, type BoardItem, type VoteValue } from "@/lib/team";
 import { Input } from "@/components/ui/input";
 import { stub, useRadar } from "./store";
 import { analyzePdf, PdfResult } from "./PdfView";
-import { ConfirmDialog, DeadlineChip, GoneNote, OFFLINE_TIP, PersonAvatar, ScoreChip, textareaClass } from "./ui";
+import { AiVerdictChip, ConfirmDialog, DeadlineChip, GoneNote, OFFLINE_TIP, PersonAvatar, ScoreChip, textareaClass } from "./ui";
 
 /** What the drawer draws: the live call, or (when it is gone from the sources) the board row. Compared by reference. */
 type Shown = { live: Opportunity | undefined; item: BoardItem | undefined };
@@ -132,6 +132,7 @@ function DrawerBody({ o }: { o: Opportunity }) {
         <li>{fit.outsideManualSources ? "No es de los organismos que ya revisáis a mano" : `Organismo que ya revisáis: ${fit.manualSourceMatch ?? "sí"}`}</li>
       </ul>
     </section>,
+    o.aiReview && <AiReviewSection key="ai" o={o} review={o.aiReview} />,
     <TriagePicker key="triage" o={o} />,
     <VoteSection key="vote" o={o} />,
     <TeamSection key="team" o={o} />,
@@ -461,6 +462,36 @@ function TriagePicker({ o }: { o: Opportunity }) {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+/* ---------- «Revisión por IA» (ADR 0041): a second opinion on the topic, apart from the rules' reasons ---------- */
+
+function AiReviewSection({ o, review }: { o: Opportunity; review: AiReview }) {
+  const { discarded, board, votes, setVote, offline } = useRadar();
+  const { me } = useSession();
+  const hidden = discarded.some((d) => d.id === o.id);
+  const mine = votes.find((v) => v.opportunityId === o.id && v.user.id === me.id);
+  return (
+    <section aria-labelledby="ai-h" className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <SectionTitle id="ai-h">Revisión por IA</SectionTitle>
+        <AiVerdictChip review={review} />
+      </div>
+      <p className="leading-snug">{review.reason}</p>
+      <p className="text-xs text-muted-foreground">
+        Una IA lee el texto público de la convocatoria y opina si tiene que ver con vuestro trabajo. No cambia la nota.
+        {review.verdict === "no" && (hidden ? " Por eso no sale en la lista." : board[o.id] ? " Sigue en la lista porque está en vuestro seguimiento." : " Sigue en la lista porque alguien del equipo votó «Nos sirve».")}
+      </p>
+      {hidden && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-1">
+          <Button size="sm" variant="outline" disabled={offline} title={offline ? OFFLINE_TIP : undefined} onClick={() => setVote(o.id, "sirve", mine?.reason ?? "")}>
+            <ThumbsUp aria-hidden /> Sí encaja
+          </Button>
+          <span className="text-xs text-muted-foreground">Vuelve a la lista y queda como tu voto «Nos sirve».</span>
+        </div>
+      )}
     </section>
   );
 }

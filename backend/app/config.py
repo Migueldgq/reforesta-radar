@@ -37,6 +37,15 @@ class Settings:
     # stored calls and lists them as "disabled" (docs/mantenimiento.md). Their rows stay in the database.
     disabled_sources: list[str] = field(default_factory=lambda: _list(os.getenv("RADAR_DISABLED_SOURCES", "")))
 
+    # --- «Revisión por IA» (app/review.py, ADR 0041): a second opinion that may hide a call, never change its score ---
+    # Google Gemini API key (Google's own variable name). Empty: the review is off and the app shows nothing about it.
+    gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", "").strip())
+    # Off switch that keeps the key in place: false behaves exactly as without a key.
+    ai_review: bool = field(default_factory=lambda: _bool(os.getenv("RADAR_AI_REVIEW", "true")))
+    ai_model: str = field(default_factory=lambda: os.getenv("RADAR_AI_MODEL", "gemini-flash-lite-latest").strip())
+    # Calls sent to the model per ingest run at most (the rest wait for the next run).
+    ai_max_calls: int = field(default_factory=lambda: int(os.getenv("RADAR_AI_MAX_CALLS", "300")))
+
     # --- accounts (app/auth) ---
     # Public base URL of the web app: invitation and reset links are `<public_url>/invitacion/<token>` etc.
     public_url: str = field(default_factory=lambda: os.getenv("RADAR_PUBLIC_URL", "http://localhost:3010").rstrip("/"))
@@ -89,6 +98,10 @@ class Settings:
     def mcp_team_url(self) -> str:
         """The team address: always asks the assistant to sign in (OAuth) or to send a personal token."""
         return f"{self.mcp_public_url}/equipo"
+
+    @property
+    def ai_review_on(self) -> bool:
+        return self.ai_review and bool(self.gemini_api_key)
 
     @property
     def email_enabled(self) -> bool:

@@ -104,6 +104,20 @@ def test_facility_service_tender_is_capped_off_topic() -> None:
     assert fit.score_cap == 57 and FACILITY_WARNING not in fit.warnings
 
 
+def test_supply_tender_with_its_own_topic_is_not_a_facility_tender() -> None:
+    # ADR 0042: «suministro» alone used to cap any tender at 30 with "el tema sale del nombre del centro"
+    plants = "Anuncio de licitación de: Ayuntamiento. Objeto: Suministro de planta forestal para reforestación."
+    fit = adjusted_fit(_tender(plants))
+    assert (fit.score, fit.score_cap) == (57, 57) and FACILITY_WARNING not in fit.warnings
+    # the topic in the object still counts when the contract also names a centre
+    nursery = "Objeto: Suministro de planta forestal autóctona para el vivero del Centro de Educación Ambiental."
+    assert FACILITY_WARNING not in adjusted_fit(_tender(nursery)).warnings
+    # supplies for a centre whose only topic is its name stay capped
+    office = "Objeto: Suministro de material de oficina para el Centro Nacional de Educación Ambiental (CENEAM)."
+    fit = adjusted_fit(_tender(office))
+    assert (fit.score, fit.score_cap) == (30, 30) and FACILITY_WARNING in fit.warnings
+
+
 def test_profile_bonus_never_lifts_a_call_past_its_kind_cap() -> None:
     profile = TeamProfile.model_validate({"linePriority": {"educacion": 10}})
     o = _tender(CENEAM)

@@ -4,6 +4,11 @@ Wakes every 30 s and runs `python -m app.ingest --trigger schedule` when a run i
 Polling instead of sleeping until 09:00 survives the host sleeping (a laptop): the first tick after waking catches
 up. Each tick also claims an admin's "update now" request (table ingest_requests, POST /api/ingest) and runs it
 with `--trigger request`; one short connection per tick, two tiny indexed queries.
+
+After a deploy (the scheduler restarts with the new image): if the last successful ingest was scored with another
+SCORING_VERSION, an ingest is due right away (`--trigger scoring`), so stored calls never keep old scores until the next
+09:00. Otherwise, with the «Revisión por IA» on, the review step runs once on its own (`python -m app.ingest.review`):
+it asks only about calls whose cached verdict no longer matches their text, the prompt version or the model.
 """
 
 import asyncio
@@ -18,12 +23,16 @@ from sqlalchemy import TextClause, text
 from app.config import local_now, settings
 from app.db.session import make_engine
 from app.ingest.store import INTERRUPTED_RUNS_SQL
+from app.scoring import SCORING_VERSION
 
 log = logging.getLogger("scheduler")
 
 TICK_S = 30  # also how soon an "update now" request is picked up
 RETRY_AFTER = timedelta(hours=1)  # a failed run is retried at most once an hour
-LAST_OK_SQL = text("select max(finished_at) from ingest_runs where status in ('ok', 'partial')")
+LAST_OK_SQL = text(
+    "select finished_at, scoring_version from ingest_runs where status in ('ok', 'partial') "
+    "order by finished_at desc nulls last limit 1"
+)
 CLAIM_SQL = text("""
     update ingest_requests set status = 'running', started_at = now()
     where id = (select id from ingest_requests where status = 'requested' order by id limit 1 for update skip locked)
@@ -43,13 +52,20 @@ def latest_slot(now: datetime, at: time) -> datetime:
     return slot if now >= slot else slot - timedelta(days=1)
 
 
-def is_due(now: datetime, at: time, last_ok: datetime | None, last_attempt: datetime | None = None) -> bool:
-    """Due when the database was never ingested, or when no ingest (any trigger) has succeeded since the latest
-    slot: after 09:00, none since today's 09:00; before 09:00, none since yesterday's (a missed day catches up as soon
-    as the host wakes). After a failed attempt, wait RETRY_AFTER before the next one."""
+def is_due(
+    now: datetime,
+    at: time,
+    last_ok: datetime | None,
+    last_attempt: datetime | None = None,
+    old_scoring: bool = False,
+) -> bool:
+    """Due when the database was never ingested, when the last successful ingest was scored by another
+    SCORING_VERSION (`old_scoring`: a deploy changed the rules), or when no ingest (any trigger) has succeeded since
+    the latest slot: after 09:00, none since today's 09:00; before 09:00, none since yesterday's (a missed day catches
+    up as soon as the host wakes). After a failed attempt, wait RETRY_AFTER before the next one."""
     if last_attempt is not None and now - last_attempt < RETRY_AFTER:
         return False
-    return last_ok is None or last_ok < latest_slot(now, at)
+    return last_ok is None or old_scoring or last_ok < latest_slot(now, at)
 
 
 async def _execute(sql: TextClause, **params: object) -> None:
@@ -61,20 +77,25 @@ async def _execute(sql: TextClause, **params: object) -> None:
         await engine.dispose()
 
 
-async def poll() -> tuple[datetime | None, int | None]:
-    """(last successful ingest, id of the request just claimed or None)."""
+async def poll() -> tuple[datetime | None, int | None, int | None]:
+    """(last successful ingest, its scoring version, id of the request just claimed or None)."""
     engine = make_engine()
     try:
         async with engine.begin() as conn:
-            last_ok = (await conn.execute(LAST_OK_SQL)).scalar()
+            last = (await conn.execute(LAST_OK_SQL)).first()
             claimed = (await conn.execute(CLAIM_SQL)).scalar()
-            return last_ok, claimed
+            return (last.finished_at, last.scoring_version, claimed) if last else (None, None, claimed)
     finally:
         await engine.dispose()
 
 
 def run_ingest(trigger: str) -> int:
     return subprocess.run([sys.executable, "-m", "app.ingest", "--trigger", trigger]).returncode
+
+
+def run_review() -> None:
+    """The review step alone (it never fails; with nothing to ask it only reads the database)."""
+    subprocess.run([sys.executable, "-m", "app.ingest.review"])
 
 
 def run_request(request_id: int) -> None:
@@ -97,6 +118,7 @@ def main() -> None:
     log.info("daily ingest at %s %s; checking every %d s", at.strftime("%H:%M"), settings.timezone, TICK_S)
     last_attempt: datetime | None = None
     announced: datetime | None = None
+    review_pending = settings.ai_review_on  # once per start, unless an ingest (which includes it) runs first
     try:
         asyncio.run(_execute(INTERRUPTED_SQL))
         asyncio.run(_execute(INTERRUPTED_RUNS_SQL))  # an ingest killed with the previous scheduler
@@ -104,18 +126,26 @@ def main() -> None:
         log.warning("cannot reset interrupted requests: %s", e)
     while True:
         try:
-            last_ok, claimed = asyncio.run(poll())
+            last_ok, version, claimed = asyncio.run(poll())
         except Exception as e:  # noqa: BLE001 - database down: try again next tick
             log.warning("cannot read the last ingest: %s", e)
         else:
             now = local_now()
+            old_scoring = version is not None and version != SCORING_VERSION
             if claimed is not None:
+                review_pending = False
                 run_request(claimed)
-            elif is_due(now, at, last_ok, last_attempt):
-                log.info("ingest due (last successful: %s); running", _fmt(last_ok))
+            elif is_due(now, at, last_ok, last_attempt, old_scoring):
+                why = f"scored with v{version}, code is v{SCORING_VERSION}" if old_scoring else _fmt(last_ok)
+                log.info("ingest due (last successful: %s); running", why)
                 last_attempt = now
-                code = run_ingest("schedule")
+                review_pending = False
+                code = run_ingest("scoring" if old_scoring else "schedule")
                 log.info("ingest finished with exit code %d", code)
+            elif review_pending:
+                review_pending = False
+                log.info("running the AI review step (asks only about calls without a current verdict)")
+                run_review()
             else:
                 # not due: either done since the latest slot, or waiting out RETRY_AFTER after a failed run
                 done = last_ok is not None and last_ok >= latest_slot(now, at)

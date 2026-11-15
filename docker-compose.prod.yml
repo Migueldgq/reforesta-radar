@@ -2,7 +2,8 @@
 # checkout of this repository (custom command):
 #   docker compose -p <app name> -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
 # (<app name>: the one Dokploy gave the app, e.g. reforesta-radar-prod-fb9o1w; also COMPOSE_PROJECT_NAME), with the
-# .env Dokploy writes from the app's environment: RADAR_DOMAIN and RADAR_DB_PASSWORD (never in git).
+# .env Dokploy writes from the app's environment: RADAR_DOMAIN and RADAR_DB_PASSWORD (never in git); optionally
+# GEMINI_API_KEY for the «Revisión por IA» (ADR 0041).
 # Dokploy's Traefik terminates https and reaches only `web`, over the external network `reforesta-radar-edge`
 # (created by deploy/setup-server.sh, Traefik attached). No service publishes a port.
 
@@ -19,6 +20,11 @@ x-prod-env: &prod-env
   # Traefik replaces any client X-Forwarded-For with the peer address, Next passes it on, and only `web` and the
   # other services of this project sit on this subnet: the API trusts it (and nothing else).
   FORWARDED_ALLOW_IPS: ${RADAR_NET_SUBNET:-172.28.90.0/24}
+  # «Revisión por IA» (ADR 0041, docs/despliegue.md): set in the Dokploy environment, never here. No key = off.
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  RADAR_AI_REVIEW: ${RADAR_AI_REVIEW:-true}
+  RADAR_AI_MODEL: ${RADAR_AI_MODEL:-gemini-flash-lite-latest}
+  RADAR_AI_MAX_CALLS: ${RADAR_AI_MAX_CALLS:-300}
 
 # Memory caps so another project on the same machine cannot starve the radar (and the radar cannot starve it).
 # Measured idle: 50-100 MB per service. The ingest (scheduler, or a manual `ingest` run) is the hungry one.

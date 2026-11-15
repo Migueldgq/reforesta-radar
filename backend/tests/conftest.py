@@ -27,7 +27,7 @@ PASSWORD = "correct horse battery"
 TABLES = (
     "oauth_tokens, oauth_codes, oauth_grants, oauth_requests, oauth_clients, "
     "ingest_requests, votes, org_settings, tracking_notes, tracking, password_resets, invitations, sessions, users, "
-    "opportunity_changes, opportunities, source_runs, ingest_runs, fetch_cache, bdns_editions"
+    "opportunity_changes, opportunities, source_runs, ingest_runs, fetch_cache, bdns_editions, ai_reviews"
 )
 
 

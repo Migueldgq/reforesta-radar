@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fmtEuros, parseDay, reforestaWins, sourceLabelOf, territoryOf, tidy, TRIAGE_ORDER, type Triage } from "./model";
 import { useRadar } from "./store";
-import { Deadline, EmptyState, ScoreChip, TriageSelect, WonMarker } from "./ui";
+import { AiDoubtChip, Deadline, EmptyState, ScoreChip, TriageSelect, WonMarker } from "./ui";
 
 export const KIND_SHORT: Record<OpportunityKind, string> = {
   subvencion: "Subvención",
@@ -230,6 +230,7 @@ function Row({ o, onOpen }: { o: Opportunity; onOpen: (opener: HTMLElement | nul
             {o.organismo}
           </span>
         </button>
+        <AiDoubtChip o={o} className="mt-1.5" />
       </TableCell>
       <TableCell className="hidden py-3 @min-[67rem]:table-cell">
         <Badge variant="outline" className="font-normal">
@@ -269,6 +270,7 @@ function MobileCard({ o, onOpen }: { o: Opportunity; onOpen: (opener: HTMLElemen
         </button>
         <p className="truncate text-xs text-muted-foreground">{o.organismo}</p>
         <WonMarker o={o} className="flex w-fit" />
+        <AiDoubtChip o={o} />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-0.5">
           <Deadline o={o} />
           <span className="text-sm">

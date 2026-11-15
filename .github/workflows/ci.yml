@@ -98,6 +98,8 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://radar:radar@localhost:5432/radar
       RADAR_PUBLIC_URL: http://localhost:3090
       RADAR_E2E: "1"
+      # Shows the seeded «Revisión por IA» verdicts; not a key: nothing ingests here, nothing is sent to Google.
+      GEMINI_API_KEY: e2e-not-a-key
       # Web: the API address baked into the /api/* rewrites at build time, and read by server components
       API_URL: http://127.0.0.1:8090
       # Playwright (playwright.config.ts, e2e/global-setup.ts)

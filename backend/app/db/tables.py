@@ -1,5 +1,5 @@
 """Table definitions (SQLAlchemy Core). Schema owner: alembic/versions/ (0001 init, 0002 + 0003 bdns_editions,
-0004 accounts and team state, 0005 personal tokens, 0008 OAuth for assistants).
+0004 accounts and team state, 0005 personal tokens, 0008 OAuth for assistants, 0009 AI review).
 
 Same tables and columns as supabase/migrations/0001_init.sql, so data and semantics carry over:
 rows hold the BASE opportunity (connector output + base fit); geographic and kind fit are applied at read time.
@@ -364,4 +364,18 @@ ingest_requests = Table(
         unique=True,
         postgresql_where=text("status in ('requested', 'running')"),
     ),
+)
+
+# «Revisión por IA» (0009; app/review.py, ADR 0041): one cached verdict per call, keyed by the opportunity id with no
+# foreign key (like tracking). Valid only while `input_hash` matches the call's current text, prompt and model.
+ai_reviews = Table(
+    "ai_reviews",
+    metadata,
+    Column("opportunity_id", Text, primary_key=True),
+    Column("input_hash", Text, nullable=False),
+    Column("verdict", Text, nullable=False),  # si | no | dudoso
+    Column("reason", Text, nullable=False),  # one short Spanish sentence from the model, shown as plain text
+    Column("model", Text, nullable=False),
+    Column("reviewed_at", TSTZ, nullable=False, server_default=text("now()")),
+    CheckConstraint("verdict in ('si', 'no', 'dudoso')", name="ai_reviews_verdict"),
 )

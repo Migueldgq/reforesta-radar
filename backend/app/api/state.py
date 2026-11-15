@@ -1,4 +1,5 @@
-"""Read path (port of readState in store-pg.ts and readDb in aggregate.ts), plus the history of BDNS calls."""
+"""Read path (port of readState in store-pg.ts and readDb in aggregate.ts), plus the history of BDNS calls and the
+«Revisión por IA» verdicts."""
 
 from collections import defaultdict
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from app.config import settings
 from app.db.tables import bdns_editions
 from app.models import History, IngestState, Opportunity, SourceHealth
+from app.review import read_reviews
 from app.sources import SOURCE_ORDER, SOURCES
 from app.sources.bdns_history import EditionRow, build_history, from_db
 
@@ -134,6 +136,8 @@ async def read_state(conn: AsyncConnection) -> State:
         for o in items
         if o.id not in superseded
     ]
+    reviews = await read_reviews(conn, items)  # empty while the «Revisión por IA» is off
+    items = [o.model_copy(update={"ai_review": reviews[o.id]}) if o.id in reviews else o for o in items]
     sources = await read_sources(conn)
     last, stale = await last_ingest(conn)
     return State(items=items, sources=sources, last_ingest_at=last, ingest_stale=stale,
