@@ -2,6 +2,7 @@
 
 import {
   AlarmClock,
+  Award,
   CalendarClock,
   CalendarDays,
   CircleSlash,
@@ -18,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { daysLeft, fmtDate, fmtDayShort, isClosed, isNextEdition, parseDay, todayUTC, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel, type Triage } from "./model";
+import { daysLeft, fmtDate, fmtDayShort, fmtEuros, isClosed, isNextEdition, joinEs, openingNote, parseDay, reforestaWins, todayUTC, TIER_LABELS, TRIAGE_LABELS, TRIAGE_ORDER, workLineLabel, type Triage } from "./model";
 import { useRadar } from "./store";
 
 const badge = "gap-1 font-medium whitespace-nowrap [&>svg]:size-3.5";
@@ -71,8 +72,13 @@ function deadlineState(o: Opportunity) {
   const opens = parseDay(o.opensAt);
   const closes = end != null ? `Cierra el ${fmtDayNote(end)}` : null;
   const closed = end != null ? `Cerró el ${fmtDayNote(end)}` : null;
-  if (isNextEdition(o))
-    return { Icon: RotateCw, label: "Próxima edición", tone: "muted", title: "Convocatoria periódica: prepara la siguiente edición", detail: closed } as const;
+  if (isNextEdition(o)) {
+    // When it usually opens is more useful than when the last one closed; that date stays in the tooltip.
+    const opening = openingNote(o);
+    const full = o.history?.typicalOpening?.text;
+    const note = [full, closed].filter(Boolean).join(" · ") || undefined;
+    return { Icon: RotateCw, label: "Próxima edición", tone: "muted", title: "Convocatoria periódica: prepara la siguiente edición", detail: opening ?? closed, note } as const;
+  }
   if (isClosed(o)) return { Icon: CircleSlash, label: "Cerrada", tone: "muted", title: undefined, detail: closed } as const;
   if (opens != null && opens > todayUTC())
     return { Icon: CalendarClock, label: `Abre el ${fmtDayNote(opens)}`, tone: "sky", title: `Abre el ${fmtDate(o.opensAt)}`, detail: closes } as const;
@@ -99,12 +105,30 @@ export function DeadlineChip({ o }: { o: Opportunity }) {
 
 /** The chip with its date note underneath, for lists and cards. */
 export function Deadline({ o, className }: { o: Opportunity; className?: string }) {
-  const { detail } = deadlineState(o);
+  const s = deadlineState(o);
   return (
     <div className={cn("flex min-w-0 flex-col items-start gap-1", className)}>
       <DeadlineChip o={o} />
-      {detail && <span className="pl-0.5 text-xs leading-snug text-muted-foreground tabular-nums">{detail}</span>}
+      {s.detail && (
+        <span className="line-clamp-2 pl-0.5 text-xs leading-snug whitespace-normal text-muted-foreground tabular-nums" title={"note" in s ? s.note : undefined}>
+          {s.detail}
+        </span>
+      )}
     </div>
+  );
+}
+
+/** Quiet marker for calls Reforesta already won in a past edition. Renders nothing otherwise. */
+export function WonMarker({ o, className }: { o: Opportunity; className?: string }) {
+  const wins = reforestaWins(o);
+  if (!wins.length) return null;
+  const title = `Reforesta la ganó en ${joinEs(wins.map((w) => (w.importe ? `${w.year} (${fmtEuros(w.importe)})` : String(w.year))))}`;
+  return (
+    <span title={title} className={cn("inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap text-primary", className)}>
+      <Award className="size-3.5 shrink-0" aria-hidden />
+      Ya la ganasteis
+      <span className="sr-only">: {title}</span>
+    </span>
   );
 }
 

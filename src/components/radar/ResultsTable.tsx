@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { daysLeft, fmtEuros, tidy, TRIAGE_ORDER, type Triage } from "./model";
+import { daysLeft, fmtEuros, reforestaWins, tidy, TRIAGE_ORDER, type Triage } from "./model";
 import { useRadar } from "./store";
-import { Deadline, EmptyState, ScoreChip, TriageSelect } from "./ui";
+import { Deadline, EmptyState, ScoreChip, TriageSelect, WonMarker } from "./ui";
 
 export const KIND_SHORT: Record<OpportunityKind, string> = {
   subvencion: "Subvención",
@@ -201,6 +201,11 @@ function Row({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
           <span className="line-clamp-2 leading-snug font-medium break-words">{title}</span>
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">
             {/* What the hidden columns would show */}
+            {reforestaWins(o).length > 0 && (
+              <>
+                <WonMarker o={o} className="align-[-2px]" /> ·{" "}
+              </>
+            )}
             <span className="@min-[60.5rem]:hidden">{o.sourceLabel} · </span>
             <span className="@min-[48rem]:hidden">{o.region} · </span>
             {amount && <span className="@min-[54rem]:hidden">{amount} · </span>}
@@ -244,6 +249,7 @@ function MobileCard({ o, onOpen }: { o: Opportunity; onOpen: () => void }) {
           <span className="line-clamp-3 leading-snug font-medium">{tidy(o.titulo)}</span>
         </button>
         <p className="truncate text-xs text-muted-foreground">{tidy(o.organismo)}</p>
+        <WonMarker o={o} className="flex w-fit" />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-0.5">
           <Deadline o={o} />
           <span className="text-sm">
