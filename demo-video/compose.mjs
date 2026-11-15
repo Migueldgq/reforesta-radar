@@ -131,17 +131,18 @@ timed.forEach((s, idx) => {
   if (idx > 0 && s.kind !== "outro" && s.canvas !== "green") sounds.push({ t: s.start, kind: "whoosh" });
 
   if (s.kind === "intro") {
-    const lead = typed(s.lead);
+    // Optional typed lead-in before the mark (e.g. "Os presentamos"); without it the mark pops first.
+    const lead = s.lead ? typed(s.lead) : null;
     const name = typed(s.name);
     html.push(`<section id="b-${s.id}" class="clip beat center" ${win(s.start, s.duration)} style="z-index:${z}">
         <div class="intro-line">
-          <span id="${s.id}-lead" class="typed">${lead.html}</span>
+          ${lead ? `<span id="${s.id}-lead" class="typed">${lead.html}</span>` : ""}
           <span class="mark mark-intro">${MARK_SVG}</span>
           <span id="${s.id}-name" class="typed strong">${name.html}<span class="caret"></span></span>
         </div>
       </section>`);
     const a = s.start + 0.15;
-    const e1 = typeLine(`${s.id}-lead`, a, lead.n, { caret: false });
+    const e1 = lead ? typeLine(`${s.id}-lead`, a, lead.n, { caret: false }) : a - 0.05;
     anim.push(`tl.fromTo("#b-${s.id} .mark", { scale: 0, rotate: -12 }, { scale: 1, rotate: 0, duration: 0.42, ease: "back.out(2.2)" }, ${r3(e1 + 0.1)});`);
     sounds.push({ t: e1 + 0.1, kind: "pop" });
     typeLine(`${s.id}-name`, e1 + 0.42, name.n);
