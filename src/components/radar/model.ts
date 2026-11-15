@@ -315,7 +315,7 @@ export function withPlazoView(f: Filters, v: PlazoView): Filters {
 }
 
 /** Open or opening soon, with a known closing date ("Sin fecha fija" calls are often old and already closed). */
-export function isDatedOpen(o: Opportunity): boolean {
+function isDatedOpen(o: Opportunity): boolean {
   return !isClosed(o) && daysLeft(o) != null;
 }
 

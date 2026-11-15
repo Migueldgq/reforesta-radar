@@ -15,7 +15,6 @@ import {
   fmtDayShort,
   haystackOf,
   isClosed,
-  isDatedOpen,
   isNextEdition,
   isOpenNow,
   KIND_LABELS,
@@ -312,7 +311,7 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
             </TabsList>
           </Tabs>
           {quiet && view !== "todas" ? (
-            <QuietNotice view={view} open={anyPlazo.filter(isDatedOpen).length} onSwitch={() => setView(view === "ahora" ? "ediciones" : "ahora")} />
+            <QuietNotice view={view} onSwitch={() => setView(view === "ahora" ? "ediciones" : "ahora")} />
           ) : view === "ahora" && altoOpen === 0 && altoNext > 0 && (
             <p className="text-sm text-muted-foreground">
               Hoy no hay convocatorias abiertas de encaje alto.{" "}
@@ -337,7 +336,7 @@ function Dashboard({ items, fetchedAt, sourceCount }: { items: Opportunity[]; fe
 }
 
 /** Shown while no open call fits well: explains why the home opens on the next editions and links both tabs. */
-function QuietNotice({ view, open, onSwitch }: { view: "ahora" | "ediciones"; open: number; onSwitch: () => void }) {
+function QuietNotice({ view, onSwitch }: { view: "ahora" | "ediciones"; onSwitch: () => void }) {
   const link = "inline-flex cursor-pointer items-center gap-1 font-medium text-primary underline-offset-4 hover:underline";
   if (view === "ediciones")
     return (
@@ -348,11 +347,9 @@ function QuietNotice({ view, open, onSwitch }: { view: "ahora" | "ediciones"; op
             Ahora mismo no hay convocatorias abiertas con encaje alto. Te enseñamos las que mejor encajan y suelen repetirse
             cada año, para prepararlas con tiempo.
           </p>
-          {open > 0 && (
-            <button type="button" onClick={onSwitch} className={link}>
-              {open === 1 ? "Ver la abierta" : `Ver las ${open} abiertas`}
-            </button>
-          )}
+          <button type="button" onClick={onSwitch} className={link}>
+            Ver las abiertas
+          </button>
         </AlertDescription>
       </Alert>
     );
@@ -360,13 +357,7 @@ function QuietNotice({ view, open, onSwitch }: { view: "ahora" | "ediciones"; op
     <Alert role="status">
       <Target aria-hidden />
       <AlertDescription>
-        <p>
-          {open > 1
-            ? `Ninguna de las ${open} abiertas con fecha de cierre tiene encaje alto.`
-            : open === 1
-              ? "La única abierta con fecha de cierre no tiene encaje alto."
-              : "Ahora mismo no hay convocatorias abiertas con encaje alto."}
-        </p>
+        <p>Ahora mismo ninguna convocatoria abierta con fecha de cierre tiene encaje alto.</p>
         <button type="button" onClick={onSwitch} className={link}>
           Las mejores están en Próximas ediciones
           <ArrowRight className="size-3.5" aria-hidden />
