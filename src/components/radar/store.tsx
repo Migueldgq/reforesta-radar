@@ -111,8 +111,8 @@ interface RadarState {
   loading: boolean;
   refreshing: boolean;
   error: string | null;
-  /** Re-reads the API. Sources are only fetched by the scheduled ingest, so `force` changes nothing (kept for callers). */
-  reload: (force?: boolean) => void;
+  /** Re-reads the API. Sources are only fetched by the scheduled ingest. */
+  reload: () => void;
   byId: Map<string, Opportunity>;
 
   triage: TriageMap;
