@@ -17,7 +17,8 @@ Internet ──▶ cortafuegos de Oracle (lista de seguridad de la VCN: 22, 80, 
          ──▶ web :3000 (Next.js; reenvía /api/*, /mcp*, /oauth/*, /.well-known/oauth-* a la API)
          ──▶ api :8000 (FastAPI) ──▶ postgres :5432
              ingest-scheduler (carga diaria a las 9:00, hora de Madrid)
-Panel de Dokploy :3000 ── solo desde el propio servidor (túnel SSH)
+Panel de Dokploy :3000 ── desde el propio servidor (túnel SSH); y, si se publica (ADR 0042),
+                          Traefik :443 solo para panel.miguelddev.com
 ```
 
 Traefik solo ve `web`, por la red `reforesta-radar-edge`. `api` y `postgres` solo son alcanzables dentro de la red
@@ -46,11 +47,12 @@ es la de GitHub Actions, que solo puede pedir `deploy <commit>`. Los comandos de
 **Correo.** No hay SMTP configurado: los administradores copian el enlace de invitación o de restablecimiento en
 **Equipo** y lo mandan ellos. «He olvidado mi contraseña» no aparece.
 
-## El panel de Dokploy (solo por túnel SSH)
+## El panel de Dokploy
 
-El panel no tiene dominio ni es alcanzable desde internet: el puerto 3000 está cerrado en Oracle y en el propio
-servidor (`DOCKER-USER`), y `setup-server.sh` quita la ruta que Dokploy crea en Traefik para
-`Host: dokploy.docker.localhost`. Para entrar, desde tu ordenador:
+Hoy el panel **no** es alcanzable desde internet: el puerto 3000 está cerrado en Oracle y en el propio servidor
+(`DOCKER-USER`), y `setup-server.sh` quita la ruta que Dokploy crea en Traefik para `Host: dokploy.docker.localhost`.
+Se puede publicar en `https://panel.miguelddev.com` con 2FA obligatorio ([abajo](#el-panel-con-dominio-panelmiguelddevcom)).
+El túnel funciona siempre, publicado o no: es la entrada de emergencia. Para entrar por él, desde tu ordenador:
 
 ```bash
 ssh -i ~/.ssh/oracle-reforesta.key -N -L 3300:127.0.0.1:3000 ubuntu@130.61.182.106
@@ -66,9 +68,10 @@ y abre <http://localhost:3300> (el 3000 local lo usa `npm run dev`). Cierra el t
   **Actions → Deploy → Run workflow**). No actives **Auto Deploy** ni los webhooks. No le pongas dominios a la app
   (el enrutado está en `docker-compose.prod.yml`). No actives **Isolated Deployments**. **Requests** activa el log de
   accesos de Traefik, que guarda las rutas con su cadena de consulta (`/autorizar?solicitud=…`): déjalo apagado.
-  Cambiar en **Settings → Web Server** el correo de Let's Encrypt, los puertos de Traefik o el dominio del panel
-  reescribe `/etc/dokploy/traefik/traefik.yml`: después vuelve a ejecutar `setup-server.sh` (o compáralo con
-  `deploy/traefik.yml`).
+  Cambiar en **Settings → Web Server** el correo de Let's Encrypt o los puertos de Traefik reescribe
+  `/etc/dokploy/traefik/traefik.yml`: después vuelve a ejecutar `setup-server.sh` (o compáralo con
+  `deploy/traefik.yml`). Deja vacío **Server Domain**: reescribe `dokploy.yml` con una segunda ruta al panel, sin los
+  límites ni las cabeceras de la nuestra.
 - **Clave de API.** `reforesta-radar-deploy` (perfil → API/CLI), sin límite de peticiones (la que se crea sin tocar
   nada admite 10 al día). Copia solo en `/etc/reforesta-radar/dokploy-api-key`. Si la regeneras, escríbela ahí:
   `sudo bash -c 'umask 077; read -rs -p "clave: " k; echo; printf "%s\n" "$k" > /etc/reforesta-radar/dokploy-api-key'`.
@@ -76,19 +79,46 @@ y abre <http://localhost:3300> (el 3000 local lo usa `npm run dev`). Cierra el t
   cargan en su versión en la nube (`IS_CLOUD`, comprobado en el código de v0.31.2). Al crear la primera cuenta pide
   la IP pública del servidor a `ifconfig.io` (o `icanhazip.com`, `ipecho.net`). Traefik tiene `sendAnonymousUsage: false`.
 
-### Opcional: el panel con dominio
+### El panel con dominio (`panel.miguelddev.com`)
 
-Más cómodo, pero **el panel equivale a root en la máquina** (controla Docker): quien entre controla el servidor y
-todos los proyectos. Solo con 2FA ya activado en todas las cuentas del panel.
+[ADR 0042](adr/0042-panel-de-dokploy-con-dominio-publico.md) (propuesta). Más cómodo (entra desde el móvil), pero
+**el panel equivale a root en la máquina** (controla Docker): quien entre controla el servidor y todos los proyectos.
+Un interruptor en el servidor, `reforesta-panel` (`deploy/panel.sh`, instalado por `setup-server.sh`):
 
-1. Registro DNS `A` `dokploy.miguelddev.com` → la IP, sin proxy.
-2. En el panel: **Settings → Web Server → Server Domain**: `dokploy.miguelddev.com`, HTTPS activado, certificado
-   Let's Encrypt. Deja vacío el correo de Let's Encrypt (si lo pide, no pongas un correo personal: va a Let's
-   Encrypt). Comprueba que `https://dokploy.miguelddev.com` abre el panel.
-3. Cierra el acceso por IP:puerto: `sudo docker service update --publish-rm "published=3000,target=3000,mode=host" dokploy`
-   (desde entonces el túnel deja de servir; se entra solo por el dominio).
-4. Vuelve a ejecutar `setup-server.sh` si el paso 2 tocó `traefik.yml` (no toca `dokploy.yml`, que ahora tiene la
-   ruta del panel), y apunta en un ADR nuevo que el panel ya es público.
+```bash
+sudo reforesta-panel status    # público o privado, y cuántas cuentas del panel tienen 2FA
+sudo reforesta-panel public    # publica; se niega si alguna cuenta del panel no tiene 2FA
+sudo reforesta-panel private   # vuelve a solo túnel, en segundos
+```
+
+`public` copia `deploy/traefik-panel.yml` (del clon `/opt/reforesta-radar`) a
+`/etc/dokploy/traefik/dynamic/reforesta-panel.yml`; Traefik lo lee solo, sin reiniciar, y pide el certificado a
+Let's Encrypt en segundos. `private` lo borra. El radar no se corta en ningún caso.
+
+**Para publicarlo:**
+
+1. DNS `A` `panel.miguelddev.com` → la IP, sin proxy (ya existe).
+2. Por el túnel: **Settings → Profile → 2FA** en **todas** las cuentas del panel (hoy, una).
+3. En el servidor: `cd /opt/reforesta-radar && sudo git pull` (si aún no tiene este cambio),
+   `sudo ./deploy/setup-server.sh` (instala `reforesta-panel`) y `sudo reforesta-panel public`.
+4. Desde fuera: `PANEL_URL=https://panel.miguelddev.com deploy/smoke.sh https://reforesta-radar.miguelddev.com`, y
+   entra en el panel. En el ADR 0042, estado «Aceptada».
+
+**Qué hace la ruta:** solo `Host: panel.miguelddev.com`, solo por https (en http, 301 a https); cualquier otro
+nombre, la IP sola o `dokploy.docker.localhost` dan 404. Certificado del resolvedor `letsencrypt` de siempre (cuenta
+sin correo). Límites por IP del cliente (la de la conexión, no `X-Forwarded-For`): 20 peticiones/s con ráfagas de
+200 en todo el panel, y 5 por minuto con ráfagas de 10 en el inicio de sesión, los códigos 2FA, el registro y el
+restablecimiento de contraseña; por encima, 429 hasta que pasa la ventana (12 s por petición en el inicio de
+sesión). Cabeceras: HSTS, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `noindex`. El
+registro de cuentas nuevas está cerrado (Dokploy solo lo admite sin propietario o con una invitación). Dokploy además
+limita a 3 intentos cada 10 s por IP el inicio de sesión y los códigos 2FA, y bloquea la cuenta 15 minutos tras 10
+códigos 2FA fallidos.
+
+**Si te bloquea un 429:** espera; el límite del inicio de sesión se recupera en 12 s por intento, el general en
+segundos. Si no puedes esperar, entra por el túnel (no pasa por Traefik).
+
+**No** quites el puerto 3000 del servicio `dokploy` (`--publish-rm`): el túnel dejaría de servir y es la única entrada
+si el dominio o Traefik fallan. Desde fuera sigue cerrado (`DOCKER-USER` y la lista de seguridad de Oracle).
 
 ## Cómo llega un cambio a producción (CI/CD)
 
@@ -111,7 +141,8 @@ todos los proyectos. Solo con 2FA ya activado en todas las cuentas del panel.
 5. El workflow comprueba desde fuera `https://<dominio>/login` y que el emisor OAuth es exactamente la URL pública.
 6. Después ejecuta `deploy/smoke.sh <URL pública>` (del commit desplegado): comprobaciones de solo lectura desde fuera
    (`/login` con el nombre de la app, `/api/board` → 401 sin sesión, `/api/public/oportunidades` con datos, `POST /mcp`
-   público → 200, `POST /mcp/equipo` → 401 con `resource_metadata`, emisor OAuth, http → https y HSTS). No crea
+   público → 200, `POST /mcp/equipo` → 401 con `resource_metadata`, emisor OAuth, http → https y HSTS, y que
+   `Host: dokploy.docker.localhost` no llega al panel). No crea
    cuentas, clientes OAuth ni datos. **Ojo: corre después de la vuelta atrás automática.** Si falla, el workflow sale
    en rojo con cada comprobación fallida anotada, pero la versión nueva sigue en marcha: vuelve a la anterior a mano
    (abajo). Se puede lanzar en cualquier momento desde cualquier ordenador:
@@ -346,8 +377,8 @@ tú). Mantened al menos dos administradores.
    `netfilter-persistent save`: guardaría también las reglas que Docker crea al arrancar.
 3. **iptables `DOCKER-USER`**: los puertos que publica Docker no pasan por `INPUT` sino por `FORWARD`, y ahí Docker
    consulta primero `DOCKER-USER`. `docker-user-firewall.service` (`deploy/docker-user-firewall.sh`, tras cada arranque
-   de Docker) solo deja entrar por la interfaz pública conexiones nuevas a 80 y 443. Así el panel (3000) solo se
-   alcanza desde el propio servidor, y cualquier puerto que publique otro proyecto queda cerrado hasta que se añada
+   de Docker) solo deja entrar por la interfaz pública conexiones nuevas a 80 y 443. Así el puerto 3000 del panel solo se
+   alcanza desde el propio servidor (si el panel se publica, entra por Traefik en 443, no por el 3000), y cualquier puerto que publique otro proyecto queda cerrado hasta que se añada
    aquí a propósito.
 
 Si la web no responde desde fuera pero `curl -k --resolve <dominio>:443:127.0.0.1 https://<dominio>/login` funciona
@@ -424,7 +455,8 @@ Ubuntu 24.04 con acceso SSH y `sudo`. Abre 80 y 443 en la lista de seguridad de 
    Instala Docker desde su repositorio oficial con rotación de logs, deja activas las actualizaciones de seguridad
    automáticas, abre 80/443 en iptables, el cortafuegos `DOCKER-USER`, un swap de 2 GB, **Dokploy v0.31.2**
    (instalador comprobado por SHA-256; Swarm con el pool `10.200.0.0/16`), la configuración de Traefik de
-   `deploy/traefik.yml`, quita la ruta pública del panel, crea la red `reforesta-radar-edge`, el usuario `deploy` con
+   `deploy/traefik.yml`, quita la ruta pública del panel e instala el interruptor `reforesta-panel` (el panel queda
+   privado), crea la red `reforesta-radar-edge`, el usuario `deploy` con
    su regla de `sudo`, los scripts en `/usr/local/sbin` y el temporizador de copias. No cambia la zona horaria (UTC; la
    app usa `Europe/Madrid` por su cuenta). Para subir de versión de Dokploy: cambia `DOKPLOY_VERSION` y
    `DOKPLOY_INSTALLER_SHA256` en el script (el `install.sh` de esa versión en las releases de GitHub de Dokploy; lee
@@ -458,3 +490,5 @@ Ubuntu 24.04 con acceso SSH y `sudo`. Abre 80 y 443 en la lista de seguridad de 
 
 5. **Datos:** el primer administrador del radar (arriba) o restaurar una copia («Restaurar de verdad»); la clave de
    despliegue («Rotar la clave de despliegue»). Comprueba con `deploy/smoke.sh https://<dominio>`.
+6. **El panel con dominio** (opcional, ADR 0042): con 2FA ya activado en el panel, `sudo reforesta-panel public`
+   («El panel con dominio», arriba). Si el dominio del panel cambia, cámbialo en `deploy/traefik-panel.yml`.
