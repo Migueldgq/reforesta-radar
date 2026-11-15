@@ -28,10 +28,12 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
   «Actualizar ahora» en la vista Fuentes: la API solo la apunta en `ingest_requests` y la ejecuta `ingest-scheduler`.
 - `ingestStale` (más de 36 h sin una ingesta correcta, es decir, una carga diaria perdida) hace que Inicio muestre
   «Los datos son de hace N h: la carga diaria no ha terminado bien desde entonces».
-- Si Postgres no responde, la API devuelve 503; si la API no responde, la web muestra un estado de error (o la
-  última copia guardada en el navegador, con un aviso). La portada se pinta sin cifras.
+- Si Postgres no responde, la API devuelve 503. Si la API no responde, la web abre con la última lista guardada en
+  el navegador y un aviso con la hora de esos datos; los cambios del equipo (tablero, votos, asignaciones) quedan
+  desactivados con una explicación, y la web reintenta sola y recarga al volver el servidor. Sin copia guardada
+  muestra un estado de error. La portada se pinta sin cifras.
 - Esquema: migraciones de Alembic en `backend/alembic/` (la API las aplica al arrancar).
-- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 16) se guarda en cada `ingest_runs`; súbelo cuando
+- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 17) se guarda en cada `ingest_runs`; súbelo cuando
   cambie la puntuación.
 - Historial BDNS: tras guardar la ingesta, un paso aparte busca ediciones anteriores de las convocatorias BDNS
   relevantes (cuándo suelen abrir, cuánto plazo dan) y quién las ganó (solo recuentos por tipo de entidad, nunca
