@@ -30,7 +30,8 @@ exec < /dev/null
 : "${RADAR_APP:?}" "${RADAR_COMPOSE_ID:?}" "${RADAR_DOMAIN:?}" "${RADAR_DEPLOY_BRANCH:=main}"
 code=/etc/dokploy/compose/$RADAR_APP/code
 
-exec 9> /run/lock/reforesta-radar-deploy.lock
+# /run, not /run/lock: that one is sticky and world-writable, and root cannot reopen another user's file there.
+exec 9> /run/reforesta-radar-deploy.lock
 flock -n 9 || { echo "Another deploy is running." >&2; exit 1; }
 
 log() { printf '\n== %s\n' "$*"; }
