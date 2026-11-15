@@ -167,9 +167,9 @@ Reglas fijas en `backend/app/scoring/` (`score.py`, `profile.py`, `rank.py`, `hi
 
 - **Suma** si el título o la finalidad hablan de lo que hace Reforesta (listas de palabras por línea de trabajo:
   restauración, conservación, educación ambiental, agroambiental y custodia; en castellano, catalán, gallego y
-  euskera; el título cuenta más), si es de concurrencia competitiva, si menciona a entidades sin ánimo de lucro, si
-  está abierta o abre pronto, si no es de los cuatro organismos que ya revisan a mano y si el presupuesto llega a
-  50.000 €.
+  euskera; el título cuenta más; las palabras ambiguas como «aves» o «natural» solo cuentan en su contexto), si es de
+  concurrencia competitiva, si menciona a entidades sin ánimo de lucro, si está abierta o abre pronto, si —con encaje
+  temático— no es de los cuatro organismos que ya revisan a mano y si el presupuesto llega a 50.000 €.
 - **Resta** si es nominativa, directa o un convenio; si es solo para empresas o ayuntamientos; o si es de otro ámbito
   (patrimonio, caza, pesca, eficiencia energética, becas…). También por territorio: lejos de donde trabaja
   Reforesta, baja.
