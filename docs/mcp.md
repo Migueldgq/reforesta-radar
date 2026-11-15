@@ -170,9 +170,8 @@ las bases), cualquier escritura y el filtro de organismos del equipo en las bús
 - [ ] claude.ai llega desde la red de Anthropic (`160.79.104.0/21` según su documentación): no bloquearla si hay
       cortafuegos.
 - [ ] Detrás del proxy de la web todas las peticiones llegan con la misma IP: los límites de OAuth solo frenan fallos
-      y nunca una petición correcta, y el registro tiene un presupuesto global (60 cada 10 minutos; quien lo agote
-      retrasa como mucho 10 minutos el primer registro de un asistente nuevo, ADR 0035 «Límites»). Si un proxy de
-      confianza da la IP real, poned `FORWARDED_ALLOW_IPS` con su dirección y se añade un límite de 10 registros por
-      IP.
+      y nunca una petición correcta; el registro no tiene límite global (la tabla se acota sola, ADR 0035
+      «Límites»). Si un proxy de confianza da la IP real, poned `FORWARDED_ALLOW_IPS` con su dirección y se añade un
+      límite de 10 registros por IP.
 - [ ] Con varias réplicas de la API, los límites (registro, autorización, fallos en `/oauth/token`) son por
       proceso: con una sola instancia, como hoy, no hace falta nada.

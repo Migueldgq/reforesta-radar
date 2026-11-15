@@ -97,5 +97,6 @@ Pide siempre el enlace oficial: las bases de la convocatoria mandan sobre lo que
 | Funcionaba y ahora Claude dice que hay que volver a conectar | Has cambiado la contraseña, te han desconectado o lleva más de un mes sin usarse. Pulsa Conectar otra vez. |
 | Claude responde pero no sabe nada del tablero | Seguramente usaste la dirección que termina en `/mcp` (solo datos públicos). Quita ese conector y añade el de `/mcp/equipo`. |
 | Ves «No reconocido» al conectar | No continúes si no lo has conectado tú. Pulsa No permitir. |
+| «Hay demasiadas solicitudes de conexión pendientes» | Entra en la web del radar con tu cuenta en ese mismo navegador y vuelve a pulsar Conectar en Claude. |
 
 Si nada de esto lo arregla, avisa a quien mantiene el radar y dile qué paso falló y qué mensaje viste.

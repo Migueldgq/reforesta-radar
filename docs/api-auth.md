@@ -99,7 +99,7 @@ account is inactive. `lastUsedAt` is updated at most every 5 minutes.
 | Method + path | Body | 2xx | Errors |
 |---|---|---|---|
 | `POST /api/oauth/consent` | `{request}` (the `solicitud` query parameter of `/autorizar`) | `200 ConsentInfo` | `404` unknown, expired, already decided, or opened in another browser |
-| `POST /api/oauth/consent/decision` | `{request, allow: boolean}` | `200 {redirectTo}`: navigate the browser there (`window.location.assign`) | `404` as above |
+| `POST /api/oauth/consent/decision` | `{request, allow: boolean}` | `200 {redirectTo: string \| null}`: navigate the browser there (`window.location.assign`); `null` after refusing a `desconocido` client: stay and show «No permitido» | `404` as above |
 | `GET /api/me/assistants` | – | `200 AssistantsInfo` | – |
 | `DELETE /api/me/assistants/{id}` | – | `204` (its tokens stop working at once) | `404` not mine or not connected |
 
@@ -120,9 +120,12 @@ type AssistantsInfo = { assistants: ConnectedAssistant[]; teamUrl: string; publi
   assistant; if someone sent you this link, press No permitir».
 - `/oauth/authorize` errors found before the person decides (unknown client or redirect URI, PKCE, `resource`, …) are
   an HTML page from the API (400, or 429 after 30 failures per IP in 10 minutes), never a redirect to the client,
-  except to a loopback redirect URI. Valid requests are never limited. `/oauth/token` and `/oauth/revoke` count only
-  failures (60 per minute per IP; after that, failures other than `invalid_grant` get 429); `/oauth/register` has a
-  global budget of 60 per 10 minutes (plus 10 per IP with `FORWARDED_ALLOW_IPS` set to a trusted proxy).
+  except to a loopback redirect URI. Valid requests are not rate-limited; pending requests are capped instead
+  (anonymous: 10 per client and 1000 in total, the newest refused with a 429 page asking to sign in first; signed-in:
+  20 per person). `POST /api/oauth/consent` claims the request for the signed-in person. `/oauth/token` and
+  `/oauth/revoke` count only failures (60 per minute per IP; after that, failures other than `invalid_grant` get 429);
+  `/oauth/register` has no global limit (at most 5000 clients; when full the oldest unused one is removed), only 10
+  per IP per 10 minutes with `FORWARDED_ALLOW_IPS` set to a trusted proxy.
 - `signIn: false` when OAuth is off (`RADAR_MCP_OAUTH=false`, or an http `RADAR_PUBLIC_URL` with
   `RADAR_COOKIE_SECURE=true`): show the personal-token option only.
 - Every grant of a person is revoked with their sessions (password change or reset, role change, deactivation).
