@@ -94,9 +94,9 @@ services:
       - default
       - edge
     environment:
-      # After SIGTERM the old container keeps serving this long (scripts/web-start.sh): Traefik routes only to healthy
-      # containers and drops one when it exits, a couple of seconds after the event (ADR 0044).
-      RADAR_DRAIN_SECONDS: "5"
+      # After SIGTERM the old container drains this long before Next stops (scripts/web-start.sh, ADR 0044): half to
+      # let Traefik add the new container, half after /healthz turns 503 and Traefik's health check drops this one.
+      RADAR_DRAIN_SECONDS: "6"
     stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
@@ -120,6 +120,11 @@ services:
       traefik.http.routers.reforesta-radar.tls.certresolver: letsencrypt
       traefik.http.routers.reforesta-radar.middlewares: reforesta-radar-retry,reforesta-radar-headers
       traefik.http.services.reforesta-radar.loadbalancer.server.port: "3000"
+      # Traefik's own check of each container (src/app/healthz/route.ts): a container being replaced answers 503 and
+      # gets no new requests while it finishes the ones it has.
+      traefik.http.services.reforesta-radar.loadbalancer.healthcheck.path: /healthz
+      traefik.http.services.reforesta-radar.loadbalancer.healthcheck.interval: 1s
+      traefik.http.services.reforesta-radar.loadbalancer.healthcheck.timeout: 3s
       # A request that cannot reach a `web` container (refused: it has just exited during a deploy and Traefik still
       # lists it) goes to the other one. Only on a network error before any answer, never on an HTTP error status.
       traefik.http.middlewares.reforesta-radar-retry.retry.attempts: "3"
