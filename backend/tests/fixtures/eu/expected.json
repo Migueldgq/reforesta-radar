@@ -1,0 +1,590 @@
+{
+ "items": [
+  {
+   "publishedAt": null,
+   "opensAt": "2026-10-26",
+   "deadline": "2026-12-21",
+   "deadlineText": null,
+   "budget": 3720000,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "The investment concepts will represent an initial step towards fully-fledged business and financial plans and facilitate the subsequent mobilization of investments in energy efficiency and renewable energy. Maximum grant amount per investment concept (lump-sum) is 60.000 EUR.",
+   "id": "eu:LIFE-2025-CET-EUCF",
+   "source": "eu",
+   "sourceLabel": "UE · LIFE",
+   "kind": "europa",
+   "titulo": "European City Facility",
+   "organismo": "Comisión Europea · LIFE (LIFE-2025-CET-EUCF)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/competitive-calls-cs/48256791",
+   "fit": {
+    "score": 35,
+    "tier": "bajo",
+    "workLines": [],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Programa LIFE: el instrumento europeo de referencia para naturaleza y biodiversidad.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Plazo abierto: quedan 36 días."
+    ],
+    "warnings": [],
+    "daysRemaining": 36,
+    "deadlineState": "abierta"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-04-20",
+   "deadline": "2027-09-23",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Project results are expected to contribute to all of the following expected outcomes: societal and political actors have a better understanding of how European agriculture and forestry, as well as agri-food and forest-based supply chains, are exposed to and impacted by a combination of complex systemic risks and crises; EU, national, regional and local decision-makers have access",
+   "id": "eu:HORIZON-CL6-2027-02-CLIMATE-02",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Strengthening evidence-based policies for the resilience of European agriculture and forestry and related supply chains against crises and systemic risks",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-CL6-2027-02-CLIMATE-02)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl6-2027-02-climate-02",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "restauracion",
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Ámbito forestal, Masas forestales, Biodiversidad.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder."
+    ],
+    "daysRemaining": 312,
+    "deadlineState": "proxima"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-04-20",
+   "deadline": "2027-09-22",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Project results are expected to contribute to all the following expected outcomes: effective scientific support is provided by the Science Service for Biodiversity to all levels of policymaking related to biodiversity, through the European Commission’s Knowledge Centre for Biodiversity (KCBD); in particular, the coordination of answering ad hoc policy requests related to biodiver",
+   "id": "eu:HORIZON-CL6-2027-01-BIODIV-02",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Science-policy support to the implementation of EU and global biodiversity policies and strategies",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-CL6-2027-01-BIODIV-02)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl6-2027-01-biodiv-02",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "restauracion",
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Soluciones basadas en la naturaleza, Biodiversidad, Ecosistemas, Medio natural.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder."
+    ],
+    "daysRemaining": 311,
+    "deadlineState": "proxima"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-04-20",
+   "deadline": "2027-09-22",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Project results are expected to contribute to all of the following expected outcomes: land managers, farmers, conservation organizations, researchers, policymakers, and agribusinesses are equipped with the knowledge and tools to implement practices that enhance habitats for farmland birds and mammals, thereby improving pest control, supporting pollination, and strengthening agric",
+   "id": "eu:HORIZON-CL6-2027-01-BIODIV-08",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Fostering common farmland birds and mammals for resilient food production systems",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-CL6-2027-01-BIODIV-08)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl6-2027-01-biodiv-08",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "restauracion",
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Restauración ecológica, Biodiversidad, Mejora de hábitats, Hábitat de aves.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder."
+    ],
+    "daysRemaining": 311,
+    "deadlineState": "proxima"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-04-20",
+   "deadline": "2027-09-22",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Project results are expected to contribute to all the following expected outcomes: transdisciplinary research communities work together to predict the health of ecosystems and wild species (including physiology, genetic diversity, population distribution and ecology) in the face of the existing and emerging stressors induced by the indirect and direct drivers of biodiversity loss",
+   "id": "eu:HORIZON-CL6-2027-01-BIODIV-07",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Health of ecosystems and wild species, predictions and impacts on human health, in the face of existing and emerging stressors, from a One Health approach",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-CL6-2027-01-BIODIV-07)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl6-2027-01-biodiv-07",
+   "fit": {
+    "score": 53,
+    "tier": "medio",
+    "workLines": [
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Biodiversidad, Ecosistemas.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder."
+    ],
+    "daysRemaining": 311,
+    "deadlineState": "proxima"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-04-20",
+   "deadline": "2027-09-22",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Project results are expected to contribute to all the following expected outcomes, driving transformative change for biodiversity and nature positive economic practices: overall, the economic case for biodiversity protection, restoration, sustainable use and the delivery of ecosystem services upon which all life depends, is strengthened including through robust assessments of the",
+   "id": "eu:HORIZON-CL6-2027-01-BIODIV-05",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Accelerating the transition to a nature positive economy: Integrating biodiversity into the private sector",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-CL6-2027-01-BIODIV-05)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl6-2027-01-biodiv-05",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Biodiversidad, Mejora de hábitats, Ecosistemas, Medio natural.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder."
+    ],
+    "daysRemaining": 311,
+    "deadlineState": "proxima"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-02-09",
+   "deadline": "2027-09-22",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Projects are expected to contribute to all of the following outcomes: Development of approaches, tools and methods, on how and where to restore, increase and maintain urban green space and tree canopy cover to achieve the greatest positive impacts - on climate mitigation, adaptation and resilience, biodiversity, soil, air and water quality, quality of life, and human health. Upta",
+   "id": "eu:HORIZON-MISS-2027-07-CLIMA-CIT-NEB-01",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Urban nature: supporting restoration of urban ecosystems, along urban transport networks and in the built environment for cities and local authorities",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-MISS-2027-07-CLIMA-CIT-NEB-01)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-miss-2027-07-clima-cit-neb-01",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Biodiversidad, Ecosistemas, Medio natural.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder.",
+     "Dirigida principalmente a municipios / autoridades locales."
+    ],
+    "daysRemaining": 311,
+    "deadlineState": "proxima"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-02-09",
+   "deadline": "2027-09-21",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Project results are expected to contribute to all of the following expected outcomes: Increased area and improved condition of marine and coastal vegetated habitats within EU waters through effective on-site conservation, restoration and management of activities to help deliver on the objectives of the Nature Restoration Regulation; Maintained and enhanced capacity of blue carbon",
+   "id": "eu:HORIZON-MISS-2027-03-OCEAN-05",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Large-scale demonstration of protection, restoration and management of blue forest ecosystems in European sea basins",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-MISS-2027-03-OCEAN-05)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-miss-2027-03-ocean-05",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "restauracion",
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Restauración ecológica, Ámbito forestal, Masas forestales, Biodiversidad.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder."
+    ],
+    "daysRemaining": 310,
+    "deadlineState": "proxima"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-05-13",
+   "deadline": "2027-09-23",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Projects should contribute to all of the following expected outcomes: Policymakers and civil society organisations will have robust evidence on whether inclusive management of (peri-)urban environmental commons fosters climate and societal resilience, social inclusion, wellbeing and community participation, and whether lack of access to biodiverse green and/or blue spaces exacerb",
+   "id": "eu:HORIZON-CL2-2027-01-TRANSFO-01",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Impact of access to nature-positive environments in promoting social cohesion and reducing inequalities in urban and peri-urban settings",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-CL2-2027-01-TRANSFO-01)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl2-2027-01-transfo-01",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "restauracion",
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Restauración ecológica, Biodiversidad, Ecosistemas, Medio natural.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder."
+    ],
+    "daysRemaining": 312,
+    "deadlineState": "proxima"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-04-20",
+   "deadline": "2027-09-22",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Successful proposals should support the recovery, resilience, and EU integration of Ukraine’s forest sector, addressing the compounded impacts of climate change and Russia’s war of aggression. Project results are expected to contribute to all of the following expected outcomes: Ukrainian decision-makers and policymakers gain access to robust scientific data, tools, and methodolog",
+   "id": "eu:HORIZON-CL6-2027-01-CIRCBIO-10",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Strengthening forest research for the support of Ukraine",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-CL6-2027-01-CIRCBIO-10)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl6-2027-01-circbio-10",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "restauracion",
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Ámbito forestal, Masas forestales, Biodiversidad.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder."
+    ],
+    "daysRemaining": 311,
+    "deadlineState": "proxima"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-04-20",
+   "deadline": "2027-09-22",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Project results are expected to contribute to all of the following expected outcomes: advancing robust, policy-relevant ecosystem assessment, nature protection and restoration planning activities, and biodiversity trend prediction based on fit for purpose data, thus supporting EU biodiversity and climate objectives; strengthened capacity of researchers, practitioners and decision",
+   "id": "eu:HORIZON-CL6-2027-01-BIODIV-01",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Integrating Remote Sensing and in-situ observations of Biodiversity, towards a fully interoperable observation and data framework",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-CL6-2027-01-BIODIV-01)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl6-2027-01-biodiv-01",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Biodiversidad, Mejora de hábitats, Ecosistemas, Medio natural.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder."
+    ],
+    "daysRemaining": 311,
+    "deadlineState": "proxima"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-04-20",
+   "deadline": "2027-09-22",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Project results are expected to contribute to all of the following expected outcomes: the capacities and integrated governance of researchers, decision-makers, practitioners, local communities and other stakeholders to effectively collaborate to prevent, eradicate or manage invasive alien species (IAS) are enhanced; native ecosystems are better protected, leading to improved resi",
+   "id": "eu:HORIZON-CL6-2027-01-BIODIV-04",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Living Labs for the eradication and/or management of invasive alien species",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-CL6-2027-01-BIODIV-04)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl6-2027-01-biodiv-04",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "restauracion",
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Restauración ecológica, Biodiversidad, Control de invasoras, Ecosistemas.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder."
+    ],
+    "daysRemaining": 311,
+    "deadlineState": "proxima"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2027-04-20",
+   "deadline": "2027-09-22",
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Convocatoria UE (concurrencia competitiva)",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Expected Outcome: Project results are expected to contribute to all of the following expected outcomes: activities of protection and restoration of ecosystems by stakeholders become easier and more effective; conditions to scale up the implementation of the EU Nature Restoration Regulation by stakeholders are improved, thus improving ecosystem services including for climate mitigation and adaptati",
+   "id": "eu:HORIZON-CL6-2027-01-BIODIV-03",
+   "source": "eu",
+   "sourceLabel": "UE · Horizon Europe",
+   "kind": "europa",
+   "titulo": "Technical innovation to protect ecosystems and to scale up their restoration",
+   "organismo": "Comisión Europea · Horizon Europe (HORIZON-CL6-2027-01-BIODIV-03)",
+   "region": "Unión Europea",
+   "nivelAdmin": "UE",
+   "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl6-2027-01-biodiv-03",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "restauracion",
+     "conservacion"
+    ],
+    "outsideManualSources": true,
+    "manualSourceMatch": null,
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Restauración ecológica, Soluciones basadas en la naturaleza, Biodiversidad, Mejora de hábitats.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Fuera de tus 4 fuentes habituales: no la habrías visto revisando a mano.",
+     "Abre próximamente: margen para preparar la memoria."
+    ],
+    "warnings": [
+     "Horizon Europe: proyecto de investigación en consorcio internacional; Reforesta encajaría como socio de demostración, no como líder."
+    ],
+    "daysRemaining": 311,
+    "deadlineState": "proxima"
+   }
+  }
+ ],
+ "health": {
+  "id": "eu",
+  "name": "UE · Funding & Tenders (LIFE, Horizon)",
+  "category": "Portal UE",
+  "status": "ok",
+  "count": 13,
+  "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/calls-for-proposals",
+  "note": "API SEDIA oficial: 5 búsquedas (LIFE + bosques/biodiversidad/restauración), solo con plazo futuro."
+ }
+}

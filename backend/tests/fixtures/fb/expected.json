@@ -1,0 +1,222 @@
+{
+ "items": [
+  {
+   "publishedAt": null,
+   "opensAt": "2026-09-11",
+   "deadline": "2026-11-10",
+   "deadlineText": "Convocatoria cerrada",
+   "budget": null,
+   "amountText": "Por proyecto: el máximo de ayuda a solicitar es 200.000,00 € en ambas líneas.",
+   "tipo": "Concurrencia competitiva",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Convocatoria de subvenciones de la Fundación Biodiversidad F.S.P., en régimen de concurrencia competitiva, para la financiación de proyectos de Educación Ambiental para la sostenibilidad e […] -->",
+   "id": "fb:convocatoria-para-proyectos-de-educacion-ambiental-para-la-sostenibilidad-e-investigacion-sobre-desinformacion-climatica-2",
+   "source": "fb",
+   "sourceLabel": "F. Biodiversidad",
+   "kind": "subvencion",
+   "titulo": "Convocatoria para proyectos de Educación Ambiental para la Sostenibilidad e investigación sobre desinformación climática",
+   "organismo": "Fundación Biodiversidad (MITECO)",
+   "region": "Estatal",
+   "nivelAdmin": "Estatal",
+   "url": "https://fundacion-biodiversidad.es/otras_convocatorias/convocatoria-para-proyectos-de-educacion-ambiental-para-la-sostenibilidad-e-investigacion-sobre-desinformacion-climatica-2/",
+   "fit": {
+    "score": 77,
+    "tier": "alto",
+    "workLines": [
+     "conservacion",
+     "educacion"
+    ],
+    "outsideManualSources": false,
+    "manualSourceMatch": "Fundación Biodiversidad",
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Biodiversidad, Medio ambiente, Educación ambiental.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Convocatoria periódica: la edición actual cerró el 10/11/2026; prepara la siguiente con tiempo."
+    ],
+    "warnings": [],
+    "daysRemaining": -5,
+    "deadlineState": "cerrada"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2026-06-09",
+   "deadline": "2026-11-10",
+   "deadlineText": "Convocatoria cerrada",
+   "budget": null,
+   "amountText": "Total: Más de 40 M€",
+   "tipo": "Convocatoria pública",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Esta convocatoria se enfoca en apoyar la investigación y la innovación que aborden la biodiversidad y los ecosistemas novedosos del futuro, así como su dinámica […] -->",
+   "id": "fb:convocatoria-biodivfuture-del-partenariado-europeo-de-biodiversidad-biodiversa-sobre-ecosistemas-del-futuro",
+   "source": "fb",
+   "sourceLabel": "F. Biodiversidad",
+   "kind": "subvencion",
+   "titulo": "Convocatoria BiodivFuture del Partenariado Europeo de Biodiversidad (Biodiversa +) sobre ecosistemas del futuro",
+   "organismo": "Fundación Biodiversidad (MITECO)",
+   "region": "Estatal",
+   "nivelAdmin": "Estatal",
+   "url": "https://fundacion-biodiversidad.es/convocatorias_biodiv/convocatoria-biodivfuture-del-partenariado-europeo-de-biodiversidad-biodiversa-sobre-ecosistemas-del-futuro/",
+   "fit": {
+    "score": 58,
+    "tier": "medio",
+    "workLines": [
+     "conservacion"
+    ],
+    "outsideManualSources": false,
+    "manualSourceMatch": "Fundación Biodiversidad",
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Biodiversidad, Ecosistemas.",
+     "Convocatoria periódica: la edición actual cerró el 10/11/2026; prepara la siguiente con tiempo."
+    ],
+    "warnings": [],
+    "daysRemaining": -5,
+    "deadlineState": "cerrada"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2026-08-27",
+   "deadline": "2026-09-23",
+   "deadlineText": "Convocatoria cerrada",
+   "budget": 800000,
+   "amountText": "Total: 800.000,00 € · Por proyecto: máximo 230.000,00 €",
+   "tipo": "Concurrencia competitiva",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Convocatoria de subvenciones de la Fundación Biodiversidad F.S.P., en régimen de concurrencia competitiva, a determinadas organizaciones no gubernamentales para el apoyo y la participación en […] -->",
+   "id": "fb:convocatoria-para-el-apoyo-y-la-participacion-en-la-ejecucion-de-politicas-publicas-de-competencia-estatal",
+   "source": "fb",
+   "sourceLabel": "F. Biodiversidad",
+   "kind": "subvencion",
+   "titulo": "Convocatoria para el apoyo y la participación en la ejecución de políticas públicas de competencia estatal",
+   "organismo": "Fundación Biodiversidad (MITECO)",
+   "region": "Estatal",
+   "nivelAdmin": "Estatal",
+   "url": "https://fundacion-biodiversidad.es/otras_convocatorias/convocatoria-para-el-apoyo-y-la-participacion-en-la-ejecucion-de-politicas-publicas-de-competencia-estatal/",
+   "fit": {
+    "score": 63,
+    "tier": "alto",
+    "workLines": [
+     "conservacion"
+    ],
+    "outsideManualSources": false,
+    "manualSourceMatch": "Fundación Biodiversidad",
+    "isCompetitive": true,
+    "isOngEligible": true,
+    "reasons": [
+     "Encaje temático: Biodiversidad.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Menciona expresamente entidades sin ánimo de lucro (ONG, asociaciones, fundaciones).",
+     "Convocatoria periódica: la edición actual cerró el 23/9/2026; prepara la siguiente con tiempo."
+    ],
+    "warnings": [],
+    "daysRemaining": -53,
+    "deadlineState": "cerrada"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": "2025-11-03",
+   "deadline": "2026-01-13",
+   "deadlineText": "Convocatoria cerrada",
+   "budget": 11500000,
+   "amountText": "Total: 11,5 millones de euros · Por proyecto: Desde 300.000€ hasta 2.000.000€",
+   "tipo": "Concurrencia competitiva",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Convocatoria de subvenciones de la Fundación Biodiversidad, F.S.P., en régimen de concurrencia competitiva, para la recuperación de la funcionalidad ecológica del Mar Menor a través […] -->",
+   "id": "fb:convocatoria-de-subvenciones-para-la-recuperacion-de-la-funcionalidad-ecologica-del-mar-menor-a-traves-de-la-mejora-ambiental-en-la-actividad-ganadera",
+   "source": "fb",
+   "sourceLabel": "F. Biodiversidad",
+   "kind": "subvencion",
+   "titulo": "Convocatoria de subvenciones para la recuperación de la funcionalidad ecológica del Mar Menor a través de la mejora ambiental en la actividad ganadera",
+   "organismo": "Fundación Biodiversidad (MITECO)",
+   "region": "Estatal",
+   "nivelAdmin": "Estatal",
+   "url": "https://fundacion-biodiversidad.es/otras_convocatorias/convocatoria-de-subvenciones-para-la-recuperacion-de-la-funcionalidad-ecologica-del-mar-menor-a-traves-de-la-mejora-ambiental-en-la-actividad-ganadera/",
+   "fit": {
+    "score": 42,
+    "tier": "medio",
+    "workLines": [
+     "conservacion"
+    ],
+    "outsideManualSources": false,
+    "manualSourceMatch": "Fundación Biodiversidad",
+    "isCompetitive": true,
+    "isOngEligible": null,
+    "reasons": [
+     "Encaje temático: Biodiversidad, Medio ambiente.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar.",
+     "Convocatoria periódica: la edición actual cerró el 13/1/2026; prepara la siguiente con tiempo."
+    ],
+    "warnings": [
+     "Orientada a explotaciones ganaderas."
+    ],
+    "daysRemaining": -306,
+    "deadlineState": "cerrada"
+   }
+  },
+  {
+   "publishedAt": null,
+   "opensAt": null,
+   "deadline": null,
+   "deadlineText": null,
+   "budget": null,
+   "amountText": null,
+   "tipo": "Concurrencia competitiva",
+   "beneficiarios": [],
+   "basesUrl": null,
+   "documents": [],
+   "summary": "Convocatoria de subvenciones de la Fundación Biodiversidad, F.S.P., en régimen de concurrencia competitiva, para la realización de proyectos que contribuyan a apoyar el empleo y […] -->",
+   "id": "fb:convocatoria-de-ayudas-para-la-realizacion-de-proyectos-que-contribuyan-a-apoyar-el-empleo-y-la-capacitacion-a-traves-de-actuaciones-de-restauracion-y-recuperacion-de-los-municipios-afectados-por-la-d",
+   "source": "fb",
+   "sourceLabel": "F. Biodiversidad",
+   "kind": "subvencion",
+   "titulo": "Convocatoria de ayudas para la realización de proyectos que contribuyan a apoyar el empleo y la capacitación a través de actuaciones de restauración y recuperación de los municipios afectados por la DANA",
+   "organismo": "Fundación Biodiversidad (MITECO)",
+   "region": "Estatal",
+   "nivelAdmin": "Estatal",
+   "url": "https://fundacion-biodiversidad.es/otras_convocatorias/convocatoria-de-ayudas-para-la-realizacion-de-proyectos-que-contribuyan-a-apoyar-el-empleo-y-la-capacitacion-a-traves-de-actuaciones-de-restauracion-y-recuperacion-de-los-municipios-afectados-por-la-d/",
+   "fit": {
+    "score": 27,
+    "tier": "bajo",
+    "workLines": [
+     "conservacion"
+    ],
+    "outsideManualSources": false,
+    "manualSourceMatch": "Fundación Biodiversidad",
+    "isCompetitive": true,
+    "isOngEligible": false,
+    "reasons": [
+     "Encaje temático: Biodiversidad.",
+     "Concurrencia competitiva: cualquier entidad que cumpla requisitos puede optar."
+    ],
+    "warnings": [
+     "Dirigida a entidades locales (ayuntamientos): Reforesta solo podría participar como socio."
+    ],
+    "daysRemaining": null,
+    "deadlineState": "sin_fecha"
+   }
+  }
+ ],
+ "health": {
+  "id": "fb",
+  "name": "Fundación Biodiversidad",
+  "category": "Web oficial",
+  "status": "ok",
+  "count": 5,
+  "url": "https://fundacion-biodiversidad.es/buscador-de-convocatorias/",
+  "note": "Buscador oficial (2 páginas) + ficha de cada convocatoria: 5 convocatorias, 0 abiertas o próximas (el resto se muestran cerradas como referencia)."
+ }
+}

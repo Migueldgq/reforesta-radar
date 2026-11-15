@@ -1,0 +1,41 @@
+{
+ "content": [
+  {
+   "id": 1124851,
+   "mrr": false,
+   "numeroConvocatoria": "923290",
+   "descripcion": "AYUDAS CONCURRENCIA COMPETITIVA LÍNEA A DESARROLLO ACTIVIDADES INTERÉS GENERAL CONSIDERADAS INTERÉS SOCIAL, EN EL ÁMBITO DE LA INVESTIGACIÓN CIENTÍFICA Y TÉCNICA Y PROTECCIÓN MEDIO AMBIENTE EN MATERIAS DE COMPETENCIA ESTATAL. ANUALIDAD 2026.",
+   "descripcionLeng": null,
+   "fechaRecepcion": "2026-08-03",
+   "nivel1": "ESTADO",
+   "nivel2": "MINISTERIO PARA LA TRANSICIÓN ECOLÓGICA Y EL RETO DEMOGRÁFICO",
+   "nivel3": "DIRECCIÓN GENERAL DE SERVICIOS",
+   "codigoInvente": null
+  },
+  {
+   "id": 1109538,
+   "mrr": false,
+   "numeroConvocatoria": "907977",
+   "descripcion": "Resolución de 25 de mayo de 2026, del vicepresidente tercero y conseller de Medio Ambiente, Infraestructuras, Territorio y de la Recuperación, por la que se establecen las bases reguladoras de las ayudas al voluntariado ambiental (PIFVOL 2026)",
+   "descripcionLeng": "Resolució de 25 de maig de 2026, del vicepresident tercer i conseller de Medi Ambient, Infraestructures, Territori i de la Recuperació, per la qual s'establixen les bases reguladores de les ajudes al voluntariat ambiental (PIFVOL 2026)",
+   "fechaRecepcion": "2026-05-26",
+   "nivel1": "AUTONOMICA",
+   "nivel2": "COMUNITAT VALENCIANA",
+   "nivel3": "SECRETARÍA AUTONÓMICA DE MEDIO AMBIENTE  Y TERRITORIO",
+   "codigoInvente": null
+  },
+  {
+   "id": 1106280,
+   "mrr": false,
+   "numeroConvocatoria": "904719",
+   "descripcion": "SUBVENCIÓN ENTIDADES SIN ÁNIMO DE LUCRO PROYECTOS AMBIENTALES 2026",
+   "descripcionLeng": null,
+   "fechaRecepcion": "2026-05-11",
+   "nivel1": "AUTONOMICA",
+   "nivel2": "COMUNIDAD DE MADRID",
+   "nivel3": "CONSEJERÍA DE MEDIO AMBIENTE, AGRICULTURA E INTERIOR",
+   "codigoInvente": null
+  }
+ ],
+ "totalElements": 60
+}
