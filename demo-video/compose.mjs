@@ -29,8 +29,7 @@ const MAX_SCALE = 2.0; // …but never past 2 canvas px per CSS px (the capture 
 const OVERLAP = 0.32; // s: beats overlap by this much (blur swap)
 const CPS = 0.034; // s per typed character
 const CARD_RADIUS = 18;
-const TOPBAR = 57; // CSS px: height of the app's sticky top bar (breadcrumb) incl. its border
-const RAIL = 52; // CSS px: width of the app's collapsed sidebar rail in the capture
+const RAIL = 52; // CSS px: width of the app's collapsed sidebar rail in the capture (48) plus a little margin
 
 /* ---------- audio ---------- */
 const MUSIC_ON = process.env.MUSIC !== "0";
@@ -56,12 +55,25 @@ const SFX = {
 const MARK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3"/><path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4"/><path d="M5 21h14"/></svg>`;
 const GITHUB_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>`;
 
+// The app's numbers at capture time ({fuentes}, {total}, {alto} in scenes.mjs text).
+const FACTS_FILE = path.join(HERE, "captures", "facts.json");
+const FACTS = existsSync(FACTS_FILE) ? JSON.parse(readFileSync(FACTS_FILE, "utf8")) : {};
+const fill = (text) =>
+  text.replace(/\{(\w+)\}/g, (m, k) => {
+    if (FACTS[k] == null) throw new Error(`no value for ${m} in captures/facts.json: run capture.mjs first`);
+    return String(FACTS[k]);
+  });
+
+const CHECK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
+const AWARD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526"/><circle cx="12" cy="8" r="6"/></svg>`;
+const CAL_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>`;
+
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const r3 = (n) => Math.round(n * 1000) / 1000;
 
 /* ---------- typed text: "*green words*" → per-character spans ---------- */
 function typed(text) {
-  const parts = text.split(/(\*[^*]+\*)/).filter(Boolean);
+  const parts = fill(text).split(/(\*[^*]+\*)/).filter(Boolean);
   let n = 0;
   const html = parts
     .map((p) => {
@@ -96,7 +108,7 @@ const total = r3(t + OVERLAP);
 
 /* ---------- camera math ---------- */
 function camera(r, vp) {
-  const s = Math.min(FIT.w / r.w, FIT.h / r.h, MAX_SCALE);
+  const s = Math.min(FIT.w / r.w, FIT.h / r.h, r.max ?? MAX_SCALE);
   const cx = r.x + r.w / 2;
   const cy = r.y + r.h / 2;
   // Never show the app's collapsed sidebar rail at the left edge: keep the visible area right of it.
@@ -114,14 +126,14 @@ const swap = (sel, a, b) => {
 };
 
 /** A typed line: chars appear one by one, caret follows, then blinks out. Returns the time typing ends. */
-function typeLine(id, a, n, { caret = true, tick = true } = {}) {
+function typeLine(id, a, n, { caret = true, tick = true, cps = CPS } = {}) {
   // display:none until typed, so a centred line grows from the middle like the reference
-  anim.push(`gsap.utils.toArray("#${id} .c").forEach((c, i) => { tl.set(c, { display: "none" }, 0); tl.set(c, { display: "inline" }, ${r3(a)} + i * ${CPS}); });`);
-  const end = a + n * CPS;
+  anim.push(`gsap.utils.toArray("#${id} .c").forEach((c, i) => { tl.set(c, { display: "none" }, 0); tl.set(c, { display: "inline" }, ${r3(a)} + i * ${cps}); });`);
+  const end = a + n * cps;
   if (caret) {
     anim.push(`tl.set("#${id} .caret", { opacity: 1 }, ${r3(a)}); tl.set("#${id} .caret", { opacity: 0 }, ${r3(end + 0.22)}); tl.set("#${id} .caret", { opacity: 1 }, ${r3(end + 0.44)}); tl.set("#${id} .caret", { opacity: 0 }, ${r3(end + 0.66)});`);
   }
-  if (tick) for (let i = 0; i < n; i++) sounds.push({ t: a + i * CPS, kind: i % 2 ? "type2" : "type1", g: ((i * 7) % 5) - 2 });
+  if (tick) for (let i = 0; i < n; i++) sounds.push({ t: a + i * cps, kind: i % 2 ? "type2" : "type1", g: ((i * 7) % 5) - 2 });
   return end;
 }
 
@@ -163,6 +175,52 @@ timed.forEach((s, idx) => {
     const e1 = typeLine(`${s.id}-l1`, s.start + 0.2, l1.n, { caret: false });
     typeLine(`${s.id}-l2`, e1 + 0.12, l2.n);
     swap(`#b-${s.id} .statement`, s.start, s.end);
+    return;
+  }
+
+  if (s.kind === "assistant") {
+    // Green contrast section: a question and the answer built from the radar's real tool output
+    // (captures/assistant.json). A neutral chat card in the film's own style: no assistant's name, logo or look.
+    const f = path.join(HERE, "captures", "assistant.json");
+    if (!existsSync(f)) throw new Error("captures/assistant.json missing: run capture.mjs first");
+    const A = JSON.parse(readFileSync(f, "utf8"));
+    const fi = A.ficha;
+    const hist = fi.historial ?? {};
+    const won = fi.encaje.motivos.find((m) => /^Reforesta ya la ganó/.test(m));
+    const title = fi.titulo.charAt(0) + fi.titulo.slice(1).toLowerCase();
+    const opening = [hist.typicalOpening?.text, hist.typicalWindow ? `plazo habitual: ${hist.typicalWindow}` : null].filter(Boolean).join("; ");
+    const lines = [
+      { cls: "a-title", html: esc(title) },
+      { cls: "a-meta", html: `${esc(fi.territorio)} · nota ${esc(fi.encaje.nota)}` },
+      won && { cls: "a-fact", icon: AWARD_SVG, html: esc(won) },
+      opening && { cls: "a-fact", icon: CAL_SVG, html: esc(opening.charAt(0).toUpperCase() + opening.slice(1)) + "." },
+      { cls: "a-src", html: `${esc(new URL(fi.url).host)} · ${esc(fi.fuente)} ${esc(fi.id.split(":")[1] ?? "")}` },
+    ].filter(Boolean);
+    const q = typed(A.question);
+    html.push(`<div id="bg-${s.id}" class="clip greenbg" ${win(s.start, s.duration + 0.7)} style="z-index:${z - 1}"></div>`);
+    anim.push(`tl.fromTo("#bg-${s.id}", { clipPath: "circle(0% at 50% 56%)" }, { clipPath: "circle(75% at 50% 56%)", duration: 0.6, ease: "power3.inOut" }, ${r3(s.start)});`);
+    sounds.push({ t: s.start, kind: "wipe" });
+    const hx = typed(s.headline);
+    const hid = `h-${s.id}`;
+    html.push(`<div id="${hid}" class="clip headline on-green" ${win(s.start + 0.35, s.duration + 0.35)} style="z-index:150"><p class="typed">${hx.html}<span class="caret"></span></p></div>`);
+    typeLine(hid, s.start + 0.35, hx.n);
+    html.push(`<div id="w-${s.id}" class="chat" style="z-index:${z}">
+        <div class="q"><p id="q-${s.id}" class="typed">${q.html}<span class="caret"></span></p></div>
+        <div class="steps">${A.calls.map((c, i) => `<span class="step" id="st-${s.id}-${i}">${CHECK_SVG}<span>${i === 0 ? "Buscó en el radar" : "Abrió la ficha"}</span></span>`).join("")}</div>
+        <div class="answer">${lines.map((l, i) => `<p class="${l.cls}" id="al-${s.id}-${i}">${l.icon ? `<span class="ico">${l.icon}</span>` : ""}<span>${l.html}</span></p>`).join("")}</div>
+      </div>`);
+    const a = s.start;
+    anim.push(`tl.fromTo("#w-${s.id}", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "power3.out" }, ${r3(a + 0.45)});`);
+    const qEnd = typeLine(`q-${s.id}`, a + 1.0, q.n, { cps: 0.024 });
+    A.calls.forEach((_, i) => {
+      const t = qEnd + 0.25 + i * 0.4;
+      anim.push(`tl.fromTo("#st-${s.id}-${i}", { opacity: 0, y: 8, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "back.out(1.8)" }, ${r3(t)});`);
+      sounds.push({ t, kind: "type1", g: 4 });
+    });
+    const ansAt = qEnd + 0.25 + A.calls.length * 0.4 + 0.15;
+    lines.forEach((_, i) => {
+      anim.push(`tl.fromTo("#al-${s.id}-${i}", { opacity: 0, y: 12, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.45, ease: "power3.out" }, ${r3(ansAt + i * 0.22)});`);
+    });
     return;
   }
 
@@ -253,32 +311,32 @@ timed.forEach((s, idx) => {
     const push = camera({ x: first.x - first.w * 0.06, y: first.y - first.h * 0.06, w: first.w * 1.12, h: first.h * 1.12 }, vp);
     anim.push(`tl.set("#${vid}", { transformOrigin: "0 0", x: ${push.x}, y: ${push.y}, scale: ${push.scale} }, 0);`);
     anim.push(`tl.to("#${vid}", { x: ${c0.x}, y: ${c0.y}, scale: ${c0.scale}, duration: 1.5, ease: "power2.out" }, ${r3(s.start + 0.05)});`);
-    // The app's sticky top bar (breadcrumb) would cut across the framed UI when the page is scrolled: a white band
-    // hides everything above css y = TOPBAR and follows the camera. It steps aside when a side sheet opens.
-    const tb = `tb-${s.id}`;
-    const tbY = (k) => r3(k.y + k.scale * TOPBAR - STAGE.h);
-    html.push(`<div id="${tb}" class="clip topcut" ${win(s.start, s.duration)} style="z-index:${z + 1}"></div>`);
-    anim.push(`tl.set("#${tb}", { y: ${tbY(push)} }, 0);`);
-    anim.push(`tl.fromTo("#${tb}", { opacity: 0 }, { opacity: 1, duration: 0.42, ease: "power3.out" }, ${r3(s.start)});`);
-    anim.push(`tl.to("#${tb}", { y: ${tbY(c0)}, duration: 1.5, ease: "power2.out" }, ${r3(s.start + 0.05)});`);
-    anim.push(`tl.to("#${tb}", { opacity: 0, duration: 0.3, ease: "power2.in" }, ${r3(s.end - 0.3)});`);
+    // Hide what lies left of css x = curtain (the dimmed list behind a side sheet): a white curtain whose right edge
+    // follows the camera. It can start with the beat (sheet already open) or with a later camera move.
     let curtainX = null;
+    if (first.curtain != null) {
+      curtainX = first.curtain;
+      html.push(`<div id="cu-${s.id}" class="clip curtain" ${win(s.start, s.duration)} style="z-index:${z + 1}"></div>`);
+      anim.push(`tl.set("#cu-${s.id}", { x: ${r3(push.x + push.scale * curtainX - W)} }, 0);`);
+      anim.push(`tl.fromTo("#cu-${s.id}", { opacity: 0 }, { opacity: 1, duration: 0.42, ease: "power3.out" }, ${r3(s.start)});`);
+      anim.push(`tl.to("#cu-${s.id}", { x: ${r3(c0.x + c0.scale * curtainX - W)}, duration: 1.5, ease: "power2.out" }, ${r3(s.start + 0.05)});`);
+    }
+    let prev = c0;
     for (const c of cams.slice(1)) {
       const k = camera(c, vp);
       const d = Math.max(0.2, c.dur ?? 0.7);
       anim.push(`tl.to("#${vid}", { x: ${k.x}, y: ${k.y}, scale: ${k.scale}, duration: ${d}, ease: "power3.inOut" }, ${r3(s.start + c.t)});`);
-      if (c.curtain != null && curtainX == null) anim.push(`tl.to("#${tb}", { opacity: 0, duration: 0.2 }, ${r3(s.start + c.t)});`);
-      else if (curtainX == null) anim.push(`tl.to("#${tb}", { y: ${tbY(k)}, duration: ${d}, ease: "power3.inOut" }, ${r3(s.start + c.t)});`);
       if (c.curtain != null && curtainX == null) {
-        // Hide what lies left of css x = c.curtain (e.g. the dimmed list behind a side sheet): a white curtain
-        // whose right edge follows the camera.
         curtainX = c.curtain;
         html.push(`<div id="cu-${s.id}" class="clip curtain" ${win(s.start + c.t, s.end - s.start - c.t)} style="z-index:${z + 1}"></div>`);
-        anim.push(`tl.fromTo("#cu-${s.id}", { opacity: 0, x: ${r3(k.x + k.scale * curtainX - W)} }, { opacity: 1, duration: ${d}, ease: "power2.out" }, ${r3(s.start + c.t)});`);
+        // fades in fast and rides with the camera move, so its edge stays on the sheet's edge
+        anim.push(`tl.fromTo("#cu-${s.id}", { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power2.out" }, ${r3(s.start + c.t)});`);
+        anim.push(`tl.fromTo("#cu-${s.id}", { x: ${r3(prev.x + prev.scale * curtainX - W)} }, { x: ${r3(k.x + k.scale * curtainX - W)}, duration: ${d}, ease: "power3.inOut", immediateRender: false }, ${r3(s.start + c.t)});`);
       } else if (curtainX != null) {
         anim.push(`tl.to("#cu-${s.id}", { x: ${r3(k.x + k.scale * curtainX - W)}, duration: ${d}, ease: "power3.inOut" }, ${r3(s.start + c.t)});`);
       }
       if (d >= 0.5) sounds.push({ t: s.start + c.t, kind: "swish" });
+      prev = k;
     }
     swap(`#w-${s.id}`, s.start, s.end);
   }
@@ -402,11 +460,25 @@ const page = `<!doctype html>
       }
       .screen { position: absolute; left: 0; top: 0; width: 1440px; height: 810px; will-change: transform; }
       .greenbg { background: var(--accent); }
-      .topcut { inset: auto; left: 0; top: ${STAGE.top}px; width: ${W}px; height: ${STAGE.h}px; background: var(--ground); opacity: 0; }
       .curtain { right: auto; width: ${W}px; top: ${STAGE.top}px; background: var(--ground); }
       .placeholder { display: grid; place-items: center; top: ${STAGE.top}px; }
       .placeholder span { font-size: 32px; color: var(--muted); }
 
+      .chat { position: absolute; left: 50%; top: ${STAGE.top + 92}px; width: 1240px; margin-left: -620px; opacity: 0; padding: 40px 48px 44px;
+        border-radius: 24px; background: var(--ground); box-shadow: 0 40px 80px -30px rgba(0,0,0,.45); display: flex; flex-direction: column; gap: 26px; }
+      .chat .q { align-self: flex-end; max-width: 88%; padding: 18px 26px; border-radius: 22px 22px 6px 22px; background: oklch(0.955 0.015 158); font-size: 35px; font-weight: 500; letter-spacing: -0.015em; }
+      .chat .q .typed { white-space: pre-wrap; }
+      .steps { display: flex; gap: 12px; }
+      .step { display: inline-flex; align-items: center; gap: 9px; padding: 8px 16px 8px 12px; border-radius: 999px; border: 1.5px solid var(--border); color: var(--muted); font-size: 24px; font-weight: 500; opacity: 0; }
+      .step svg { width: 24px; height: 24px; color: var(--accent); }
+      .answer { display: flex; flex-direction: column; gap: 14px; }
+      .answer p { display: flex; align-items: flex-start; gap: 14px; opacity: 0; }
+      .a-title { font-size: 40px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.2; }
+      .a-meta { font-size: 27px; color: var(--muted); margin-top: -6px; margin-bottom: 6px; }
+      .a-fact { font-size: 34px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.3; }
+      .a-fact .ico { flex: none; width: 34px; height: 34px; margin-top: 3px; color: var(--accent); }
+      .a-fact .ico svg { width: 100%; height: 100%; }
+      .a-src { font-size: 24px; color: var(--muted); margin-top: 6px; }
       .outro { background: var(--ground); display: grid; place-items: center; }
       .outro-inner { display: flex; flex-direction: column; align-items: center; gap: 26px; transform: translateY(-10px); }
       .brand { display: flex; align-items: center; gap: 22px; }
