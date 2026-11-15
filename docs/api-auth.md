@@ -146,8 +146,8 @@ type BoardItem = {
 
 - A call absent from `/api/board` is `"nueva"` (what `triageOf` returns today). Setting `"nueva"` keeps the row
   (and its notes and assignee); it is not deleted.
-- Use the board item's snapshot to draw cards of calls missing from `/api/oportunidades` (replaces today's `stub()`
-  built from the localStorage entry). The snapshot is refreshed on every write while the call is still known.
+- Use the board item's snapshot to draw cards of calls missing from `/api/oportunidades` (`stub()` in
+  `src/components/radar/store.tsx`). The snapshot is refreshed on every write while the call is still known.
 - `opportunityId` goes in the path as is (`bdns:923290`); `encodeURIComponent` is safe too.
 - Concurrency: last write wins per field. Re-fetch `GET /api/board` on focus or every minute to see colleagues'
   changes.
