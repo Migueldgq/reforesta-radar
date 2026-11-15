@@ -246,7 +246,7 @@ function People() {
           <ul className="divide-y rounded-lg border">
             {users.map((u) => (
               <li key={u.id} className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3", !u.active && "bg-muted/40")}>
-                <div className="flex min-w-0 flex-1 basis-56 items-center gap-3">
+                <div className="order-1 flex min-w-0 flex-1 basis-56 items-center gap-3">
                   <PersonAvatar name={u.name || u.email} className={cn("size-8 text-xs", !u.active && "opacity-60")} />
                   <div className="min-w-0">
                     <p className="truncate font-medium">
@@ -256,7 +256,7 @@ function People() {
                     <p className="truncate text-xs text-muted-foreground">{u.email}</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="order-3 flex flex-wrap items-center gap-2">
                   <Badge variant={u.role === "admin" ? "secondary" : "outline"} className="gap-1 font-normal">
                     {u.role === "admin" && <ShieldCheck aria-hidden />}
                     {ROLE_LABEL[u.role]}
@@ -271,12 +271,12 @@ function People() {
                     </Badge>
                   )}
                 </div>
-                <p className="w-36 text-xs text-muted-foreground" title={u.lastLoginAt ? fmtDayLong(u.lastLoginAt) : undefined}>
+                <p className="order-4 w-36 text-xs text-muted-foreground" title={u.lastLoginAt ? fmtDayLong(u.lastLoginAt) : undefined}>
                   {u.lastLoginAt ? `Entró ${fmtAgo(u.lastLoginAt)}` : "Nunca ha entrado"}
                 </p>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon-sm" aria-label={`Acciones para ${u.name || u.email}`} disabled={busy === u.id}>
+                    <Button variant="ghost" size="icon-sm" className="order-2 sm:order-5" aria-label={`Acciones para ${u.name || u.email}`} disabled={busy === u.id}>
                       {busy === u.id ? <Loader2 className="animate-spin" aria-hidden /> : <MoreHorizontal aria-hidden />}
                     </Button>
                   </DropdownMenuTrigger>
