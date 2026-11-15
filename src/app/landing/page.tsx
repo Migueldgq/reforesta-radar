@@ -216,7 +216,7 @@ export default function LandingPage() {
             </p>
             <div className="lp-enter mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row" style={enter(3)}>
               <Button asChild size="lg" className="w-full sm:w-auto">
-                <Link href="/">
+                <Link href="/login">
                   Abrir el radar
                   <ArrowRight />
                 </Link>
@@ -496,7 +496,7 @@ export default function LandingPage() {
               </h2>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Button asChild size="lg">
-                  <Link href="/">
+                  <Link href="/login">
                     Abrir el radar
                     <ArrowRight />
                   </Link>
@@ -521,7 +521,7 @@ export default function LandingPage() {
               </div>
               <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
                 <li>
-                  <Link href="/" className="lp-link hover:text-primary">
+                  <Link href="/login" className="lp-link hover:text-primary">
                     Abrir el radar
                   </Link>
                 </li>
