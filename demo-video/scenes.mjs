@@ -6,7 +6,8 @@
 //   (never shorter than `duration`). A statement types `lines[i]` when voice line i starts.
 // - `voice`: the narration of the beat, one entry per audio file (voice-lines.mjs names them NN-<beat>.wav and
 //   GUION-VOZ.md lists them). `text` is what is said and subtitled; `say` (optional) is the respelled text the local
-//   voice reads; `notes` (optional) are pronunciation notes for whoever records the line. In "screen" beats the
+//   voice reads; `notes` (optional) are pronunciation notes for whoever records the line; `seed` (optional) is the
+//   ElevenLabs seed for that line when the default one gives a bad take. In "screen" beats the
 //   recording logs `say k` where line k starts; the voice drives the timing (compose.mjs holds the picture if a line
 //   needs longer).
 // - In any on-screen text, *words in asterisks* are set in the brand green, and {fuentes} / {total} / {alto} are
@@ -21,7 +22,6 @@ export const FPS = 30;
 export const REPO_URL = "github.com/Migueldgq/reforesta-radar";
 
 const MCP = "MCP se lee letra a letra: «eme, ce, pe».";
-const IA = "«IA» se lee «i, a».";
 
 export const SCENES = [
   {
@@ -177,9 +177,10 @@ export const SCENES = [
     headlines: ["Conectadlo por MCP *a cualquier agente de IA*", "Pregúntaselo a *vuestro agente de IA*"],
     voice: [
       {
-        text: "Y si usáis un asistente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquier agente de IA.",
-        say: "Y si usáis un asistente de inteligencia artificial, podéis conectarle el radar por eme ce pe, un estándar abierto que vale para cualquier agente de i a.",
-        notes: `${MCP} ${IA}`,
+        text: "Y si usáis un agente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquiera.",
+        say: "Y si usáis un agente de inteligencia artificial, podéis conectarle el radar por eme ce pe, un estándar abierto que vale para cualquiera.",
+        notes: MCP,
+        seed: 11, // ElevenLabs: with the default seed, Whisper hears «ene ce pe»
       },
       { text: "Es de solo lectura: puede buscar y leer, pero no cambia nada." },
       { phase: 1, text: "Le preguntáis con vuestras palabras; él busca en el radar y os responde con los mismos datos que veis en la aplicación." },

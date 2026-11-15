@@ -42,7 +42,7 @@ pronunciación dicen cómo leer siglas, cifras y años; el texto se graba tal cu
 | `28-fuentes` | En Fuentes veis de dónde sale cada dato: la Base de Datos Nacional de Subvenciones, el BOE, los fondos europeos y cuatro fuentes más. | BOE se lee como palabra: «boe». |
 | `29-fuentes` | De cada una, cuántos resultados dio y si la última carga fue bien. | — |
 | `30-fuentes` | Y si no queréis esperar a mañana, alguien de administración puede pedir una actualización en el momento. | — |
-| `31-asistente` | Y si usáis un asistente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquier agente de IA. | MCP se lee letra a letra: «eme, ce, pe». «IA» se lee «i, a». |
+| `31-asistente` | Y si usáis un agente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquiera. | MCP se lee letra a letra: «eme, ce, pe». |
 | `32-asistente` | Es de solo lectura: puede buscar y leer, pero no cambia nada. | — |
 | `33-asistente` | Le preguntáis con vuestras palabras; él busca en el radar y os responde con los mismos datos que veis en la aplicación. | — |
 | `34-outro` | Reforesta Radar. Menos horas buscando, y más horas en el monte. | — |
@@ -109,7 +109,7 @@ pronunciación dicen cómo leer siglas, cifras y años; el texto se graba tal cu
 
 30-fuentes: Y si no queréis esperar a mañana, alguien de administración puede pedir una actualización en el momento.
 
-31-asistente: Y si usáis un asistente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquier agente de IA.
+31-asistente: Y si usáis un agente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquiera.
 
 32-asistente: Es de solo lectura: puede buscar y leer, pero no cambia nada.
 
