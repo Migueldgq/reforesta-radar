@@ -1,46 +1,34 @@
-// Single source of truth for the demo's scene order and on-screen text.
-// - "screen" scenes are recorded by capture.mjs (ACTIONS[id]); their length comes from the recording
-//   (captures/<id>.json). `captions[i]` is shown from the moment the recording logs `caption i`.
-// - "card" scenes are typographic cards rendered by HyperFrames with a fixed `duration`.
+// Single source of truth for the demo's beat order and on-screen text (launch-video style: white canvas,
+// one typed headline per beat, one cropped piece of the real app below it).
+// - "screen" beats are recorded by capture.mjs (ACTIONS[id]); their length comes from the recording
+//   (captures/<id>.json). `headlines[i]` types in when the recording logs `head i`.
+// - "intro" / "statement" / "outro" are typographic beats rendered by HyperFrames with a fixed `duration`.
+// - In headline text, *words in asterisks* are set in the brand green.
+// - `canvas: "green"` puts a beat on the forest-green canvas (one contrast section) and shows the UI as a card.
 // compose.mjs builds composition/index.html from this list. Keep GUION.md in sync.
 
 export const FPS = 30;
-export const CUT = 0.12; // seconds of overlap between scenes: a near-hard cut
 export const REPO_URL = "github.com/Migueldgq/reforesta-radar";
 
 export const SCENES = [
-  { id: "landing", kind: "screen", route: "/landing", captions: [] },
-  {
-    id: "problema",
-    kind: "card",
-    duration: 3,
-    eyebrow: "El problema",
-    title: "4–5 solicitudes al año.",
-    subtitle: "Siempre las mismas cuatro fuentes.",
-  },
-  { id: "fuentes", kind: "screen", route: "/fuentes", captions: ["11 fuentes, una sola lista"] },
-  { id: "mapa", kind: "screen", route: "/", captions: ["Todo de un vistazo", "Pulsa Madrid: la tabla responde"] },
-  { id: "encaje", kind: "screen", route: "/", captions: ["Hoy, nada abierto que encaje", "Lo que vuelve: próximas ediciones"] },
-  {
-    id: "ejemplos",
-    kind: "screen",
-    route: null, // continues on the page left by "encaje"
-    captions: ["Ejemplo del reto: cerró en junio", "¿Encaja? 85, y por qué", "A «En estudio»", "El otro ejemplo, justo debajo"],
-    lowerThirds: [
-      { chip: "Ejemplo del reto", title: "Subvenciones a entidades sin ánimo de lucro · proyectos ambientales 2026", meta: "BDNS 904719 · Comunidad de Madrid" },
-      { chip: "Ejemplo del reto", title: "Actividades de interés general · protección del medio ambiente 2026", meta: "BDNS 923290 · MITECO" },
-    ],
-  },
-  { id: "seguimiento", kind: "screen", route: "/seguimiento", captions: ["Seguimiento: arrastra y decide"] },
-  { id: "perfil", kind: "screen", route: "/perfil", captions: ["Perfil: ajustad el criterio", "El efecto, al momento"] },
-  { id: "empresas", kind: "screen", route: "/empresas", captions: ["Empresas: el canal RSC"] },
-  { id: "analizar", kind: "screen", route: "/analizar", captions: ["Unas bases en PDF…", "…una ficha de decisión"] },
+  { id: "intro", kind: "intro", duration: 2.7, lead: "Os presentamos", name: "Reforesta Radar" },
+  { id: "statement", kind: "statement", duration: 3.0, lines: ["Cada convocatoria que se escapa", "*es monte que no se planta.*"] },
+  { id: "fuentes", kind: "screen", route: "/fuentes", headlines: ["*11 fuentes*, una sola lista"] },
+  { id: "inicio", kind: "screen", route: "/", headlines: ["Lo importante, *de un vistazo*"] },
+  { id: "semana", kind: "screen", route: "/", headlines: ["Pulsa una *semana*…", "…y la lista *responde*"] },
+  { id: "mapa", kind: "screen", route: "/", headlines: ["O pulsa *Madrid*", "Solo lo de *vuestro territorio*"] },
+  { id: "encaje", kind: "screen", route: "/?tier=alto&cerradas=1", headlines: ["¿Encaja? *Y por qué*", "Marcadla *en estudio*"] },
+  { id: "seguimiento", kind: "screen", route: "/seguimiento", headlines: ["Del radar *al tablero*"] },
+  { id: "perfil", kind: "screen", route: "/perfil", headlines: ["El criterio *es vuestro*", "La lista *se reordena*"] },
+  { id: "analizar", kind: "screen", route: "/analizar", headlines: ["¿Unas bases en PDF?", "*Una ficha* para decidir"] },
+  { id: "empresas", kind: "screen", route: "/empresas", canvas: "green", headlines: ["Y el canal *de empresas*"] },
   {
     id: "outro",
-    kind: "card",
-    duration: 3,
-    eyebrow: "Reforesta Radar",
-    title: "Menos horas leyendo bases, más horas en el monte.",
-    subtitle: REPO_URL,
+    kind: "outro",
+    duration: 4.6,
+    name: "Reforesta Radar",
+    tagline: "Menos horas leyendo bases, *más horas en el monte.*",
+    cta: "Ver el código",
+    url: REPO_URL,
   },
 ];
