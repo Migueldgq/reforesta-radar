@@ -66,6 +66,17 @@ code=$(fetch "$URL/.well-known/oauth-authorization-server")
 issuer=$(jq -r '.issuer // empty' "$tmp/body" 2>/dev/null)
 if [ "$code" = 200 ] && [ "$issuer" = "$URL" ]; then ok "OAuth issuer is $issuer"; else fail "/.well-known/oauth-authorization-server -> $code, issuer '$issuer' (expected '$URL')"; fi
 
+# The Dokploy panel answers only on its own domain (ADR 0042), never for the default host Dokploy routes.
+code=$(fetch -H 'Host: dokploy.docker.localhost' "http://$HOST/")
+if [ "$code" = 404 ]; then ok "Host: dokploy.docker.localhost -> 404 (panel not reachable)"; else fail "Host: dokploy.docker.localhost -> $code (expected 404)"; fi
+
+# Only when the panel is public: PANEL_URL=https://panel.example.org deploy/smoke.sh https://<domain>
+if [ -n "${PANEL_URL:-}" ]; then
+  code=$(fetch "$PANEL_URL/")
+  hsts=$(header Strict-Transport-Security)
+  if [ "$code" = 200 ] && grep -q Dokploy "$tmp/body" && [[ $hsts == *max-age=* ]]; then ok "panel $PANEL_URL -> 200 with HSTS"; else fail "panel $PANEL_URL -> $code, HSTS '$hsts'"; fi
+fi
+
 if [ "$failed" -gt 0 ]; then
   echo "$failed smoke check(s) failed against $URL" >&2
   exit 1
