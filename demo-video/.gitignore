@@ -5,6 +5,8 @@ composition/assets/scenes/
 # audio mix built by compose.mjs (music bed + effects, incl. the CLI's bundled Pixabay SFX): not redistributed on its own
 composition/assets/audio/
 composition/assets/sfx/
+# shorter cuts (CUT=<name> node compose.mjs): generated, like their mix
+composition/cut-*.html
 # renders
 out/
 renders/

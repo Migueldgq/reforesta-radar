@@ -66,6 +66,10 @@ Las cifras que se ven (7 fuentes, 302 convocatorias, 100, 86, 45…) son las de 
 | 3:37,3 – 3:44,3 | `35-asistente` | Le preguntáis con vuestras palabras; él busca en el radar y os responde con los mismos datos que veis en la aplicación. |
 | 3:45,6 – 3:50,1 | `36-outro` | Reforesta Radar. Menos horas buscando, y más horas en el monte. |
 
+## Versión corta para X
+
+`out/demo-x-2min.mp4` (2:01,7, `npm run render:x`; subtítulos `out/demo-x-2min.es.srt`), para X sin Premium (máximo 2:20). Mismas tomas y grabaciones, sin locución nueva; qué se queda está en `cuts.mjs`. Líneas: 01–06, 09–11, 13–16, 22, 25–26, 33–34 y 36. Fuera: `empresas`, `analizar`, `invitar`, `fuentes`; de `inicio` solo la primera línea; de `ganasteis`, la 12; de `equipo`, votar y asignar; del agente de IA, el chat (queda la tarjeta del conector).
+
 ## Notas
 
 - La app no redacta solicitudes y la nota sale de reglas (ADR 0005 y 0006) que el equipo ajusta en el Perfil. La locución lo dice así, y dice que una inteligencia artificial solo ayuda a descartar lo que no tiene que ver (ADR 0041). El momento `ia` enseña veredictos reales de esa revisión (ninguno inventado ni sembrado): las dos convocatorias que la IA sacó de la lista son claramente ajenas a la restauración forestal (sindicatos, voluntariado social), y «Sí encaja» solo se señala con el puntero.
