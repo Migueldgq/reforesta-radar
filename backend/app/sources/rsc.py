@@ -86,7 +86,7 @@ RSC_PROGRAMMES: tuple[RscProgramme, ...] = (
         opens_at="2026-06-02",
         deadline="2026-06-30",
         window="Del 2 al 30 jun 2026, hasta las 12:00. En 2025 el plazo se amplió hasta el 28 oct.",
-        timing="Fecha variable: en 2025 cerró en octubre; en 2026, en junio",
+        timing="Fecha variable (cerró en oct 2025 y en jun 2026)",
         about="Apoya proyectos de entidades sin ánimo de lucro en conservación de la biodiversidad y espacios "
         "naturales (gestión forestal sostenible, restauración), economía circular, sostenibilidad rural y "
         "educación ambiental.",
