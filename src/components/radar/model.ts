@@ -314,6 +314,17 @@ export function withPlazoView(f: Filters, v: PlazoView): Filters {
   return { ...f, hideClosed: v === "ahora", dims: { ...f.dims, plazo } };
 }
 
+/** Open or opening soon, with a known closing date ("Sin fecha fija" calls are often old and already closed). */
+export function isDatedOpen(o: Opportunity): boolean {
+  return !isClosed(o) && daysLeft(o) != null;
+}
+
+/** No dated open call fits well, but some next editions do. Judged on every call, never on the current filters. */
+export function noOpenHighFit(items: Opportunity[]): boolean {
+  const alto = items.filter((o) => o.fit.tier === "alto");
+  return !alto.some(isDatedOpen) && alto.some(isNextEdition);
+}
+
 /* ---------- Filters <-> URL query (shareable links) ---------- */
 
 const URL_DIMS: Dim[] = ["plazo", "kind", "source", "organismo", "region", "workLine", "tier", "budget", "triage"];

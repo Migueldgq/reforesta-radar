@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import type { OpportunitiesResponse, Opportunity } from "@/lib/opportunity";
-import { DEFAULT_FILTERS, filtersFromUrl, type Filters, type Triage } from "./model";
+import { DEFAULT_FILTERS, filtersFromUrl, noOpenHighFit, withPlazoView, type Filters, type Triage } from "./model";
 import { applyProfileAll, DEFAULT_USER_PROFILE, isNeutral, loadProfile, saveProfile, subscribeProfile, type UserProfile } from "./profile";
 
 /* ---------- Last payload cached for instant paint ---------- */
@@ -175,12 +175,21 @@ export function RadarProvider({ children }: { children: ReactNode }) {
   const fetchRef = useRef<(() => Promise<void>) | null>(null);
   const orgsLoaded = useRef(false);
 
+  // When nothing open fits well, open on "Próximas ediciones". Decided once, on the first data, unless the URL names a tab,
+  // so later refreshes or filter changes never move the user to another tab.
+  const toNextEditions = useRef<boolean | null>(null);
+  const decideNextEditions = useCallback((items: Opportunity[]): boolean => {
+    toNextEditions.current ??= noOpenHighFit(applyProfileAll(items, loadProfile()));
+    return toNextEditions.current;
+  }, []);
+
   // Fetch, store the payload for instant paint next time, and re-poll while the server says it is refreshing.
   const fetchData = useCallback((): Promise<void> => {
     return request().then((r) => {
       if (r.data) {
         setData(r.data);
         writePayload(r.data);
+        if (toNextEditions.current == null && decideNextEditions(r.data.items)) setFilters((f) => withPlazoView(f, "ediciones"));
       }
       setError(r.error ?? null);
       setLoading(false);
@@ -189,7 +198,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       if (pollRef.current) clearTimeout(pollRef.current);
       if (again) pollRef.current = setTimeout(() => void fetchRef.current?.(), 6000);
     });
-  }, []);
+  }, [decideNextEditions]);
 
   useEffect(() => {
     fetchRef.current = fetchData;
@@ -206,14 +215,17 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       // Organisms in the URL win; otherwise restore the ones chosen last time.
       const init = filtersFromUrl() ?? DEFAULT_FILTERS;
       const organismo = init.dims.organismo.length ? init.dims.organismo : readOrgs();
-      setFilters({ ...init, dims: { ...init.dims, organismo } });
+      if (!init.hideClosed || init.dims.plazo.length) toNextEditions.current = false;
+      const start = { ...init, dims: { ...init.dims, organismo } };
+      // Idempotent: Strict Mode runs this twice, and the second run must not undo the first decision.
+      setFilters(cached && decideNextEditions(cached.items) ? withPlazoView(start, "ediciones") : start);
       orgsLoaded.current = true;
     });
     void fetchData();
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
-  }, [fetchData]);
+  }, [fetchData, decideNextEditions]);
 
   useEffect(() => {
     if (orgsLoaded.current) writeOrgs(filters.dims.organismo);
