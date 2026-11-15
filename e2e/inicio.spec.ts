@@ -136,7 +136,7 @@ test("«Sí encaja» brings a discarded call back to the list, and removing the 
   const review = drawer(page).getByRole("region", { name: "Revisión por IA" });
   await review.getByRole("button", { name: "Sí encaja" }).click();
   await expect(review).toContainText("Sigue en la lista porque alguien del equipo votó «Nos sirve».");
-  await expect(drawer(page).getByRole("button", { name: "Nos sirve" })).toHaveAttribute("aria-pressed", "true");
+  await expect(drawer(page).getByRole("button", { name: "Nos sirve", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
   await expect(page.getByText(/^13 oportunidades de 2 fuentes/)).toBeVisible();
   await expect(list(page).getByRole("table")).toContainText(run.seed.titles[run.seed.discarded]);
