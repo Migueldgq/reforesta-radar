@@ -18,7 +18,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
-import { BASE_URL, ON_CAMERA, login, seed } from "./demo-data.mjs";
+import { BASE_URL, ON_CAMERA, demoPeople, login, seed } from "./demo-data.mjs";
 import { FPS, SCENES } from "./scenes.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -42,9 +42,10 @@ const CONFIG = {
     "/usr/bin/chromium",
   ],
   // Hide dev-only chrome (Next.js dev indicator) and scrollbars in the recording.
+  // Dialogs open over a white veil instead of the dark one: the page behind fades out like the film's canvas.
   // The side sheet opens without its slide and dimming overlay: the composition hides the list behind it with a white
   // curtain that rides the camera move, and a sliding edge would open a gap next to it.
-  hideCss: `nextjs-portal{display:none!important} *::-webkit-scrollbar{display:none} *{scrollbar-width:none} [data-slot=sheet-overlay]{background:transparent!important} [data-slot=sheet-content]{animation:none!important}`,
+  hideCss: `nextjs-portal{display:none!important} *::-webkit-scrollbar{display:none} *{scrollbar-width:none} [data-slot=sheet-overlay]{background:transparent!important} [data-slot=sheet-content]{animation:none!important} [data-slot=dialog-overlay]{background:rgb(255 255 255 / .9)!important}`,
   // The app's own collapsed-sidebar state (shadcn cookie): more room for the content we crop.
   cookies: [{ name: "sidebar_state", value: "false" }],
   captureDir: path.join(HERE, "captures"),
@@ -67,6 +68,10 @@ const CONFIG = {
     // Marked, voted, assigned and annotated on camera (demo-data.mjs resets it before every capture).
     team: { id: ON_CAMERA },
     company: /Fundación Unicaja/,
+    // A real public PDF of a call that is in the radar (BDNS 923290, MITECO): the app gives it the list's own score.
+    pdf: path.join(HERE, "../data/samples/miteco-convocatoria-923290.pdf"),
+    // Invited on camera (fictional; the invitation is revoked by `demo-data.mjs cleanup`).
+    invite: { email: "nuria@example.org", name: "Nuria Campos" },
   },
   // What the assistant beat asks the radar (real tool calls against /mcp, public tools, no token).
   mcp: {
@@ -97,6 +102,23 @@ const CONFIG = {
     boardCard: (col, re) => [{ css: `[data-col='${col}'] [data-slot=card]`, text: re }, { css: `[data-col='${col}'] [data-slot=card]` }],
     boardColumn: (col) => [{ css: `[data-col='${col}']` }],
     empresasCard: (re) => [{ css: "main [data-slot=card]", text: re }, { css: "main article", text: re }],
+    sourcesSummary: [{ css: "main p", text: /^\d+ fuentes · \d+ convocatorias/ }],
+    sourcesTable: [{ css: "main table" }],
+    sourcesHeader: [{ css: "main header" }],
+    ingestNow: [{ css: "main button", text: /^Actualizar ahora$/ }],
+    pdfPick: [{ css: "main button", text: /^Elegir archivo$/ }],
+    pdfDrop: [{ css: "main [data-slot=card]", text: /^Arrastra un PDF/ }],
+    pdfScore: [{ css: "main [data-slot=badge]", text: /^\d+\s*\/100$/ }],
+    pdfSame: [{ css: "main p", text: /^Es la nota del radar/ }],
+    pdfMotivos: [{ css: "main section", text: /^Motivos/ }],
+    teamPeople: [{ css: "main section[aria-labelledby=people-h]" }],
+    teamLinks: [{ css: "main section[aria-labelledby=inv-h]" }],
+    teamInvite: [{ css: "main button", text: /^Invitar$/ }],
+    inviteEmail: [{ css: "[role=dialog] input[type=email]" }],
+    inviteName: [{ css: "[role=dialog] input:not([type=email])" }],
+    inviteCreate: [{ css: "[role=dialog] button", text: /^Crear invitación$/ }],
+    inviteReady: [{ css: "[role=dialog]", text: /^Invitación lista/ }],
+    inviteDone: [{ css: "[role=dialog] button", text: /^Hecho$/ }],
   },
 };
 
@@ -371,6 +393,53 @@ const CURSOR_SCRIPT = (hideCss) => {
   else install();
 };
 
+// Privacy: the database may hold real people's accounts. Every API response the page reads goes through this filter
+// before the app sees it, so only the demo team (@example.org, ids in `allowed`) can ever be rendered: people,
+// invitations and resets of anyone else are dropped, notes and votes by anyone else are dropped, and an assignee or
+// "…By" field pointing at anyone else becomes empty. The app and the database are not touched.
+const PRIVACY_SCRIPT = (allowed, names) => {
+  const ok = new Set(allowed);
+  const okName = new Set(names);
+  const other = (v) => v && typeof v === "object" && typeof v.id === "number" && !ok.has(v.id);
+  const drop = (v) =>
+    v && typeof v === "object" && !Array.isArray(v) &&
+    ((typeof v.email === "string" && !/@example\.org$/i.test(v.email)) ||
+      (typeof v.id === "number" && typeof v.name === "string" && "active" in v && !ok.has(v.id)) ||
+      (typeof v.userId === "number" && !ok.has(v.userId)) ||
+      other(v.user) || other(v.author));
+  const clean = (v) => {
+    if (Array.isArray(v)) return v.filter((x) => !drop(x)).map(clean);
+    if (!v || typeof v !== "object") return v;
+    for (const k of Object.keys(v)) {
+      if (k === "assignee" || /By$/.test(k)) {
+        const x = v[k];
+        if (other(x) || (typeof x === "number" && !ok.has(x)) || (typeof x === "string" && !okName.has(x))) v[k] = null;
+      } else v[k] = clean(v[k]);
+    }
+    return v;
+  };
+  const orig = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    const res = await orig(...args);
+    const url = String(args[0]?.url ?? args[0]);
+    if (!/\/api\//.test(url) || !(res.headers.get("content-type") ?? "").includes("json")) return res;
+    const body = clean(await res.clone().json());
+    const headers = new Headers(res.headers);
+    headers.delete("content-length");
+    headers.delete("content-encoding");
+    return new Response(JSON.stringify(body), { status: res.status, statusText: res.statusText, headers });
+  };
+};
+
+/** Fails the beat if any e-mail address on the page (text or form values) is not a demo one. Prints only a count. */
+async function assertOnlyDemoEmails(page) {
+  const bad = await page.evaluate(() => {
+    const text = document.body.innerText + " " + [...document.querySelectorAll("input, textarea")].map((e) => e.value).join(" ");
+    return (text.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g) ?? []).filter((e) => !/@example\.org$/i.test(e)).length;
+  });
+  if (bad) throw new Error(`privacy: ${bad} non-demo e-mail address(es) on the page`);
+}
+
 async function goto(page, route, readySpecs) {
   await page.goto(CONFIG.baseUrl + route, { waitUntil: "networkidle2", timeout: 60000 });
   if (readySpecs) await must(page, readySpecs, `ready marker for ${route}`, { timeout: 45000 });
@@ -535,6 +604,97 @@ const ACTIONS = {
     await click(page, add.cx, add.cy, 1500);
   },
 
+  async fuentes(page) {
+    const sum = await box(await must(page, S.sourcesSummary, "sources summary"), { scroll: false });
+    const t = await box(await must(page, S.sourcesTable, "sources table"), { scroll: false });
+    headline(0);
+    // The whole table (name, state, results, note), then down through the seven sources.
+    await cam(region({ x: t.x, y: sum.y, width: t.width, height: 400 }, 20), { dur: 0 });
+    await glide(page, t.x + t.width * 0.42, t.y + 64, 500);
+    await sleep(TYPE_HOLD + 700);
+    await scroll(page, { dy: 560, ms: 1800 });
+    await sleep(1100);
+    // Back up to the admin's «Actualizar ahora»: hovered, never pressed (an ingest would change the data).
+    headline(1);
+    await scroll(page, { dy: -2000, ms: 900 });
+    const hd = await box(await must(page, S.sourcesHeader, "header"), { scroll: false });
+    const b = await box(await must(page, S.ingestNow, "Actualizar ahora"), { scroll: false });
+    const t2 = await box(await must(page, S.sourcesTable, "sources table"), { scroll: false });
+    await cam(region({ x: hd.x, y: hd.y, width: t.width, height: t2.y + 150 - hd.y }, 20), { dur: 0.8 });
+    await glide(page, b.cx, b.cy, 600);
+    await sleep(2400);
+  },
+
+  async analizar(page) {
+    const hd = await box(await must(page, [{ css: "main header" }], "header"), { scroll: false });
+    const drop = await box(await must(page, S.pdfDrop, "drop zone"), { scroll: false });
+    const pick = await box(await must(page, S.pdfPick, "Elegir archivo"), { scroll: false });
+    headline(0);
+    await cam(region([hd, drop], 24), { dur: 0 });
+    await glide(page, pick.cx, pick.cy, 700);
+    await sleep(TYPE_HOLD - 200);
+    const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 10000 }), click(page, pick.cx, pick.cy, 0)]);
+    await chooser.accept([CONFIG.examples.pdf]);
+    await sleep(500); // «Leyendo el PDF…» shows for a moment; the rest of the wait is cut
+    const score = await skip(() => must(page, S.pdfScore, "PDF score", { timeout: 60000 }));
+    await skip(() => sleep(400));
+    headline(1);
+    const title = await box(await must(page, [{ css: "main [data-slot=card] h2" }], "result title"), { scroll: false });
+    const same = await box(await must(page, S.pdfSame, "same-score line"), { scroll: false });
+    await cam(region({ x: title.x, y: title.y, width: title.width, height: same.y + same.height - title.y }, 20), { dur: 0.7 });
+    const sc = await box(score, { scroll: false });
+    await glide(page, sc.x + sc.width + 140, sc.cy + 26, 500);
+    await sleep(2000);
+    // Its reasons and warnings: the same ones as the call's detail in the list.
+    const mot = await must(page, S.pdfMotivos, "Motivos");
+    await scroll(page, { el: mot, at: 0.12, ms: 800 });
+    const m = await box(mot, { scroll: false });
+    await cam(region({ x: title.x, y: m.y, width: title.width, height: Math.min(m.height, 430) }, 18), { dur: 0.8 });
+    await sleep(2600);
+  },
+
+  async invitar(page) {
+    const ppl = await box(await must(page, S.teamPeople, "Personas"), { scroll: false });
+    const inv = await box(await must(page, S.teamInvite, "Invitar"), { scroll: false });
+    headline(0);
+    await cam(region(ppl, 20), { dur: 0 });
+    await glide(page, inv.cx, inv.cy, 700);
+    await sleep(TYPE_HOLD - 100);
+    await click(page, inv.cx, inv.cy, 400);
+    const dlg = await box(await must(page, S.dialog, "invite dialog"), { scroll: false });
+    await cam(region(dlg, 16), { dur: 0.6 });
+    const { email, name } = CONFIG.examples.invite;
+    const em = await box(await must(page, S.inviteEmail, "e-mail field"), { scroll: false });
+    await glide(page, em.x + 140, em.cy, 400);
+    await click(page, em.x + 140, em.cy, 150);
+    await ramp(1.6, () => page.keyboard.type(email, { delay: 38 }));
+    const nm = await box(await must(page, S.inviteName, "name field"), { scroll: false });
+    await glide(page, nm.x + 140, nm.cy, 300);
+    await click(page, nm.x + 140, nm.cy, 150);
+    await ramp(1.6, () => page.keyboard.type(name, { delay: 38 }));
+    await sleep(250);
+    const cr = await box(await must(page, S.inviteCreate, "Crear invitación"), { scroll: false });
+    await glide(page, cr.cx, cr.cy, 400);
+    await click(page, cr.cx, cr.cy, 150);
+    await skip(() => must(page, S.inviteReady, "Invitación lista"));
+    await sleep(350);
+    const rd = await box(await must(page, S.dialog, "link dialog"), { scroll: false });
+    await cam(region(rd, 16), { dur: 0.6 });
+    await sleep(1900);
+    // Close it: the people and their roles, with the new invitation pending.
+    headline(1);
+    const done = await box(await must(page, S.inviteDone, "Hecho"), { scroll: false });
+    await glide(page, done.cx, done.cy, 400);
+    await click(page, done.cx, done.cy, 0);
+    // The dialog's fade-out briefly shows another title (its text resets as it closes): cut it.
+    await skip(() => sleep(450));
+    const p2 = await box(await must(page, S.teamPeople, "Personas"), { scroll: false });
+    const links = await box(await must(page, S.teamLinks, "Enlaces pendientes"), { scroll: false });
+    await cam(region([p2, links], 20), { dur: 0.8 });
+    await glide(page, links.x + links.width * 0.55, links.y + links.height + 40, 500);
+    await sleep(2600);
+  },
+
   async seguimiento(page) {
     const colA = await box(await must(page, S.boardColumn("estudio"), "En estudio column"), { scroll: false });
     const colB = await box(await must(page, S.boardColumn("presentar"), "A presentar column"), { scroll: false });
@@ -561,7 +721,25 @@ const ACTIONS = {
   },
 };
 
+/** Before recording: put the page back in its starting state (runs after the page loads, outside the take). */
+const PREPARE = {
+  // An invitation left by an earlier take would already be listed: revoke it (through the page, so the privacy
+  // filter applies) and reload.
+  async invitar(page) {
+    const n = await page.evaluate(async (email) => {
+      const team = await (await fetch("/api/team")).json();
+      const stale = team.invitations.filter((i) => i.email === email);
+      for (const i of stale) await fetch(`/api/team/invitations/${i.id}`, { method: "DELETE", headers: { "X-Radar-CSRF": "1" } });
+      return stale.length;
+    }, CONFIG.examples.invite.email);
+    if (n) await goto(page, "/equipo", READY.invitar);
+  },
+};
+
 const READY = {
+  fuentes: S.sourcesTable,
+  analizar: S.pdfPick,
+  invitar: S.teamInvite,
   inicio: S.notice,
   ganasteis: S.notice,
   motivos: S.drawerFit,
@@ -697,6 +875,7 @@ async function main() {
   });
   const ok = [];
   const failed = [];
+  const people = await demoPeople(); // the only accounts the page may show (PRIVACY_SCRIPT)
   try {
     // A fresh tab per beat (same browser profile, so cookies and the seeded board persist): a tab left with an open
     // sheet could end up with a detached frame and fail every later beat.
@@ -704,6 +883,7 @@ async function main() {
       const pg = await browser.newPage();
       await pg.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }, { name: "prefers-reduced-motion", value: "no-preference" }]);
       await pg.evaluateOnNewDocument(CURSOR_SCRIPT, CONFIG.hideCss);
+      await pg.evaluateOnNewDocument(PRIVACY_SCRIPT, people.map((p) => p.id), people.map((p) => p.name));
       await pg.evaluateOnNewDocument((keys) => keys.forEach((k) => { try { localStorage.removeItem(k); } catch {} }), CONFIG.clearStorageKeys);
       await pg.setCookie(...CONFIG.cookies.map((c) => ({ ...c, url: CONFIG.baseUrl })));
       return pg;
@@ -726,9 +906,12 @@ async function main() {
         try {
           mousePos = { x: CONFIG.viewport.width * 0.72, y: CONFIG.viewport.height * 0.7 };
           await goto(page, scene.route, READY[scene.id]);
+          await PREPARE[scene.id]?.(page);
+          await assertOnlyDemoEmails(page);
           take = new Take(page, path.join(CONFIG.captureDir, "raw", scene.id));
           await take.start();
           await ACTIONS[scene.id](page);
+          await assertOnlyDemoEmails(page);
           await take.stop();
           const { duration } = encode(scene.id, take);
           ok.push(scene.id);
