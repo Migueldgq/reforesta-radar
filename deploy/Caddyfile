@@ -1,0 +1,69 @@
+# Reforesta Radar in production: Caddy in front of the `web` container (docker-compose.prod.yml).
+# Automatic HTTPS (Let's Encrypt) for RADAR_DOMAIN, http -> https, then everything goes to Next.js, which proxies
+# /api/*, /mcp*, /oauth/* and /.well-known/oauth-* to the API. Guide: docs/despliegue.md.
+{
+	# No e-mail on purpose: the ACME account is anonymous (Let's Encrypt no longer sends expiry e-mails anyway).
+	# RADAR_ACME_CA lets an operator point at Let's Encrypt staging while testing a new domain.
+	acme_ca {$RADAR_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+	servers {
+		# HTTP/3 needs UDP 443 open in two firewalls; h1 + h2 over TCP is enough here.
+		protocols h1 h2
+		timeouts {
+			read_header 10s
+			# a 16 MiB PDF on a slow uplink
+			read_body 2m
+			idle 5m
+		}
+	}
+}
+
+{$RADAR_DOMAIN} {
+	# Body limits, matching the API (app/body_limit.py, next.config.ts): 16 MiB for PDF analysis, 1 MiB elsewhere.
+	@pdf path /api/analyze-pdf
+	request_body @pdf {
+		max_size 16MiB
+	}
+	@other not path /api/analyze-pdf
+	request_body @other {
+		max_size 1MiB
+	}
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		# Defaults only (`?`): the app's own values win, e.g. Referrer-Policy: no-referrer on invitation links and
+		# X-Frame-Options: DENY + CSP frame-ancestors 'none' on /autorizar (next.config.ts).
+		?X-Content-Type-Options "nosniff"
+		?Referrer-Policy "strict-origin-when-cross-origin"
+		?X-Frame-Options "SAMEORIGIN"
+		?Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		-Server
+		-X-Powered-By
+	}
+
+	# Caddy sets X-Forwarded-For to the TCP peer and ignores what the client sent (no trusted_proxies here), and
+	# X-Forwarded-Proto to https. Next passes them on and the API trusts them from the compose network only
+	# (FORWARDED_ALLOW_IPS), so per-IP limits see the real client.
+	reverse_proxy web:3000
+
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				# Never log credentials or one-time values: no query strings at all (the consent page's `solicitud`,
+				# OAuth `code`/`state`), no tokens in /invitacion/<token> or /restablecer/<token>, no cookies, no
+				# Authorization header, no Referer (it can carry any of these).
+				request>uri multi_regexp {
+					regexp "\?.*$" "?REDACTED"
+					regexp "^/(invitacion|restablecer)/[^/?]+" "/$1/REDACTED"
+				}
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+				request>headers>Referer delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+}
