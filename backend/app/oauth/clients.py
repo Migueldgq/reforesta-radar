@@ -69,8 +69,25 @@ def redirect_matches(registered: list[str], requested: str) -> bool:
 
 
 def clean_name(raw: str | None) -> str:
-    text = "".join(" " if c.isspace() else c for c in (raw or "") if unicodedata.category(c)[0] != "C" or c.isspace())
-    text = re.sub(r"\s+", " ", text).strip()
+    """NFC, then: no control or format characters (bidi overrides, zero-width), at most one combining mark per base
+    character (no "zalgo" text spilling over the consent screen), whitespace collapsed, MAX_NAME characters."""
+    out: list[str] = []
+    marks = 0
+    for c in unicodedata.normalize("NFC", raw or ""):
+        cat = unicodedata.category(c)
+        if c.isspace():
+            out.append(" ")
+            marks = 1  # no mark on a space
+        elif cat[0] == "C":
+            continue
+        elif cat[0] == "M":
+            if marks == 0 and out:
+                out.append(c)
+            marks += 1
+        else:
+            out.append(c)
+            marks = 0
+    text = re.sub(r"\s+", " ", "".join(out)).strip()
     return text[:MAX_NAME].strip() or "Asistente sin nombre"
 
 

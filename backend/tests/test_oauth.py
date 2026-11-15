@@ -717,3 +717,13 @@ async def test_mcp_endpoints_refuse_other_methods(engine: AsyncEngine, running: 
     async with bare(engine) as c:
         assert (await c.post("/oauth/authorize")).status_code == 405
         assert (await c.get("/oauth/token")).status_code == 405
+
+
+def test_clean_name() -> None:
+    assert clean_name("Cafe\u0301 IA") == "Café IA"  # NFC: the accent joins its letter
+    zalgo = "Bot" + "\u0300\u0301\u0302\u0303" * 50
+    assert clean_name(zalgo) == "Bot\u0300"  # at most one combining mark per character
+    assert clean_name("\u0301\u0301 Agente") == "Agente"  # no mark without a base character
+    assert clean_name("Cla\u202eude\u200b\n\tCode") == "Claude Code"  # bidi override, zero-width, whitespace
+    assert clean_name("x" * 100) == "x" * 60
+    assert clean_name("\u200b") == "Asistente sin nombre"
