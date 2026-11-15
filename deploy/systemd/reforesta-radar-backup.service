@@ -1,0 +1,9 @@
+[Unit]
+Description=Reforesta Radar: daily Postgres backup (deploy/backup.sh)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+Environment=APP_DIR=/opt/reforesta-radar
+ExecStart=/opt/reforesta-radar/deploy/backup.sh

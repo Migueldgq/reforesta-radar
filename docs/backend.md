@@ -110,35 +110,38 @@ la ingesta programada es el servicio `ingest-scheduler` (`backend/app/ingest/sch
 
 ## Antes de publicarlo en internet
 
-- [ ] Proxy inverso (Caddy, nginx) con https delante de `web` que **sobrescriba** `X-Forwarded-For` (nginx:
-      `proxy_set_header X-Forwarded-For $remote_addr;`, no `$proxy_add_x_forwarded_for`); solo entonces
-      `FORWARDED_ALLOW_IPS` = red de compose (p. ej. `172.16.0.0/12`). Sin proxy, déjalo en `127.0.0.1`: todos los
-      clientes comparten entonces la IP de `web` (y el cupo sin token de `/mcp`).
-- [ ] Con ese proxy, el contenedor `web` no debe ser alcanzable directamente (puerto solo en `127.0.0.1` o sin
-      publicar): Next solo pone `X-Forwarded-For` si falta, así que saltándose el proxy el cliente elige su IP y se
-      salta todos los límites, el de login incluido.
-- [ ] Tiempos máximos de petición y de lectura del cuerpo en el proxy; no registrar la cabecera `Authorization`.
-- [ ] Opcional: caché corta en el proxy para `GET /api/public/oportunidades` (igual para todos).
-- [ ] Límite de tamaño de cuerpo también en el proxy (16 MB basta: el PDF más grande).
-- [ ] `RADAR_COOKIE_SECURE=true` y `RADAR_PUBLIC_URL=https://…` (los enlaces de invitación usan esa URL).
-- [ ] El puerto de la API (`8010`) solo en `127.0.0.1` (como ya está) o sin publicar; si se expone, quitar `/docs`
-      y `/openapi.json`.
-- [ ] No registrar en los logs del proxy las rutas `/invitacion/*` ni `/restablecer/*` (llevan el token).
-- [ ] Quitar `RADAR_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` del `.env` tras el primer arranque; al menos dos admins.
+Publicado en <https://reforesta-radar.miguelddev.com> con `docker-compose.prod.yml` y `deploy/Caddyfile`
+([despliegue.md](despliegue.md), ADR 0037). Marcado lo que ese despliegue ya resuelve:
+
+- [x] Proxy inverso con https delante de `web` que **sobrescribe** `X-Forwarded-For`: Caddy (no confía en ningún
+      proxy, así que pone la IP del que conecta). `FORWARDED_ALLOW_IPS` = la subred fija de compose
+      (`RADAR_NET_SUBNET`, `172.28.89.0/24`). Comprobado: la API registra la IP pública del cliente, no la de `web`, y
+      un `X-Forwarded-For` falso no pasa.
+- [x] `web` no es alcanzable sin pasar por Caddy: en producción solo Caddy publica puertos (80 y 443).
+- [x] Tiempos máximos en el proxy (cabeceras 10 s, cuerpo 2 min) y el log no registra `Authorization`, cookies,
+      `Referer` ni cadenas de consulta.
+- [ ] Opcional: caché corta en el proxy para `GET /api/public/oportunidades` (no hecho; la API ya manda
+      `Cache-Control: public, max-age=60`).
+- [x] Límite de cuerpo también en el proxy: 1 MiB, 16 MiB en `/api/analyze-pdf`.
+- [x] `RADAR_COOKIE_SECURE=true` y `RADAR_PUBLIC_URL=https://<RADAR_DOMAIN>` (los pone `docker-compose.prod.yml`).
+- [x] El puerto de la API sin publicar en producción (ni el de Postgres).
+- [x] El log del proxy no guarda los tokens de `/invitacion/*` ni `/restablecer/*` (los sustituye por `REDACTED`).
+- [ ] Quitar `RADAR_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` del `.env` tras el primer arranque (en producción no se
+      usan: el primer admin se crea con `python -m app.users`); al menos dos admins.
 - [ ] Valorar una vida máxima absoluta de la sesión (hoy: 30 días desde el último uso, sin tope absoluto).
-- [ ] Copias de seguridad de Postgres ([mantenimiento.md](mantenimiento.md#copias-de-seguridad)).
-- [ ] Servidor MCP (`/mcp`, `/mcp/equipo`) e inicio de sesión desde el agente de IA (`/oauth/*`, ADR 0035): ver la
-      lista de [mcp.md](mcp.md#antes-de-publicarlo-en-internet). El emisor OAuth es `RADAR_PUBLIC_URL`: tiene que ser
-      la URL https exacta que ve el navegador.
+- [x] Copias de seguridad diarias de Postgres (`deploy/backup.sh`, 14 días). Pendiente: copia fuera del servidor.
+- [x] Servidor MCP e inicio de sesión desde el agente de IA: ver la lista de
+      [mcp.md](mcp.md#antes-de-publicarlo-en-internet). El emisor OAuth es exactamente
+      `https://reforesta-radar.miguelddev.com` (comprobado).
 
 ## Riesgos conocidos
 
 | Riesgo | Salvaguarda |
 |---|---|
-| Sin copias de seguridad automáticas de Postgres | Pendiente de automatizar. Comandos de `pg_dump` y restauración en [mantenimiento.md](mantenimiento.md#copias-de-seguridad). |
+| Copias de Postgres en el mismo disco que la base | En producción, copia diaria con `deploy/backup.sh` (14 días, [despliegue.md](despliegue.md#copias-de-seguridad-y-restauración)); falta una copia fuera del servidor. En local: [mantenimiento.md](mantenimiento.md#copias-de-seguridad). |
 | Equipo apagado o dormido a las 9:00 | `ingest-scheduler` comprueba cada 30 s e ingesta al despertar si no hubo ninguna ingesta correcta desde las 9:00. |
 | Una fuente cambia su HTML | Se registra en `source_runs`; sus filas anteriores siguen visibles y la fuente sale como parcial o error. |
-| IP del cliente poco fiable | Next reenvía el `X-Forwarded-For` que manda el navegador y no añade el suyo, así que la API no se lo cree (`FORWARDED_ALLOW_IPS=127.0.0.1` por defecto): todos los navegadores comparten la IP del contenedor `web`. Por eso una contraseña correcta nunca se rechaza por fallos ajenos (solo el tope de 50 fallos por cuenta bloquea a todos). Con un proxy inverso delante que sobrescriba `X-Forwarded-For`, poner en `FORWARDED_ALLOW_IPS` la red de compose (p. ej. `172.16.0.0/12`). |
+| IP del cliente poco fiable | Next reenvía el `X-Forwarded-For` que manda el navegador y no añade el suyo, así que la API no se lo cree (`FORWARDED_ALLOW_IPS=127.0.0.1` por defecto): todos los navegadores comparten la IP del contenedor `web`. Por eso una contraseña correcta nunca se rechaza por fallos ajenos (solo el tope de 50 fallos por cuenta bloquea a todos). Con un proxy inverso delante que sobrescriba `X-Forwarded-For`, poner en `FORWARDED_ALLOW_IPS` la red de compose (p. ej. `172.16.0.0/12`). En producción ya es así (Caddy, `docker-compose.prod.yml`). |
 
 ## Siguiente tramo
 

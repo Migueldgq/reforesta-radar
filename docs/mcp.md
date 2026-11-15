@@ -143,35 +143,29 @@ las bases), cualquier escritura y el filtro de organismos del equipo en las bús
 
 ## Antes de publicarlo en internet
 
-- [ ] `RADAR_PUBLIC_URL` (o `RADAR_MCP_URL`) con la URL https real: de ella salen el `Host` y el `Origin`
-      aceptados y los comandos de Mi cuenta.
-- [ ] El proxy inverso deja pasar `POST /mcp` sin almacenar la respuesta y sin registrar la cabecera
+Publicado en `https://reforesta-radar.miguelddev.com/mcp` y `…/mcp/equipo` ([despliegue.md](despliegue.md), ADR 0037).
+Marcado lo que ese despliegue ya resuelve:
+
+- [x] `RADAR_PUBLIC_URL` con la URL https real (`https://<RADAR_DOMAIN>`, la pone `docker-compose.prod.yml`).
+- [x] El proxy (Caddy) deja pasar `POST /mcp` sin almacenar la respuesta y sin registrar la cabecera
       `Authorization`.
-- [ ] Hasta que un proxy inverso dé la IP real del cliente, todos los que llegan por la web comparten la IP del
-      contenedor `web`: el cupo sin token (60/min) es uno para todos, y los tokens no válidos de cualquiera agotan
-      los 30 en 15 min para todos (un token válido nunca se rechaza por eso). Para tener IP real:
-      - el proxy **sobrescribe** `X-Forwarded-For` (nginx: `proxy_set_header X-Forwarded-For $remote_addr;`, no
-        `$proxy_add_x_forwarded_for`, que añade a lo que mande el cliente);
-      - `FORWARDED_ALLOW_IPS` = red de compose (p. ej. `172.16.0.0/12`);
-      - el contenedor `web` no es alcanzable sin pasar por el proxy (puerto publicado solo en `127.0.0.1` o sin
-        publicar). Si no, Next solo pone `X-Forwarded-For` cuando falta, la cabecera la decide el cliente y todos
-        los límites (también el de login) se saltan cambiándola.
-- [ ] Tiempos máximos de petición y de lectura del cuerpo en el proxy (las respuestas de `/mcp` son JSON, no
-      streams: unos segundos bastan).
-- [ ] Opcional: caché corta en el proxy para `GET /api/public/oportunidades` (es igual para todos).
-- [ ] Decidir si se quiere la parte pública (`RADAR_MCP_PUBLIC`).
+- [x] IP real del cliente: Caddy **sobrescribe** `X-Forwarded-For`, `FORWARDED_ALLOW_IPS` = la subred fija de compose
+      y `web` no es alcanzable sin pasar por Caddy. Así el cupo sin token (60/min) y los fallos de token son por
+      cliente; comprobado en el log de la API.
+- [x] Tiempos máximos en el proxy (cabeceras 10 s, cuerpo 2 min).
+- [ ] Opcional: caché corta en el proxy para `GET /api/public/oportunidades` (no hecho).
+- [x] Parte pública (`RADAR_MCP_PUBLIC`): activada (valor por defecto).
 - [ ] Explicar al equipo que lo que devuelve el radar con token lo ve el proveedor de su agente.
-- [ ] Inicio de sesión desde el agente (ADR 0035): `RADAR_PUBLIC_URL=https://…` exacta (es el emisor OAuth; los
-      clientes la comparan letra a letra) y `RADAR_COOKIE_SECURE=true`. Comprobar
-      `curl https://<dominio>/.well-known/oauth-authorization-server` y que `POST /mcp/equipo` sin credenciales da 401
-      con `resource_metadata`.
-- [ ] El proxy reenvía `/mcp/equipo`, `/.well-known/oauth-*` y `/oauth/*` sin caché, y **no registra** la cadena de
-      consulta de `/autorizar` (lleva el id de la solicitud) ni los cuerpos de `/oauth/token` (códigos, refrescos).
-- [ ] claude.ai llega desde la red de Anthropic (`160.79.104.0/21` según su documentación): no bloquearla si hay
-      cortafuegos.
-- [ ] Detrás del proxy de la web todas las peticiones llegan con la misma IP: los límites de OAuth solo frenan fallos
-      y nunca una petición correcta; el registro no tiene límite global (la tabla se acota sola, ADR 0035
-      «Límites»). Si un proxy de confianza da la IP real, poned `FORWARDED_ALLOW_IPS` con su dirección y se añade un
-      límite de 10 registros por IP.
-- [ ] Con varias réplicas de la API, los límites (registro, autorización, fallos en `/oauth/token`) son por
-      proceso: con una sola instancia, como hoy, no hace falta nada.
+- [x] Inicio de sesión desde el agente (ADR 0035): `RADAR_PUBLIC_URL` exacta y `RADAR_COOKIE_SECURE=true`.
+      Comprobado: `/.well-known/oauth-authorization-server` y `/.well-known/oauth-protected-resource/mcp/equipo`
+      dan 200 con emisor y URLs exactamente `https://reforesta-radar.miguelddev.com`, `POST /mcp/equipo` sin
+      credenciales da 401 con `resource_metadata`, y el flujo completo (registro, autorización, herramienta de equipo,
+      refresco, revocación) funciona con el cliente OAuth del SDK de MCP.
+- [x] El proxy reenvía `/mcp/equipo`, `/.well-known/oauth-*` y `/oauth/*` sin caché y **no registra** cadenas de
+      consulta (tampoco la de `/autorizar`) ni cuerpos.
+- [x] claude.ai llega desde la red de Anthropic (`160.79.104.0/21` según su documentación): ningún cortafuegos la
+      bloquea (solo se filtran puertos, no orígenes).
+- [x] Límites de OAuth con IP real: con `FORWARDED_ALLOW_IPS` puesto, se aplica también el límite de 10 registros por
+      IP. Comprobado que unas decenas de peticiones basura a `/oauth/token` y `/mcp/equipo` no bloquean una
+      petición correcta.
+- [x] Una sola instancia de la API: los límites por proceso bastan.
