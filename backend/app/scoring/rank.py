@@ -7,9 +7,9 @@ import re
 
 from app.models import FitAnalysis, Opportunity
 from app.scoring.history import history_adjust
-from app.scoring.profile import KEYWORD_RULES, GeoFit, KindFit
-from app.scoring.score import FitAdjust, apply_adjust, tier_for
-from app.scoring.text import has_term, normalize_text
+from app.scoring.profile import GeoFit, KindFit
+from app.scoring.score import FitAdjust, apply_adjust, tier_for, topic_matches
+from app.scoring.text import normalize_text
 
 LOCAL_PREFIX = re.compile(r"^(ayuntamiento|ajuntament|concello|udala|ayto\.?)\s+(de\s+|del\s+|d'\s*)?", re.IGNORECASE)
 SUPRAMUNICIPAL = re.compile(r"^(diputaci|cabildo|consell insular|consell comarcal|comarca|mancomunidad|junta general)")
@@ -23,6 +23,24 @@ FACILITY_SERVICE = re.compile(
     r"\b(servicios? de (vigilancia|seguridad|limpieza)|suministros?\b|mantenimiento (de|del) (las |los |el )?"
     r"(instalaciones|edificios?|equipos|vehiculos|sistemas|ascensores|climatizacion))"
 )
+TENDER_WARNING = "Licitación: es un contrato de servicios; exige solvencia técnica y oferta económica."
+# Supplies and works are not services: the warning names the contract the object starts with (ADR 0040), e.g.
+# "contrato de: Suministro de…" but not "servicio de mantenimiento y suministro de…".
+SUPPLY_TENDER_WARNING = "Licitación: es un contrato de suministro; exige solvencia técnica y oferta económica."
+WORKS_TENDER_WARNING = "Licitación: es un contrato de obras; exige solvencia técnica y oferta económica."
+# the first noun of the object, after "Objeto:" / "contrato de:" / "contrato por procedimiento abierto para el…"
+_OBJECT_NOUN = re.compile(
+    r"\b(?:objeto|contrato)\b[^a-z]*(?:(?:de|del|denominado|para|por|el|la|las|los|procedimiento|abierto|mixto)\b[^a-z]*)*"
+    r"(suministro|obra|servicio)"
+)
+
+
+def tender_warning(title_norm: str) -> str:
+    m = _OBJECT_NOUN.search(title_norm)
+    noun = m.group(1) if m else ""
+    return SUPPLY_TENDER_WARNING if noun == "suministro" else WORKS_TENDER_WARNING if noun == "obra" else TENDER_WARNING
+
+
 FACILITY_WARNING = (
     "Licitación para el funcionamiento de unas instalaciones (vigilancia, limpieza, mantenimiento o suministros): el "
     "tema sale del nombre del centro, no del trabajo."
@@ -86,8 +104,7 @@ def geographic_fit(o: Opportunity) -> FitAnalysis:
 
 
 def _title_topic(titulo: str) -> int:
-    t = normalize_text(titulo)
-    return sum(kw.weight for group in KEYWORD_RULES for kw in group.keywords if has_term(t, kw.term))
+    return sum(kw.weight for _, kw in topic_matches(normalize_text(titulo)))
 
 
 def kind_fit(o: Opportunity) -> FitAnalysis:
@@ -100,7 +117,7 @@ def kind_fit(o: Opportunity) -> FitAnalysis:
 
     if o.kind == "licitacion":
         score = min(score - KindFit.tender_penalty, KindFit.tender_cap)
-        warnings.append("Licitación: es un contrato de servicios; exige solvencia técnica y oferta económica.")
+        warnings.append(tender_warning(title_norm))
         if weak_topic:
             score = min(score, KindFit.off_topic_cap)
         elif FACILITY_SERVICE.search(title_norm):

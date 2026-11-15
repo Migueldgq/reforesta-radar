@@ -1,60 +1,12 @@
 {
- "items": [
-  {
-   "publishedAt": "2026-11-10",
-   "opensAt": null,
-   "deadline": "2026-11-30",
-   "deadlineText": "Fecha límite de presentación: Hasta las 23:59 horas del día 30 de noviembre de 2026",
-   "budget": null,
-   "amountText": null,
-   "tipo": "Licitación pública",
-   "beneficiarios": [],
-   "basesUrl": null,
-   "documents": [
-    {
-     "name": "BOCM-20261110-53.pdf",
-     "description": "Texto oficial (PDF)",
-     "url": "https://www.bocm.es/boletin/CM_Orden_BOCM/2026/11/10/BOCM-20261110-53.PDF"
-    }
-   ],
-   "summary": null,
-   "id": "bocm:BOCM-20261110-53",
-   "source": "bocm",
-   "sourceLabel": "BOCM · Licitación",
-   "kind": "licitacion",
-   "titulo": "Resolución de 29 de octubre de 2026, de la Dirección-Gerencia del Hospital General Universitario “Gregorio Marañón”, por la que se dispone la publicación en el boletín y en el “perfil del contratante” en Internet de la convocatoria del contrato de: “Suministro de productos alimenticios de aves frescas, congeladas y ovoproductos para la cocina del Hospital General Universitario “Gregorio Marañón”»",
-   "organismo": "CONSEJERÍA DE SANIDAD",
-   "region": "Comunidad de Madrid",
-   "nivelAdmin": "Autonómica",
-   "url": "https://www.bocm.es/bocm-20261110-53",
-   "fit": {
-    "score": 44,
-    "tier": "medio",
-    "workLines": [
-     "conservacion"
-    ],
-    "outsideManualSources": true,
-    "manualSourceMatch": null,
-    "isCompetitive": true,
-    "isOngEligible": null,
-    "reasons": [
-     "Encaje temático: Hábitat de aves.",
-     "No es de los organismos que ya revisáis a mano (Fundación Biodiversidad, MITECO, Comunidad de Madrid, Agenda 2030): fácil que se os pase.",
-     "Plazo abierto: quedan 15 días."
-    ],
-    "warnings": [],
-    "daysRemaining": 15,
-    "deadlineState": "abierta"
-   }
-  }
- ],
+ "items": [],
  "health": {
   "id": "bocm",
   "name": "BOCM · Comunidad de Madrid",
   "category": "Boletín Oficial",
   "status": "ok",
-  "count": 1,
+  "count": 0,
   "url": "https://www.bocm.es/",
-  "note": "Sumarios XML oficiales de 5 boletines (últimos 21 días): 16 convocatorias/licitaciones, 1 con encaje ambiental."
+  "note": "Sumarios XML oficiales de 5 boletines (últimos 21 días): 16 convocatorias/licitaciones, 0 con encaje ambiental."
  }
 }

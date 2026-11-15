@@ -16,6 +16,7 @@ from app.models import FitAnalysis
 from app.scoring.rank import adjusted_fit, rank
 from app.sources.base import score_raw
 from tests.golden_reconstruct import GAPS, reconstruct, scoring_day
+from tests.test_parity_functions import INTENDED
 
 GOLDEN: dict[str, Any] = json.loads((Path(__file__).parent / "golden" / "oportunidades.json").read_text())
 # RSC items are excluded: the hand-checked list in app/sources/rsc.py replaced the TS one (tested in test_sources).
@@ -31,6 +32,16 @@ KNOWN_GAPS: dict[str, str] = {
     "boe:BOE-B-2026-34894": "facility-tender",  # CENEAM security and upkeep tenders: off-topic cap (ADR 0032)
     "boe:BOE-B-2026-36150": "facility-tender",
 }
+# SCORING_VERSION 18 (ADR 0040): an item that differs only because a later rule fired carries that rule's warning
+# (INTENDED), like the function-level parity. Here that is 125 items without a topic match (no bonus for an unchecked
+# organism, no "Coincidencia parcial"; no score changes) and 9 whose only match was an ambiguous word, all noise:
+# eu:HORIZON-CL5-2027-03-D5-17 and bdns:913212 ("ecosistema"), boe:BOE-B-2026-36910 ("ecosistema de nodos edge"),
+# bocm:BOCM-20261110-53 ("aves frescas"), bdns:927188, bdns:912368 and bdns:918961 ("natural/naturaleza"),
+# bdns:877675 ("sensibilización" of SMEs), bdns:918333 ("Hábitats de sostenibilidad", an urban project).
+
+
+def _intended(fit: FitAnalysis) -> bool:
+    return bool(set(fit.warnings) & set(INTENDED))
 
 
 def _python_fit(item: dict[str, Any]) -> tuple[FitAnalysis, str]:
@@ -51,7 +62,7 @@ def _report() -> tuple[list[dict[str, Any]], Counter[str]]:
         got_json, want = got.to_json(), item["fit"]
         if got_json != want:
             full_fit_diffs[item["source"]] += 1
-        if _key(got_json) != _key(want):
+        if _key(got_json) != _key(want) and not _intended(got):
             mismatches.append({"id": item["id"], "gap": gap, "want": _key(want), "got": _key(got_json)})
     return mismatches, full_fit_diffs
 
@@ -86,7 +97,7 @@ def test_rank_order_matches_ts() -> None:
     ranked = rank(base)
     by_id = {i["id"]: i for i in ITEMS}
     assert all(isinstance(o, Opportunity) for o in ranked)
-    kept = [o for o in ranked if o.id not in KNOWN_GAPS]
+    kept = [o for o in ranked if o.id not in KNOWN_GAPS and not _intended(o.fit)]
     assert [(o.fit.score, o.deadline or "9999") for o in kept] == [
         (by_id[o.id]["fit"]["score"], by_id[o.id]["deadline"] or "9999") for o in kept
     ]

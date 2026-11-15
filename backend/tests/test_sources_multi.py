@@ -5,7 +5,9 @@ the DOG fixture is the 2026-06-05 summary, the most recent with a relevant notic
 cover the municipality warning, the "-CANCELLED" skip and the "becas" drop).
 tests/fixtures/<id>/expected.json: what the former TS connector returned on those fixtures with the same frozen clock
 (frozen fixture: the TS backend and its dump tool were removed; see git history before the Python cutover).
-Items and health must be identical.
+Items and health must be identical. Edited by hand for SCORING_VERSION 18 (ADR 0040): the EU "European City Facility"
+has no topic match (no organism bonus, "Sin encaje temático" warning), and the only BOCM item, the hospital's poultry
+supply tender, matched "aves" alone and is no longer kept: its recorded candidates hold no environmental call.
 """
 
 import json
@@ -69,7 +71,8 @@ async def test_connector_matches_ts_on_fixture(source: Source, module: object, m
         update={"count": len(items), "note": result.health.note.replace("{count}", str(len(items)))}
     )
     assert health.to_json() == want["health"]
-    assert want["items"], "fixture should yield at least one item"
+    # the BOCM recording has no environmental call since ADR 0040: it now checks the drop (and the health count)
+    assert want["items"] or source.id == "bocm", "fixture should yield at least one item"
 
 
 async def test_eu_request_is_the_ts_multipart_post() -> None:

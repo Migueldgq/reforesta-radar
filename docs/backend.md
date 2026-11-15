@@ -33,8 +33,14 @@ ingest-scheduler (una vez al día, a las 9:00 de Madrid)
   desactivados con una explicación, y la web reintenta sola y recarga al volver el servidor. Sin copia guardada
   muestra un estado de error. La portada se pinta sin cifras.
 - Esquema: migraciones de Alembic en `backend/alembic/` (la API las aplica al arrancar).
-- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 17) se guarda en cada `ingest_runs`; súbelo cuando
+- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 18) se guarda en cada `ingest_runs`; súbelo cuando
   cambie la puntuación.
+- Encaje temático (`score.topic_matches`): las palabras clave se buscan en el título y la finalidad, nunca en el
+  organismo. Las ambiguas de `profile.KEYWORD_CONTEXT` («aves», «natura», «ecosistema», «hábitat»,
+  «sensibilización») solo cuentan con una de sus expresiones («aves esteparias», «parques naturales»…) o junto a otra
+  palabra clave no ambigua. Sin encaje temático no hay línea de trabajo ni bonificación por organismo que no revisáis
+  a mano, sale el aviso «Sin encaje temático…» y los boletines y la BDNS no la listan
+  ([ADR 0040](adr/0040-palabras-ambiguas-y-sin-bonificacion-sin-tema.md)).
 - Historial BDNS: tras guardar la ingesta, un paso aparte busca ediciones anteriores de las convocatorias BDNS
   relevantes (cuándo suelen abrir, cuánto plazo dan) y quién las ganó (solo recuentos por tipo de entidad, nunca
   nombres de personas). Va en la tabla `bdns_editions` y la API lo añade como `history` a cada convocatoria. Suma

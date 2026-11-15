@@ -152,7 +152,8 @@ class BoeSource(Source):
         )
 
     def keep(self, o: Opportunity) -> bool:
-        return o.fit.score >= 30
+        # a topic match is required, like the other bulletins (the title pre-filter already asks for one; ADR 0040)
+        return len(o.fit.work_lines) > 0 and o.fit.score >= 30
 
     async def _day(self, ctx: SourceContext, d: datetime, now: datetime) -> BoeDay:
         ymd = d.strftime("%Y%m%d")
