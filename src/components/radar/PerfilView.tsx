@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, Download, Plus, RotateCcw, Upload, X } from "lucide-react";
+import { Check, ChevronDown, Download, Loader2, Plus, RotateCcw, Upload, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Opportunity, OpportunityKind } from "@/lib/opportunity";
 import type { WorkLine } from "@/lib/types";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
+import { fmtDayLong } from "@/lib/team";
 import { cn } from "@/lib/utils";
 import { isClosed, KIND_LABELS, TIER_LABELS } from "./model";
 import { ALL_KINDS, DEFAULT_USER_PROFILE, HIDE_PENALTY, isNeutral, parseProfile, WORK_LINES, type UserProfile } from "./profile";
@@ -113,6 +114,7 @@ function More({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("es-ES", { hour: "numeric", minute: "2-digit" });
 const signed = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "0");
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 
@@ -130,17 +132,10 @@ const SUGGESTIONS = ["charcas", "anfibios", "tritones", "ailanto", "Guadarrama",
 /* ---------- View ---------- */
 
 export function PerfilView() {
-  const { rawData, data, profile, setProfile } = useRadar();
+  const { rawData, data, profile, setProfile, settings, profileSave } = useRadar();
   const rules = useRules();
-  const [saved, setSaved] = useState(false);
-  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const update = (fn: (p: UserProfile) => UserProfile) => {
-    setProfile(fn(profile));
-    setSaved(true);
-    if (savedTimer.current) clearTimeout(savedTimer.current);
-    savedTimer.current = setTimeout(() => setSaved(false), 1600);
-  };
+  const update = (fn: (p: UserProfile) => UserProfile) => setProfile(fn(profile));
 
   const lineLabel = (l: WorkLine) => rules?.workLines.find((g) => g.line === l)?.label ?? l;
 
@@ -149,7 +144,16 @@ export function PerfilView() {
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Perfil</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Así entiende el radar a Reforesta. Ajustadlo y la lista se reordena al momento. Se guarda en este navegador.
+          Así entiende el radar a Reforesta. Ajustadlo y la lista se reordena al momento. Es el mismo para todo el equipo: lo que cambiéis
+          aquí cambia la lista de todos.
+        </p>
+        <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+          <Users className="size-3.5 shrink-0" aria-hidden />
+          {settings?.updatedBy && settings.updatedAt
+            ? `Guardado por ${settings.updatedBy.name || "alguien del equipo"} el ${fmtDayLong(settings.updatedAt)}, a las ${fmtTime(settings.updatedAt)}.`
+            : settings
+              ? "Nadie lo ha cambiado todavía: es el perfil de partida del radar."
+              : "Cargando el perfil del equipo…"}
         </p>
       </header>
 
@@ -162,7 +166,7 @@ export function PerfilView() {
           <TerritorySection rules={rules} profile={profile} update={update} regions={rawData?.items.map((o) => o.region) ?? []} />
           <KindsSection profile={profile} update={update} />
         </div>
-        <EffectPanel saved={saved} profile={profile} setProfile={setProfile} raw={rawData?.items ?? []} adjusted={data?.items ?? []} />
+        <EffectPanel save={profileSave} profile={profile} setProfile={setProfile} raw={rawData?.items ?? []} adjusted={data?.items ?? []} />
       </div>
     </div>
   );
@@ -503,13 +507,13 @@ function KindsSection({ profile, update }: Omit<SectionProps, "rules">) {
 /* ---------- Effect panel ---------- */
 
 function EffectPanel({
-  saved,
+  save,
   profile,
   setProfile,
   raw,
   adjusted,
 }: {
-  saved: boolean;
+  save: "saving" | "saved" | null;
   profile: UserProfile;
   setProfile: (p: UserProfile) => void;
   raw: Opportunity[];
@@ -565,8 +569,16 @@ function EffectPanel({
     <aside aria-label="Efecto de vuestros ajustes" className="space-y-4 rounded-lg border p-4 lg:sticky lg:top-8">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Efecto de vuestros ajustes</h2>
-        <span className={cn("inline-flex items-center gap-1 text-xs text-muted-foreground transition-opacity", saved ? "opacity-100" : "opacity-0")} role="status">
-          <Check className="size-3.5" aria-hidden /> Guardado
+        <span className={cn("inline-flex items-center gap-1 text-xs text-muted-foreground transition-opacity", save ? "opacity-100" : "opacity-0")} role="status">
+          {save === "saving" ? (
+            <>
+              <Loader2 className="size-3.5 animate-spin" aria-hidden /> Guardando…
+            </>
+          ) : save === "saved" ? (
+            <>
+              <Check className="size-3.5" aria-hidden /> Guardado para el equipo
+            </>
+          ) : null}
         </span>
       </div>
 
@@ -629,13 +641,13 @@ function EffectPanel({
           {importMsg}
         </p>
       )}
-      <p className="text-xs text-muted-foreground">Se guarda en este navegador. Exportadlo para compartirlo con el equipo.</p>
+      <p className="text-xs text-muted-foreground">Se aplica a todo el equipo. Exportadlo si queréis guardar una copia.</p>
 
       <Dialog open={confirm} onOpenChange={setConfirm}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>¿Restablecer el perfil?</DialogTitle>
-            <DialogDescription>Se borran vuestros ajustes de este navegador y la lista vuelve al orden del radar.</DialogDescription>
+            <DialogDescription>Se borran los ajustes del equipo y la lista vuelve al orden del radar para todos.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>
