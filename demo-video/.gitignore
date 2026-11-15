@@ -13,3 +13,10 @@ composition/renders/
 composition/.hyperframes/
 # demo team credentials (demo-data.mjs)
 .demo-accounts.json
+# narration audio (voice.py / elevenlabs.py, or recorded by hand) and its trimmed copies
+voice/
+composition/assets/voice/
+# local voice models and the Python environment for voice.py (see README → Voice)
+models/
+.venv/
+__pycache__/

@@ -2,6 +2,17 @@
 
 Every sound in the demo video, where it comes from and under which licence. Nothing here needs attribution; it is given anyway.
 
+## Voice
+
+| What | Used for | Source | Licence / terms |
+|---|---|---|---|
+| Voice «Emilio – Warm, Solid and Convincing» (`ZCh4e9eZSUf41K4cmCEL`, ElevenLabs voice library, Castilian Spanish, es-ES) | The narration in `out/demo-final.mp4` (34 lines, `GUION-VOZ.md`) | ElevenLabs text-to-speech API, model `eleven_v4`, `language_code` `es`, generated with `elevenlabs.py` on 2026-11-15 | ElevenLabs Terms of Use, paid **Starter** plan of the project owner's account (commercial licence included; no attribution required). Library voice metadata: no live moderation, 730-day notice period. The generated audio is not committed (`voice/` is git-ignored). |
+| Kokoro-82M (`hexgrad/Kokoro-82M`, voice `ef_dora`) via `kokoro` 0.9.4 | Timing draft only (`voice.py`); not in the final mix | https://huggingface.co/hexgrad/Kokoro-82M | Apache-2.0 (model and voices). Its Spanish phonemes come from espeak-ng (GPL-3.0, bundled by `espeakng-loader`), used as a tool only. |
+| Whisper `large-v3-turbo` (`mlx-community/whisper-large-v3-turbo`) via `mlx-whisper` | Speech-to-text check of every line and of the final mix | https://huggingface.co/mlx-community/whisper-large-v3-turbo | MIT |
+| Evaluated, not used: Piper 1.3.0 voices `es_ES-davefx-medium` (dataset CC0) and `es_ES-sharvard-medium` (dataset CC BY 3.0), both fine-tuned from the English «lessac» voice; macOS voices Mónica, Eddy, Flo | Voice samples for the choice | rhasspy/piper-voices v1.0.0; macOS | Piper voices: see each MODEL_CARD (the lessac base dataset has its own research-oriented licence); macOS voices: Apple's licence allows personal, non-commercial use only. |
+
+## Music and effects
+
 | File (in the mix) | Used for | Source | Author | Licence |
 |---|---|---|---|---|
 | `audio/music/holiznacc0-autumn.mp3` ("28 HoliznaCC0 - Autumn", from the *Chill Beats* collection) | Music bed under the whole film | https://opengameart.org/content/chill-beats-collection (file `chill_beats.zip`) | Holizna (HoliznaCC0) | CC0 1.0 (public domain dedication). Page: "This Music is public domain Cc0, so use it how you want!" |

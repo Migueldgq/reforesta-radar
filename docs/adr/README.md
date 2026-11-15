@@ -86,4 +86,5 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0033](0033-analizar-pdf-con-la-nota-del-radar.md) | Analizar PDF: la nota del radar cuando el PDF es de una convocatoria suya | Aceptada | 2026-11-15 |
 | [0034](0034-desactivar-fuentes-por-configuracion.md) | Desactivar fuentes por configuración | Aceptada | 2026-11-15 |
 | [0035](0035-iniciar-sesion-desde-el-asistente-oauth.md) | Iniciar sesión desde el agente de IA (OAuth 2.1) en una segunda dirección, `/mcp/equipo` | Aceptada | 2026-11-15 |
+| [0036](0036-locucion-del-video-con-elevenlabs.md) | Locución del vídeo de demo con ElevenLabs, una frase por archivo | Aceptada | 2026-11-15 |
 | [0037](0037-despliegue-en-oracle-con-caddy-y-github-actions.md) | Despliegue en Oracle Cloud Always Free con Caddy, copias diarias y GitHub Actions | Aceptada | 2026-11-15 |

@@ -12,10 +12,11 @@
 //   node compose.mjs && npx hyperframes render composition --output out/demo-final.mp4
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FPS, SCENES } from "./scenes.mjs";
+import { TIMING, lines, measure } from "./voice-lines.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const COMP = path.join(HERE, "composition");
@@ -35,14 +36,18 @@ const RAIL = 52; // CSS px: width of the app's collapsed sidebar rail in the cap
 /* ---------- audio ---------- */
 const MUSIC_ON = process.env.MUSIC !== "0";
 const MUSIC_FILE = process.env.MUSIC_FILE ?? path.join(HERE, "audio/music/holiznacc0-autumn.mp3");
-const MUSIC_LUFS = -20; // the bed alone, before the effects go on top
-const TARGET_LUFS = -17; // the whole mix
+const MUSIC_LUFS = -24; // the bed alone, before ducking and before the effects go on top
+const VOICE_LUFS = -16; // the narration stem (speech; pauses are gated out of the measurement)
+const DUCK_DB = -13; // music under the voice
+const DUCK_PRE = 0.3; // s: music is fully down this long before a line…
+const DUCK_POST = 0.35; // …and starts coming back this long after it
+const TARGET_LUFS = -16; // the whole mix
 const KENNEY = path.join(HERE, "audio/kenney-interface");
 const HF_SFX = path.join(HERE, "node_modules/hyperframes/dist/skills/media-use/audio/assets/sfx");
 // gainDb is applied to the source file; every source peaks near 0 dBFS (Kenney) or −2…−5 dBFS (Pixabay).
 const SFX = {
-  type1: { file: path.join(KENNEY, "click_002.ogg"), gainDb: -17 },
-  type2: { file: path.join(KENNEY, "click_003.ogg"), gainDb: -18 },
+  type1: { file: path.join(KENNEY, "click_002.ogg"), gainDb: -22 },
+  type2: { file: path.join(KENNEY, "click_003.ogg"), gainDb: -23 },
   click: { file: path.join(KENNEY, "click_001.ogg"), gainDb: -4 },
   clickBody: { file: path.join(HF_SFX, "click.mp3"), gainDb: -6 },
   drop: { file: path.join(KENNEY, "drop_002.ogg"), gainDb: -7 },
@@ -59,6 +64,8 @@ const GITHUB_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 // The app's numbers at capture time ({fuentes}, {total}, {alto} in scenes.mjs text).
 const FACTS_FILE = path.join(HERE, "captures", "facts.json");
 const FACTS = existsSync(FACTS_FILE) ? JSON.parse(readFileSync(FACTS_FILE, "utf8")) : {};
+const ASSIST_FILE = path.join(HERE, "captures", "assistant.json");
+const ASSIST = existsSync(ASSIST_FILE) ? JSON.parse(readFileSync(ASSIST_FILE, "utf8")) : null;
 const fill = (text) =>
   text.replace(/\{(\w+)\}/g, (m, k) => {
     if (FACTS[k] == null) throw new Error(`no value for ${m} in captures/facts.json: run capture.mjs first`);
@@ -90,24 +97,126 @@ function typed(text) {
   return { html, n };
 }
 
+/* ---------- narration ---------- */
+// One audio file per voice line (voice-lines.mjs): trimmed copies in assets/voice, their lengths time the film.
+const VLINES = lines();
+const VMEAS = measure();
+const vdur = (name) => VMEAS[name]?.duration ?? Math.round((VLINES.find((l) => l.name === name).text.length / 14) * 100) / 100;
+const beatLines = (id) => VLINES.filter((l) => l.beat === id);
+const HOLD_END = 0.25; // s: a short hold on the last frame of a recording before the swap
+
+/** Lines of a beat placed one after another from `from` (seconds into the beat). */
+function chain(ls, from) {
+  let t = from;
+  return ls.map((l) => {
+    const v = { ...l, start: r3(t), end: r3(t + vdur(l.name)) };
+    t = v.end + TIMING.gap;
+    return v;
+  });
+}
+
+/**
+ * A recorded beat timed by its voice: line k starts TIMING.lead after the recording's `say k` mark. Where a line would
+ * start too early (the previous one is longer than the recording allowed for), the picture holds its frame at that
+ * mark until it fits (a "freeze"); the same at the end for the last line. Returns the clip-time → beat-time map.
+ */
+function retime(s, log) {
+  const ls = beatLines(s.id);
+  const says = log.events.filter((e) => e.type === "say").sort((a, b) => a.t - b.t);
+  const freezes = [];
+  const shift = (t) => t + freezes.filter((f) => t >= f.at - 1e-4).reduce((a, f) => a + f.d, 0);
+  const voice = [];
+  let prevEnd = null;
+  if (ls.length && says.length !== ls.length) console.warn(`  ⚠ ${s.id}: ${says.length} say mark(s) in the recording for ${ls.length} voice line(s): re-capture it`);
+  for (const e of says) {
+    const l = ls[e.k];
+    if (!l) continue;
+    let a = shift(e.t);
+    // the first line just waits for the beat to settle in; a later one holds the picture until the previous one ends
+    const need = prevEnd == null ? 0 : prevEnd + TIMING.gap - (a + TIMING.lead);
+    if (need > 0.01) {
+      freezes.push({ at: e.t, d: r3(need) });
+      a += need;
+    }
+    const start = prevEnd == null ? Math.max(TIMING.first, a + TIMING.lead) : a + TIMING.lead;
+    voice.push({ ...l, start: r3(start), end: r3(start + vdur(l.name)) });
+    prevEnd = start + vdur(l.name);
+  }
+  // lines the recording has no mark for (an old capture): after the others
+  if (voice.length < ls.length) voice.push(...chain(ls.slice(voice.length), prevEnd == null ? TIMING.first : prevEnd + TIMING.gap));
+  const last = voice.at(-1)?.end ?? 0;
+  const extra = last + TIMING.tail - (shift(log.duration) + HOLD_END);
+  if (extra > 0.01) freezes.push({ at: log.duration, d: r3(extra) });
+  return { freezes, shift, voice, duration: shift(log.duration) + HOLD_END };
+}
+
+/** The recording with its freezes (frames held at those marks): assets/scenes/<id>.rt.mp4, rebuilt only when they change. */
+function retimedClip(id, log, freezes) {
+  if (!freezes.length) return `assets/scenes/${id}.mp4`;
+  const src = path.join(COMP, "assets/scenes", `${id}.mp4`);
+  const out = path.join(COMP, "assets/scenes", `${id}.rt.mp4`);
+  const keyFile = out + ".json";
+  const key = JSON.stringify({ freezes, src: statSync(src).mtimeMs });
+  if (existsSync(out) && existsSync(keyFile) && readFileSync(keyFile, "utf8") === key) return `assets/scenes/${id}.rt.mp4`;
+  const pts = [...new Set([0, ...freezes.map((f) => f.at), log.duration])].sort((a, b) => a - b);
+  const segs = pts.slice(0, -1).map((a, i) => ({ a, b: pts[i + 1] }));
+  const parts = segs.map((g, i) => {
+    const startPad = i === 0 ? freezes.filter((f) => f.at <= 1e-4).reduce((x, f) => x + f.d, 0) : 0;
+    const stopPad = freezes.filter((f) => f.at > 1e-4 && Math.abs(f.at - g.b) < 1e-4).reduce((x, f) => x + f.d, 0);
+    const pad = [startPad && `start_mode=clone:start_duration=${startPad}`, stopPad && `stop_mode=clone:stop_duration=${stopPad}`].filter(Boolean).join(":");
+    return `[v${i}]trim=start=${g.a}:end=${g.b},setpts=PTS-STARTPTS${pad ? `,tpad=${pad}` : ""}[s${i}]`;
+  });
+  const filter = [`[0:v]split=${segs.length}${segs.map((_, i) => `[v${i}]`).join("")}`, ...parts, `${segs.map((_, i) => `[s${i}]`).join("")}concat=n=${segs.length}:v=1:a=0,fps=${FPS},format=yuv420p[out]`].join(";");
+  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", src, "-filter_complex", filter, "-map", "[out]", "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-movflags", "+faststart", out]);
+  writeFileSync(keyFile, key);
+  return `assets/scenes/${id}.rt.mp4`;
+}
+
 /* ---------- timeline ---------- */
+const QCPS = 0.024; // s per typed character of the assistant's question
 let t = 0;
 const timed = SCENES.map((s) => {
   let duration = s.duration;
   let log = null;
+  let voice = [];
+  let clip = null;
+  let connectHold = null;
+  const ls = beatLines(s.id);
   if (s.kind === "screen") {
     const f = path.join(HERE, "captures", `${s.id}.json`);
-    const clip = path.join(COMP, "assets/scenes", `${s.id}.mp4`);
-    if (existsSync(f) && existsSync(clip)) {
-      log = JSON.parse(readFileSync(f, "utf8"));
-      duration = log.duration + 0.25; // a short hold on the last frame before the swap
-    } else duration = 2.5; // placeholder
+    const src = path.join(COMP, "assets/scenes", `${s.id}.mp4`);
+    if (existsSync(f) && existsSync(src)) {
+      const raw = JSON.parse(readFileSync(f, "utf8"));
+      const rt = retime(s, raw);
+      log = { ...raw, events: raw.events.map((e) => ({ ...e, t: r3(rt.shift(e.t)) })), freezes: rt.freezes };
+      voice = rt.voice;
+      duration = rt.duration;
+      clip = retimedClip(s.id, raw, rt.freezes);
+    } else {
+      voice = chain(ls, TIMING.first);
+      duration = Math.max(2.5, (voice.at(-1)?.end ?? 0) + TIMING.tail); // placeholder
+    }
+  } else if (s.kind === "assistant") {
+    // connector card while the phase-0 lines play, then the chat with the phase-1 lines
+    const v0 = chain(ls.filter((l) => l.phase === 0), 0.95);
+    connectHold = Math.max(CONNECT_HOLD, (v0.at(-1)?.end ?? 0) + 0.55);
+    const v1 = chain(ls.filter((l) => l.phase === 1), connectHold + 0.75);
+    voice = [...v0, ...v1];
+    const chatEnd = connectHold + 0.65 + (ASSIST?.question.length ?? 60) * QCPS + 0.5 + 2 * 0.4 + 5 * 0.22 + 2.2;
+    duration = Math.max(s.duration, chatEnd, (v1.at(-1)?.end ?? 0) + TIMING.tail);
+  } else if (s.kind === "outro") {
+    voice = chain(ls, 1.0);
+    duration = Math.max(s.duration, (voice.at(-1)?.end ?? 0) + 1.3);
+  } else {
+    voice = chain(ls, s.kind === "intro" ? 0.45 : TIMING.first);
+    duration = Math.max(s.duration, (voice.at(-1)?.end ?? 0) + TIMING.tail);
   }
   const start = r3(t);
   t += duration - OVERLAP;
-  return { ...s, start, duration: r3(duration), end: r3(start + duration), log };
+  return { ...s, start, duration: r3(duration), end: r3(start + duration), log, clip, connectHold, voice: voice.map((v) => ({ ...v, at: r3(start + v.start), until: r3(start + v.end) })) };
 });
 const total = r3(t + OVERLAP);
+const VOICE = timed.flatMap((s) => s.voice.map((v) => ({ ...v, scene: s.id, sceneStart: s.start, sceneEnd: s.end })));
 
 /* ---------- camera math ---------- */
 function camera(r, vp) {
@@ -175,8 +284,9 @@ timed.forEach((s, idx) => {
           <p id="${s.id}-l2" class="typed">${l2.html}<span class="caret"></span></p>
         </div>
       </section>`);
-    const e1 = typeLine(`${s.id}-l1`, s.start + 0.2, l1.n, { caret: false });
-    typeLine(`${s.id}-l2`, e1 + 0.12, l2.n);
+    // line i types when voice line i starts (or right after the previous line without a voice line of its own)
+    const e1 = typeLine(`${s.id}-l1`, Math.min(s.start + 0.2, s.voice[0]?.at ?? Infinity), l1.n, { caret: false });
+    typeLine(`${s.id}-l2`, s.voice[1] ? s.voice[1].at - 0.1 : e1 + 0.12, l2.n);
     swap(`#b-${s.id} .statement`, s.start, s.end);
     return;
   }
@@ -185,9 +295,8 @@ timed.forEach((s, idx) => {
     // Green contrast section: first the radar as an MCP connector of an AI agent, then a question and the answer
     // built from the radar's real tool output (captures/assistant.json), its tool calls tagged as MCP. Neutral cards in
     // the film's own style: no agent's name, logo or look.
-    const f = path.join(HERE, "captures", "assistant.json");
-    if (!existsSync(f)) throw new Error("captures/assistant.json missing: run capture.mjs first");
-    const A = JSON.parse(readFileSync(f, "utf8"));
+    if (!ASSIST) throw new Error("captures/assistant.json missing: run capture.mjs first");
+    const A = ASSIST;
     const fi = A.ficha;
     const hist = fi.historial ?? {};
     const won = fi.encaje.motivos.find((m) => /^Reforesta ya la ganó/.test(m));
@@ -205,7 +314,7 @@ timed.forEach((s, idx) => {
     anim.push(`tl.fromTo("#bg-${s.id}", { clipPath: "circle(0% at 50% 56%)" }, { clipPath: "circle(75% at 50% 56%)", duration: 0.6, ease: "power3.inOut" }, ${r3(s.start)});`);
     sounds.push({ t: s.start, kind: "wipe" });
     const a = s.start;
-    const L = a + CONNECT_HOLD; // the connector card gives way to the chat
+    const L = a + s.connectHold; // the connector card gives way to the chat
 
     // Two headlines like the screen beats: one over the connector, one over the chat.
     const [h0, h1] = s.headlines.map(typed);
@@ -223,7 +332,7 @@ timed.forEach((s, idx) => {
           <span class="mark mark-cn">${MARK_SVG}</span>
           <div class="cn-id">
             <p class="cn-name">${esc(c.name)}</p>
-            <p class="cn-url"><span class="muted">${esc(c.host)}</span>${esc(c.path)}<span class="muted"> · ${esc(c.note)}</span></p>
+            <p class="cn-url"><span class="muted">${esc(c.host)}</span>${esc(c.path)}<br><span class="muted">${esc(c.note)}</span></p>
           </div>
           <span class="cn-state">${CHECK_SVG}<span>${esc(c.state)}</span></span>
         </div>
@@ -242,7 +351,7 @@ timed.forEach((s, idx) => {
         <div class="answer">${lines.map((l, i) => `<p class="${l.cls}" id="al-${s.id}-${i}">${l.icon ? `<span class="ico">${l.icon}</span>` : ""}<span>${l.html}</span></p>`).join("")}</div>
       </div>`);
     anim.push(`tl.fromTo("#w-${s.id}", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "power3.out" }, ${r3(L + 0.1)});`);
-    const qEnd = typeLine(`q-${s.id}`, L + 0.65, q.n, { cps: 0.024 });
+    const qEnd = typeLine(`q-${s.id}`, L + 0.65, q.n, { cps: QCPS });
     anim.push(`tl.fromTo("#tt-${s.id}", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, ${r3(qEnd + 0.15)});`);
     A.calls.forEach((_, i) => {
       const t = qEnd + 0.35 + i * 0.4;
@@ -321,7 +430,7 @@ timed.forEach((s, idx) => {
   const first = cams[0] ?? { x: 0, y: 0, w: vp.width, h: vp.height };
   const c0 = camera(first, vp);
   const vid = `v-${s.id}`;
-  const video = `<video id="${vid}" class="clip screen" src="assets/scenes/${s.id}.mp4" ${win(s.start, s.duration)} muted playsinline></video>`;
+  const video = `<video id="${vid}" class="clip screen" src="${s.clip}" ${win(s.start, s.duration)} muted playsinline></video>`;
 
   if (green) {
     // The UI as a card on the green canvas: crop box = the region at the camera's scale.
@@ -348,19 +457,38 @@ timed.forEach((s, idx) => {
     let curtainX = null;
     if (first.curtain != null) {
       curtainX = first.curtain;
-      html.push(`<div id="cu-${s.id}" class="clip curtain" ${win(s.start, s.duration)} style="z-index:${z + 1}"></div>`);
+      html.push(`<div id="cu-${s.id}" class="clip curtain" ${win(s.start, s.duration)} style="z-index:${z + 1};opacity:0"></div>`);
       anim.push(`tl.set("#cu-${s.id}", { x: ${r3(push.x + push.scale * curtainX - W)} }, 0);`);
       anim.push(`tl.fromTo("#cu-${s.id}", { opacity: 0 }, { opacity: 1, duration: 0.42, ease: "power3.out" }, ${r3(s.start)});`);
       anim.push(`tl.to("#cu-${s.id}", { x: ${r3(c0.x + c0.scale * curtainX - W)}, duration: 1.5, ease: "power2.out" }, ${r3(s.start + 0.05)});`);
     }
     let prev = c0;
-    for (const c of cams.slice(1)) {
+    cams.slice(1).forEach((c, ci) => {
       const k = camera(c, vp);
-      const d = Math.max(0.2, c.dur ?? 0.7);
-      anim.push(`tl.to("#${vid}", { x: ${k.x}, y: ${k.y}, scale: ${k.scale}, duration: ${d}, ease: "power3.inOut" }, ${r3(s.start + c.t)});`);
-      if (c.curtain != null && curtainX == null) {
+      const d = c.dur === 0 ? 0 : Math.max(0.2, c.dur ?? 0.7); // 0: a cut
+      if (d === 0) anim.push(`tl.set("#${vid}", { x: ${k.x}, y: ${k.y}, scale: ${k.scale} }, ${r3(s.start + c.t)});`);
+      else anim.push(`tl.to("#${vid}", { x: ${k.x}, y: ${k.y}, scale: ${k.scale}, duration: ${d}, ease: "power3.inOut" }, ${r3(s.start + c.t)});`);
+      // `floor`: nothing below css y = floor is part of this shot (a white band whose top edge rides the camera), until
+      // the next camera target.
+      if (c.floor != null) {
+        const until = cams[ci + 2]?.t ?? s.end - s.start;
+        const fy = (q) => r3(STAGE.top + q.y + q.scale * c.floor);
+        html.push(`<div id="fl-${s.id}-${ci}" class="clip floor" ${win(s.start + c.t, until - c.t)} style="z-index:${z + 1}"></div>`);
+        anim.push(`tl.fromTo("#fl-${s.id}-${ci}", { y: ${fy(prev)} }, { y: ${fy(k)}, duration: ${d || 0.01}, ease: "power3.inOut", immediateRender: false }, ${r3(s.start + c.t)});`);
+      }
+      // `ceil`: the same above css y = ceil (a white band from the top of the stage down to that line).
+      if (c.ceil != null) {
+        const until = cams[ci + 2]?.t ?? s.end - s.start;
+        const ch = (q) => r3(Math.max(0, q.y + q.scale * c.ceil));
+        html.push(`<div id="ce-${s.id}-${ci}" class="clip ceil" ${win(s.start + c.t, until - c.t)} style="z-index:${z + 1}"></div>`);
+        anim.push(`tl.fromTo("#ce-${s.id}-${ci}", { height: ${ch(prev)} }, { height: ${ch(k)}, duration: ${d || 0.01}, ease: "power3.inOut", immediateRender: false }, ${r3(s.start + c.t)});`);
+      }
+      if (c.curtain === false && curtainX != null) {
+        // the shot no longer needs it: the curtain fades out while the camera moves
+        anim.push(`tl.to("#cu-${s.id}", { opacity: 0, duration: ${d || 0.01}, ease: "power2.out" }, ${r3(s.start + c.t)});`);
+      } else if (c.curtain != null && c.curtain !== false && curtainX == null) {
         curtainX = c.curtain;
-        html.push(`<div id="cu-${s.id}" class="clip curtain" ${win(s.start + c.t, s.end - s.start - c.t)} style="z-index:${z + 1}"></div>`);
+        html.push(`<div id="cu-${s.id}" class="clip curtain" ${win(s.start + c.t, s.end - s.start - c.t)} style="z-index:${z + 1};opacity:0"></div>`);
         // fades in fast and rides with the camera move, so its edge stays on the sheet's edge
         anim.push(`tl.fromTo("#cu-${s.id}", { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power2.out" }, ${r3(s.start + c.t)});`);
         anim.push(`tl.fromTo("#cu-${s.id}", { x: ${r3(prev.x + prev.scale * curtainX - W)} }, { x: ${r3(k.x + k.scale * curtainX - W)}, duration: ${d}, ease: "power3.inOut", immediateRender: false }, ${r3(s.start + c.t)});`);
@@ -369,7 +497,7 @@ timed.forEach((s, idx) => {
       }
       if (d >= 0.5) sounds.push({ t: s.start + c.t, kind: "swish" });
       prev = k;
-    }
+    });
     swap(`#w-${s.id}`, s.start, s.end);
   }
 
@@ -407,25 +535,70 @@ function buildAudio() {
   writeFileSync(script, chains.join(";\n"));
   execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...inputs, "-/filter_complex", script, "-map", "[mix]", "-c:a", "pcm_s24le", sfxOut]);
 
-  let mixIn = sfxOut;
+  // Voice stem: every line at its place, one level for all (loudness of the speech, silences gated out).
+  const voiceRaw = path.join(dir, "voice-raw.wav");
+  const voiceOut = path.join(dir, "voice.wav");
+  const vin = VOICE.flatMap((v) => ["-i", path.join(COMP, `assets/voice/${v.name}.wav`)]);
+  if (VOICE.length && VOICE.every((v) => existsSync(path.join(COMP, `assets/voice/${v.name}.wav`)))) {
+    const vg = VOICE.map((v, i) => `[${i + 1}:a]aformat=sample_rates=48000:channel_layouts=stereo,adelay=${Math.round(v.at * 1000)}|${Math.round(v.at * 1000)}[v${i}]`);
+    vg.push(`[0:a]${VOICE.map((_, i) => `[v${i}]`).join("")}amix=inputs=${VOICE.length + 1}:duration=first:normalize=0:dropout_transition=0[v]`);
+    writeFileSync(path.join(dir, "voice-graph.txt"), vg.join(";\n"));
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-t", String(total), "-i", "anullsrc=r=48000:cl=stereo", ...vin, "-/filter_complex", path.join(dir, "voice-graph.txt"), "-map", "[v]", "-c:a", "pcm_s24le", voiceRaw]);
+    const vgain = r3(VOICE_LUFS - lufsOf(voiceRaw));
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", voiceRaw, "-af", `volume=${vgain}dB`, "-c:a", "pcm_s24le", voiceOut]);
+  } else {
+    console.warn("  ⚠ voice files missing: the mix has no narration (run voice.py lines or add the recorded files)");
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-t", String(total), "-i", "anullsrc=r=48000:cl=stereo", "-c:a", "pcm_s24le", voiceOut]);
+  }
+
+  const stems = [voiceOut, sfxOut];
   if (MUSIC_ON && existsSync(MUSIC_FILE)) {
-    // Music bed: loudness-normalised, faded in and out, ending with the film.
+    // Music bed: loudness-normalised, faded in and out, ending with the film, and ducked under every voice line.
     const music = path.join(dir, "music.wav");
     const fadeOut = 2.2;
-    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", MUSIC_FILE, "-t", String(total),
-      "-af", `aformat=sample_rates=48000:channel_layouts=stereo,loudnorm=I=${MUSIC_LUFS}:TP=-3:LRA=11,afade=t=in:d=0.8,afade=t=out:st=${r3(total - fadeOut)}:d=${fadeOut},apad=whole_dur=${total}`,
-      "-ar", "48000", "-c:a", "pcm_s24le", music]);
-    const both = path.join(dir, "premix.wav");
-    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", music, "-i", sfxOut, "-filter_complex",
-      "[0:a][1:a]amix=inputs=2:duration=longest:normalize=0[m]", "-map", "[m]", "-c:a", "pcm_s24le", both]);
-    mixIn = both;
+    const env = path.join(dir, "duck.f32");
+    writeFileSync(env, Buffer.from(duckEnvelope().buffer));
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", MUSIC_FILE, "-f", "f32le", "-ar", "48000", "-ac", "1", "-i", env, "-filter_complex",
+      `[0:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=0:${total},loudnorm=I=${MUSIC_LUFS}:TP=-3:LRA=11,aresample=48000,afade=t=in:d=0.8,afade=t=out:st=${r3(total - fadeOut)}:d=${fadeOut},apad=whole_dur=${total}[m];` +
+        `[1:a]pan=stereo|c0=c0|c1=c0[e];[m][e]amultiply,atrim=0:${total}[out]`,
+      "-map", "[out]", "-ar", "48000", "-c:a", "pcm_s24le", music]);
+    stems.push(music);
   }
-  // Bring the whole mix to the target loudness, then a limiter (true peak stays ≤ −1 dBFS).
-  const measured = lufsOf(mixIn);
+  const premix = path.join(dir, "premix.wav");
+  execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...stems.flatMap((f) => ["-i", f]), "-filter_complex",
+    `${stems.map((_, i) => `[${i}:a]`).join("")}amix=inputs=${stems.length}:duration=longest:normalize=0[m]`, "-map", "[m]", "-c:a", "pcm_s24le", premix]);
+  // Bring the whole mix to the target loudness, then a limiter (true peak stays under −1 dBTP).
+  const measured = lufsOf(premix);
   const gain = r3(TARGET_LUFS - measured);
-  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", mixIn, "-af",
+  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", premix, "-af",
     `volume=${gain}dB,alimiter=limit=0.79:level=false:attack=1:release=60,aresample=48000`, "-c:a", "pcm_s16le", out]);
   return { file: "assets/audio/mix.wav", cues: used.length, gain, music: MUSIC_ON && existsSync(MUSIC_FILE) };
+}
+
+/** Music gain over time (48 kHz): 1, dipping DUCK_DB under each voice line (in before it starts, out after it ends). */
+function duckEnvelope() {
+  const SR = 48000;
+  const n = Math.ceil(total * SR);
+  const g = new Float32Array(n).fill(1);
+  const low = 10 ** (DUCK_DB / 20);
+  const dn = 0.25; // s ramp down, finished DUCK_PRE before the line
+  const up = 0.6; // s ramp up, starting DUCK_POST after the line
+  // merged duck windows
+  const win = [];
+  for (const v of VOICE) {
+    const a = v.at - DUCK_PRE;
+    const b = v.until + DUCK_POST;
+    if (win.length && a <= win.at(-1)[1] + dn + up) win.at(-1)[1] = Math.max(win.at(-1)[1], b);
+    else win.push([a, b]);
+  }
+  for (const [a, b] of win) {
+    for (let i = Math.max(0, Math.floor((a - dn) * SR)); i < Math.min(n, Math.ceil((b + up) * SR)); i++) {
+      const t = i / SR;
+      const x = t < a ? (a - t) / dn : t > b ? (t - b) / up : 0;
+      g[i] = Math.min(g[i], low + (1 - low) * (0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, x))));
+    }
+  }
+  return g;
 }
 /** Integrated loudness (LUFS) from ffmpeg's ebur128 summary. */
 function lufsOf(file) {
@@ -494,6 +667,8 @@ const page = `<!doctype html>
       .screen { position: absolute; left: 0; top: 0; width: 1440px; height: 810px; will-change: transform; }
       .greenbg { background: var(--accent); }
       .curtain { right: auto; width: ${W}px; top: ${STAGE.top}px; background: var(--ground); }
+      .floor { bottom: auto; height: ${H}px; background: var(--ground); }
+      .ceil { top: ${STAGE.top}px; bottom: auto; background: var(--ground); }
       .placeholder { display: grid; place-items: center; top: ${STAGE.top}px; }
       .placeholder span { font-size: 32px; color: var(--muted); }
 
@@ -556,9 +731,47 @@ const page = `<!doctype html>
 `;
 
 writeFileSync(path.join(COMP, "index.html"), page);
+
+/* ---------- subtitles (not burned in) + the voice timeline ---------- */
+// One cue per sentence (long ones split at a comma), at most two rows of ~42 characters; time shared by length.
+function cues(v) {
+  const parts = v.text.match(/[^.!?¿¡]*[¿¡]?[^.!?]*[.!?]+|[^.!?]+$/g).map((x) => x.trim()).filter(Boolean)
+    .flatMap((x) => (x.length > 84 ? x.split(/(?<=[,:;])\s+/).reduce((acc, w) => (acc.length && (acc.at(-1) + " " + w).length <= 84 ? [...acc.slice(0, -1), acc.at(-1) + " " + w] : [...acc, w]), []) : [x]));
+  const n = parts.reduce((a, x) => a + x.length, 0);
+  let t = v.at;
+  return parts.map((x) => {
+    const d = ((v.until - v.at) * x.length) / n;
+    const c = { a: t, b: t + d, text: wrap(x) };
+    t += d;
+    return c;
+  });
+}
+function wrap(x, max = 42) {
+  if (x.length <= max) return x;
+  const mid = x.length / 2;
+  const spaces = [...x.matchAll(/ /g)].map((m) => m.index);
+  const at = spaces.sort((p, q) => Math.abs(p - mid) - Math.abs(q - mid))[0];
+  return x.slice(0, at) + "\n" + x.slice(at + 1);
+}
+const srtTime = (t) => {
+  const ms = Math.round(t * 1000);
+  const p = (n, w = 2) => String(n).padStart(w, "0");
+  return `${p(Math.floor(ms / 3600000))}:${p(Math.floor(ms / 60000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`;
+};
+const srt = VOICE.flatMap(cues).map((c, i) => `${i + 1}\n${srtTime(c.a)} --> ${srtTime(c.b)}\n${c.text}\n`).join("\n");
+mkdirSync(path.join(HERE, "out"), { recursive: true });
+writeFileSync(path.join(HERE, "out/demo-final.es.srt"), srt);
+mkdirSync(path.join(HERE, "voice"), { recursive: true });
+writeFileSync(path.join(HERE, "voice/timeline.json"), JSON.stringify({
+  total,
+  beats: timed.map((s) => ({ id: s.id, start: s.start, end: s.end, freezes: s.log?.freezes ?? [] })),
+  lines: VOICE.map((v) => ({ name: v.name, scene: v.scene, at: v.at, until: v.until, sceneStart: v.sceneStart, sceneEnd: v.sceneEnd, text: v.text })),
+}, null, 1));
+const tight = VOICE.filter((v) => v.at - v.sceneStart < 0.25 || v.sceneEnd - OVERLAP - v.until < 0.25);
+if (tight.length) console.warn(`  ⚠ voice line(s) within 250 ms of a scene change: ${tight.map((v) => v.name).join(", ")}`);
 const missing = timed.filter((s) => s.kind === "screen" && !s.log).map((s) => s.id);
 console.log(
   `composition/index.html: ${timed.length} beats, ${total}s, ${audio.cues} sound cues, music ${audio.music ? "on" : "off"} (mix gain ${audio.gain} dB)` +
     (missing.length ? ` (placeholders: ${missing.join(", ")})` : ""),
 );
-console.log(timed.map((s) => `  ${s.start.toFixed(2).padStart(6)}s  ${s.id}`).join("\n"));
+console.log(timed.map((s) => `  ${s.start.toFixed(2).padStart(6)}s  ${s.id}${s.log?.freezes?.length ? `  (held ${s.log.freezes.map((f) => f.d).join(" + ")} s for the voice)` : ""}`).join("\n"));
