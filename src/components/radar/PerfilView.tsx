@@ -179,7 +179,7 @@ export function PerfilView() {
           <LinesSection rules={rules} profile={profile} update={update} />
           <KeywordsSection rules={rules} profile={profile} update={update} lineLabel={lineLabel} />
           <ExcludeSection rules={rules} profile={profile} update={update} />
-          <TerritorySection rules={rules} profile={profile} update={update} regions={rawData?.items.map((o) => o.region) ?? []} />
+          <TerritorySection rules={rules} profile={profile} update={update} regions={territoryRegions(rawData?.items ?? [])} />
           <KindsSection profile={profile} update={update} />
         </div>
         <EffectPanel save={profileSave} profile={profile} setProfile={setProfile} raw={rawData?.items ?? []} adjusted={data?.items ?? []} />
@@ -392,6 +392,9 @@ function ExcludeSection({ rules, profile, update }: SectionProps) {
     </Section>
   );
 }
+
+/** Regions to adjust: a company programme's region can be free text («Andalucía o provincia de Ciudad Real»), not a community. */
+const territoryRegions = (items: Opportunity[]) => items.filter((o) => o.kind !== "empresa" || o.region === "Estatal").map((o) => o.region);
 
 function TerritorySection({ rules, profile, update, regions }: SectionProps & { regions: string[] }) {
   const groups = useMemo(() => {
