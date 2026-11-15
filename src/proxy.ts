@@ -18,7 +18,7 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Everything except the API and MCP rewrites, Next's assets, files with an extension and the public pages.
-    "/((?!api/|mcp$|_next/|landing|login|invitacion/|restablecer/|recuperar|favicon\\.ico|.*\\.[\\w]+$).*)",
+    // Everything except the API, MCP and OAuth rewrites, Next's assets, files with an extension and the public pages.
+    "/((?!api/|mcp$|mcp/equipo$|oauth/|\\.well-known/|_next/|landing|login|invitacion/|restablecer/|recuperar|favicon\\.ico|.*\\.[\\w]+$).*)",
   ],
 };

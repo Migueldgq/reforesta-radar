@@ -1,0 +1,97 @@
+# Production overlay (docs/despliegue.md): Caddy with automatic HTTPS in front of `web`, nothing else published.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# On the server, COMPOSE_FILE in /opt/reforesta-radar/.env makes plain `docker compose …` use both files.
+# Needs in .env: RADAR_DOMAIN (public hostname, DNS pointing here) and RADAR_DB_PASSWORD.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-prod-env: &prod-env
+  RADAR_PUBLIC_URL: https://${RADAR_DOMAIN:?set RADAR_DOMAIN in .env}
+  RADAR_COOKIE_SECURE: "true"
+  CORS_ORIGINS: https://${RADAR_DOMAIN}
+  # Only Caddy overwrites X-Forwarded-For, and only containers on this network reach `web` and `api`: trust it.
+  FORWARDED_ALLOW_IPS: ${RADAR_NET_SUBNET:-172.28.89.0/24}
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${RADAR_DB_PASSWORD:?set RADAR_DB_PASSWORD in .env}
+    ports: !reset []
+    restart: unless-stopped
+    logging: *logging
+
+  # Images are tagged per deployed commit (deploy/deploy.sh writes RADAR_IMAGE_TAG to .env), so the previous
+  # version's images stay on disk and a failed deploy can switch back without rebuilding.
+  api:
+    image: ${COMPOSE_PROJECT_NAME}-backend:${RADAR_IMAGE_TAG:-dev}
+    environment:
+      <<: *prod-env
+    ports: !reset []
+    logging: *logging
+
+  ingest:
+    image: ${COMPOSE_PROJECT_NAME}-backend:${RADAR_IMAGE_TAG:-dev}
+    environment:
+      <<: *prod-env
+    logging: *logging
+
+  ingest-scheduler:
+    image: ${COMPOSE_PROJECT_NAME}-backend:${RADAR_IMAGE_TAG:-dev}
+    environment:
+      <<: *prod-env
+    healthcheck:
+      # The scheduler is a loop; check it can still reach the database.
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('postgres', 5432), 3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging: *logging
+
+  web:
+    image: ${COMPOSE_PROJECT_NAME}-web:${RADAR_IMAGE_TAG:-dev}
+    ports: !reset []
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *logging
+
+  caddy:
+    image: caddy:2.11.9-alpine # pinned; how to bump: docs/mantenimiento.md
+    environment:
+      RADAR_DOMAIN: ${RADAR_DOMAIN}
+      RADAR_ACME_CA: ${RADAR_ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # certificates and the ACME account: keep it (Let's Encrypt rate limits)
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    logging: *logging
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${RADAR_NET_SUBNET:-172.28.89.0/24}
+
+volumes:
+  caddy-data:
+  caddy-config:

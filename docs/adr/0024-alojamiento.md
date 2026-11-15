@@ -1,6 +1,6 @@
 # 0024. Alojamiento: VPS pequeño con Dokploy u Oracle Always Free
 
-- Estado: Propuesta
+- Estado: Sustituida por 0037
 - Fecha: 2026-11-15 (fecha de registro; no hay commit asociado)
 
 ## Contexto

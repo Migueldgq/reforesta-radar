@@ -56,6 +56,11 @@ export type IngestStatus = { latest: IngestRequest | null; lastIngestAt: string 
 export type PersonalToken = { id: number; name: string; createdAt: string; expiresAt: string; lastUsedAt: string | null };
 export type TokensInfo = { tokens: PersonalToken[]; mcpUrl: string; publicTools: boolean };
 export type TokenCreated = { token: PersonalToken; secret: string };
+/** Where an assistant's permission goes: Claude's own address, a program on this computer, or somewhere else. */
+export type AssistantKind = "conocido" | "local" | "desconocido";
+export type ConnectedAssistant = { id: number; name: string; kind: AssistantKind; redirectHost: string; createdAt: string; lastUsedAt: string | null };
+export type AssistantsInfo = { assistants: ConnectedAssistant[]; teamUrl: string; publicUrl: string; signIn: boolean; publicTools: boolean };
+export type ConsentInfo = { assistant: string; kind: AssistantKind; redirectHost: string };
 
 export const PASSWORD_MIN = 10;
 export const PASSWORD_MAX = 256;

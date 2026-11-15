@@ -10,8 +10,8 @@ Proyecto para **1hack A Coruña: el reto de Reforesta** (Common Seeds / The Agil
 [RETO.md](./RETO.md).
 
 - Vídeo de la demo: pendiente <!-- TODO: enlace al vídeo -->
-- Despliegue público: ninguno; se ejecuta en local con Docker (opciones de alojamiento en
-  [ADR 0024](./docs/adr/0024-alojamiento.md)).
+- Despliegue público: <https://reforesta-radar.miguelddev.com> (Oracle Cloud Always Free, Caddy y GitHub Actions;
+  cómo se despliega y se mantiene en [docs/despliegue.md](./docs/despliegue.md)).
 
 ## Qué hace hoy
 
@@ -43,8 +43,8 @@ Proyecto para **1hack A Coruña: el reto de Reforesta** (Common Seeds / The Agil
   equipo y la nota no están de acuerdo.
 - **Fuentes**: estado de cada fuente en la última carga; un administrador puede pedir «Actualizar ahora».
 
-**Conectar un asistente**
-- Servidor MCP de solo lectura en `/mcp` para Claude Code, Claude Desktop u otro asistente compatible: sin token ve
+**Conectar un agente de IA**
+- Servidor MCP de solo lectura en `/mcp` para Claude Code, Claude Desktop u otro agente compatible: sin token ve
   lo mismo que la portada pública; con un token personal (Mi cuenta) también el tablero del equipo. Ver
   [docs/mcp.md](./docs/mcp.md).
 
@@ -202,7 +202,7 @@ Qué hacer, cada cuánto y cómo: [docs/mantenimiento.md](./docs/mantenimiento.m
   personas físicas.
 - Los datos del equipo (cuentas, tablero, notas, votos) se quedan en la base de datos local. Las contraseñas se
   guardan con Argon2id; de las sesiones, invitaciones y tokens solo se guarda su hash.
-- Lo que devuelve el servidor MCP con un token personal (tablero, notas, votos) lo ve el proveedor del asistente que
+- Lo que devuelve el servidor MCP con un token personal (tablero, notas, votos) lo ve el proveedor del agente que
   lo use.
 
 ## Documentación
@@ -210,7 +210,7 @@ Qué hacer, cada cuánto y cómo: [docs/mantenimiento.md](./docs/mantenimiento.m
 - [docs/backend.md](./docs/backend.md): servicios, cuentas, ingesta, riesgos y lista antes de publicar.
 - [docs/mantenimiento.md](./docs/mantenimiento.md): tareas periódicas, copias de seguridad, qué se estropea primero.
 - [docs/api-auth.md](./docs/api-auth.md): contrato de la API para la web (cuentas, tablero, votos, ajustes).
-- [docs/mcp.md](./docs/mcp.md): conectar un asistente de IA.
+- [docs/mcp.md](./docs/mcp.md): conectar un agente de IA.
 - [docs/adr/](./docs/adr/README.md): decisiones de arquitectura y por qué se tomaron.
 - [backend/README.md](./backend/README.md): código del backend, tests y cómo añadir una fuente.
 

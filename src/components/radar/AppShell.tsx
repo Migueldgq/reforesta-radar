@@ -62,6 +62,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState<boolean | null>(null);
   // Public pages (landing, login, links with a token) never load team data.
   if (isPublicPath(path)) return children;
+  // The assistant's permission page: signed in, but on its own, without the app around it.
+  if (path === "/autorizar") return <SessionGate>{children}</SessionGate>;
   return (
     <SessionGate>
       <RadarProvider>

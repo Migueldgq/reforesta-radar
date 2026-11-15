@@ -6,7 +6,9 @@ fit (geographic + kind) and ranking on every response.
 Access (docs/api-auth.md): everything under /api/ needs a session, except /api/auth/* and /api/public/*; /health
 is open. State-changing /api/ requests must pass the CSRF check (app/auth/csrf.py). /mcp is the read-only MCP server
 (app/mcp/http.py, docs/mcp.md): public tools without credentials, team tools with a personal access token; it never
-reads the session cookie.
+reads the session cookie. /mcp/equipo always needs credentials: a personal token or an access token from the radar's
+own OAuth authorization server (/.well-known/*, /oauth/*: app/oauth, ADR 0035), whose consent step is the web's
+/autorizar page backed by /api/oauth/*.
 """
 
 import logging
@@ -20,7 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.routing import Route
 
-from app.api import analyze_pdf, auth, board, ingest_requests, perfil, team, tokens
+from app.api import analyze_pdf, auth, board, ingest_requests, oauth, perfil, team, tokens
 from app.api.state import last_ingest, read_sources, read_state
 from app.auth.accounts import bootstrap_admin
 from app.auth.csrf import csrf_middleware
@@ -30,6 +32,7 @@ from app.config import settings
 from app.db.session import make_engine
 from app.mcp.http import endpoint as mcp_endpoint
 from app.models import OpportunitiesResponse, SourcesResponse
+from app.oauth.routes import routes as oauth_routes
 from app.scoring.rank import rank
 
 log = logging.getLogger(__name__)
@@ -57,10 +60,14 @@ app.add_middleware(BodyLimitMiddleware)  # added last = runs first: oversized bo
 app.include_router(auth.router)
 signed_in = [Depends(current_user)]
 no_session: dict[int | str, dict[str, Any]] = {401: {"description": "No valid session (`radar_session` cookie)"}}
-for r in (analyze_pdf, perfil, team, tokens, board, ingest_requests):
+for r in (analyze_pdf, perfil, team, tokens, oauth, board, ingest_requests):
     app.include_router(r.router, dependencies=signed_in, responses=no_session)
 # Read-only MCP server (Streamable HTTP): its own auth, see app/mcp/http.py. POST only (405 otherwise).
 app.router.routes.append(Route("/mcp", endpoint=mcp_endpoint))
+# The team address: always asks for credentials (personal token or OAuth sign-in from the assistant, ADR 0035).
+app.router.routes.append(Route("/mcp/equipo", endpoint=mcp_endpoint))
+# The radar as the assistants' authorization server: discovery documents and /oauth/* (app/oauth/routes.py).
+app.router.routes.extend(oauth_routes)
 
 
 def _engine(request: Request) -> AsyncEngine:

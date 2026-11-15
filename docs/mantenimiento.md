@@ -92,7 +92,7 @@ Los comandos de este documento se ejecutan en la carpeta del repositorio, con el
   anteriores se siguen viendo.
 - **Desactivar una fuente sin tocar código:** en el `.env`, `RADAR_DISABLED_SOURCES=dog,bocm` (ids separados por
   comas: `bdns`, `boe`, `eu`, `bocm`, `dog`, `fb`, `rsc`) y `docker compose up -d` para aplicarlo. La carga diaria se
-  la salta, sus convocatorias **dejan de mostrarse** (en la web y en el asistente MCP) y Fuentes la enseña como
+  la salta, sus convocatorias **dejan de mostrarse** (en la web y en el agente de IA, por MCP) y Fuentes la enseña como
   «Desactivada». Sus datos **no se borran**: siguen en la base y vuelven a verse en cuanto se quita de la lista (la
   carga siguiente los pone al día). El tablero conserva las que el equipo seguía. Se eligió ocultar en vez de seguir
   enseñando sus últimos datos porque se desactiva una fuente cuando no se quiere ver; si solo está rota, no hace falta
@@ -128,7 +128,8 @@ Hay tres niveles, de menos a más técnico:
 
 ## Copias de seguridad
 
-No hay copias automáticas. Todo lo que no se recupera con una carga nueva (cuentas, tablero, notas, votos, Perfil)
+En producción hay una copia diaria automática y la restauración está probada: ver
+[despliegue.md](despliegue.md#copias-de-seguridad-y-restauración). En una instalación local no hay copias automáticas. Todo lo que no se recupera con una carga nueva (cuentas, tablero, notas, votos, Perfil)
 está en Postgres, en el volumen de Docker `reforesta-radar_radar-pgdata`.
 
 **Hacer una copia** (no hace falta parar nada):
@@ -184,7 +185,8 @@ docker compose run --rm ingest         # comprobar que todas las fuentes siguen 
 ```
 
 - **Imágenes base fijadas.** Están en tres sitios: `FROM python:…` en `backend/Dockerfile`, `FROM node:…` en
-  `Dockerfile` e `image: postgres:…` en `docker-compose.yml`. Para subirlas, mira la última versión de la misma
+  `Dockerfile` e `image: postgres:…` en `docker-compose.yml`. En producción, además, `image: caddy:…` en
+  `docker-compose.prod.yml` (`docker run --rm caddy:2-alpine caddy version` da la última 2.x). Para subirlas, mira la última versión de la misma
   rama (por ejemplo `docker pull python:3.13-slim && docker run --rm python:3.13-slim python -V`, igual con
   `node:22-alpine` y `node -v`, y `postgres:16-alpine` con `postgres -V`), escribe ese número en los tres sitios,
   reconstruye y pasa la prueba completa de arriba. Dentro de la misma versión mayor de Postgres (16.x) basta con
@@ -202,11 +204,11 @@ docker compose run --rm ingest         # comprobar que todas las fuentes siguen 
 ## Accesos
 
 - **Altas:** **Equipo → Invitar** (enlace de un solo uso, 7 días). Mantened siempre al menos dos administradores.
-- **Bajas:** **Equipo → Personas → desactivar**. Cierra sus sesiones al momento, invalida sus tokens del asistente
+- **Bajas:** **Equipo → Personas → desactivar**. Cierra sus sesiones al momento, invalida sus tokens del agente de IA
   (MCP) y las invitaciones y enlaces que había creado. No se borra a nadie: sus notas siguen firmadas.
 - **Contraseña olvidada:** un administrador genera un enlace de restablecimiento en Equipo (24 h). Sin ningún
   administrador: `docker compose run --rm api python -m app.users create-admin <correo>` con otro correo.
-- **Tokens del asistente (MCP):** cada persona ve y revoca los suyos en **Mi cuenta**. Caducan solos (30 días a 1 año)
+- **Tokens del agente de IA (MCP):** cada persona ve y revoca los suyos en **Mi cuenta**. Caducan solos (30 días a 1 año)
   y se revocan al cambiar la contraseña o el rol.
 - **Cerrar todas las sesiones y revocar todos los tokens** (si se sospecha una filtración):
 
