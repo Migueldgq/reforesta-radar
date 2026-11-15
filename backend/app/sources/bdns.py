@@ -173,6 +173,17 @@ async def search_paged(ctx: SourceContext, q: RadarQuery, fecha_desde: str, max_
     return SearchResult(items, True, total)
 
 
+async def fetch_detail(ctx: SourceContext, n: str) -> dict[str, Any] | None:
+    """Detail ("ficha") of call `n`. Details of a published call rarely change: cached by number (24 h; 3 h while it
+    has no deadline yet), so a refresh only hits the API for calls not seen before."""
+    return await ctx.memo.get(
+        f"bdns:detail:{n}",
+        lambda d: (24 if d.get("fechaFinSolicitud") else 3) * 3600,
+        lambda: ctx.http.json(f"{BDNS_BASE}/convocatorias?numConv={_enc(n)}&vpd=GE", timeout=8, retries=RETRIES),
+        persist=True,
+    )
+
+
 def bdns_nivel(nivel1: str | None) -> NivelAdmin:
     n = normalize_text(nivel1 or "")
     if "estado" in n:
@@ -366,20 +377,7 @@ class BdnsSource(Source):
         to_enrich = [raw for raw, _ in ranked[:MAX_ENRICH]]
         not_enriched = [raw for raw, _ in ranked[MAX_ENRICH:]]
 
-        # Details of a published call rarely change: cache by number (24 h; 3 h while it has no deadline yet),
-        # so a refresh only hits the API for calls not seen before.
-        async def detail(raw: dict[str, Any]) -> dict[str, Any] | None:
-            n = raw["numeroConvocatoria"]
-            return await ctx.memo.get(
-                f"bdns:detail:{n}",
-                lambda d: (24 if d.get("fechaFinSolicitud") else 3) * 3600,
-                lambda: ctx.http.json(
-                    f"{BDNS_BASE}/convocatorias?numConv={_enc(n)}&vpd=GE", timeout=8, retries=RETRIES
-                ),
-                persist=True,
-            )
-
-        details = await map_limit(to_enrich, DETAIL_CONCURRENCY, detail)
+        details = await map_limit(to_enrich, DETAIL_CONCURRENCY, lambda r: fetch_detail(ctx, r["numeroConvocatoria"]))
 
         items: list[RawOpportunity] = []
         failed = 0
