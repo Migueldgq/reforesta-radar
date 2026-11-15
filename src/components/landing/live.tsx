@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { getLandingData, type LandingData } from "./data";
-import { CountUp } from "./motion";
+import { Loader2 } from "lucide-react";
+import { getLandingData, isFirstRun, type LandingData } from "./data";
+import { CountUp, RefreshWhileLoading } from "./motion";
 
 async function Resolve({ render }: { render: (data: LandingData | null) => ReactNode }) {
   const data = await getLandingData();
@@ -16,9 +17,21 @@ export function Live({ render }: { render: (data: LandingData | null) => ReactNo
   return <Resolve render={render} />;
 }
 
+/** The very first ingest is still running: say so (instead of "no data") and refresh until it is done. */
+export async function FirstRunNotice() {
+  if (!(await isFirstRun())) return null;
+  return (
+    <p role="status" className="mx-auto mt-6 flex max-w-xl items-start justify-center gap-2 rounded-lg border bg-background px-4 py-3 text-left text-sm">
+      <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" aria-hidden />
+      <span>Primera carga en marcha: estamos leyendo las fuentes oficiales. Suele tardar unos 2 minutos.</span>
+      <RefreshWhileLoading />
+    </p>
+  );
+}
+
 export function HeroFigures({ data }: { data: LandingData | null }) {
   if (!data)
-    return <p className="text-sm text-muted-foreground">Datos de fuentes oficiales y programas de empresa, actualizados cada mañana.</p>;
+    return <p className="text-sm text-muted-foreground">Datos de fuentes oficiales y programas de empresa, actualizados cada día a las 9:00.</p>;
   const figures = [
     { n: data.total, label: "convocatorias" },
     { n: data.sources.length, label: "fuentes" },

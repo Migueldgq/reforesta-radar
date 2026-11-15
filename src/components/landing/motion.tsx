@@ -1,6 +1,17 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+
+/** While the first ingest runs: re-render the page from the server every few seconds until the data is there. */
+export function RefreshWhileLoading() {
+  const router = useRouter();
+  useEffect(() => {
+    const t = setInterval(() => router.refresh(), 15_000);
+    return () => clearInterval(t);
+  }, [router]);
+  return null;
+}
 
 /**
  * Runs once per page: reveals `[data-reveal]` / `[data-stagger]` blocks as they enter the
