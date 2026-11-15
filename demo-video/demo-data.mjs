@@ -66,6 +66,16 @@ export async function login(key) {
   return cookie;
 }
 
+/** The demo people as the app knows them: [{ id, name, email }] (only the fictional accounts from the file). */
+export async function demoPeople() {
+  return Promise.all(
+    Object.keys(accounts()).map(async (k) => {
+      const u = (await api("GET", "/api/auth/session", null, await login(k))).json.user;
+      return { id: u.id, name: u.name, email: u.email };
+    }),
+  );
+}
+
 export async function seed() {
   const who = Object.keys(accounts());
   const ck = Object.fromEntries(await Promise.all(who.map(async (k) => [k, await login(k)])));
