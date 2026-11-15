@@ -22,6 +22,11 @@ x-backend: &backend
     HTTP_USER_AGENT: ${HTTP_USER_AGENT:-Mozilla/5.0 (compatible; ReforestaRadar/1.0)}
     RADAR_INGEST_AT: ${RADAR_INGEST_AT:-09:00} # daily scheduled ingest, local time in RADAR_TZ
     RADAR_DISABLED_SOURCES: ${RADAR_DISABLED_SOURCES:-} # e.g. dog,bocm: not ingested, hidden (docs/mantenimiento.md)
+    # «Revisión por IA» (ADR 0041): off while GEMINI_API_KEY is empty. Set the key only in .env, never here.
+    GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    RADAR_AI_REVIEW: ${RADAR_AI_REVIEW:-true} # false: off even with a key
+    RADAR_AI_MODEL: ${RADAR_AI_MODEL:-gemini-flash-lite-latest}
+    RADAR_AI_MAX_CALLS: ${RADAR_AI_MAX_CALLS:-300} # calls sent to the model per ingest run at most
     # Accounts (docs/api-auth.md). Invitation/reset links point at RADAR_PUBLIC_URL; set RADAR_COOKIE_SECURE=true
     # behind https. Bootstrap admin: only used while the users table is empty (prefer `python -m app.users`).
     RADAR_PUBLIC_URL: ${RADAR_PUBLIC_URL:-http://localhost:3010}

@@ -32,6 +32,7 @@ from app.config import settings
 from app.db.session import make_engine
 from app.db.tables import org_settings, tracking, users
 from app.models import DeadlineState, Opportunity, OpportunityKind, WorkLine
+from app.review import hidden_by_ai, kept_ids
 from app.scoring.rank import rank
 from app.scoring.team_profile import apply_profile_all
 from app.scoring.text import has_term, normalize_text
@@ -56,9 +57,13 @@ SERVER_SCORE_NOTE = (
 INSTRUCTIONS = """\
 Radar de convocatorias de financiación (subvenciones, licitaciones, fondos europeos, programas de empresas) para la
 Asociación Reforesta, una ONG ambiental de Madrid. Solo lectura: no puedes cambiar nada.
-- Cada convocatoria tiene una nota de encaje 0-100 calculada por reglas (no por IA), con motivos y avisos que la
+- Cada convocatoria tiene una nota de encaje 0-100 calculada solo por reglas, con motivos y avisos que la
   explican; nivel alto >= 60, medio >= 40. Usa `perfil_reforesta` para explicar una nota o juzgar si Reforesta
   puede presentarse.
+- `revisionIA` (si el radar la tiene activada): una IA lee el texto público de la convocatoria y opina si su tema
+  tiene que ver con Reforesta (si, no, dudoso) con un motivo. Nunca cambia la nota; las que reciben «no» no salen en
+  las búsquedas salvo con `incluir_descartadas` (ni las que el equipo sigue o votó «sirve», que siempre salen). Es una
+  opinión automática: preséntala como tal.
 - Flujo típico: `buscar_convocatorias` (filtra y pagina) → `ver_convocatoria` para la ficha completa (plazos,
   importes, beneficiarios, documentos, ediciones anteriores, quién las ganó y si Reforesta ganó alguna).
 - `estado`: abierta (plazo en curso), proxima (abrirá), cerrada (plazo pasado; se conserva como próxima edición),
@@ -162,16 +167,28 @@ async def _team_profile(conn: AsyncConnection) -> TeamProfile | None:
         return None
 
 
-async def _catalogue(conn: AsyncConnection, team: bool) -> tuple[list[Opportunity], dict[str, str]]:
+async def _catalogue(
+    conn: AsyncConnection, team: bool, descartadas: bool = False
+) -> tuple[list[Opportunity], dict[str, str], int]:
     """Ranked live calls as the web shows them: server score, plus the team's Perfil (and its hidden calls) for the
-    team view. Same code path as /api/oportunidades (read_state + rank)."""
+    team view. Same code path as /api/oportunidades (read_state + rank), including what the «Revisión por IA» takes
+    out of the list unless `descartadas` (the last value: how many it took out)."""
     items = rank((await read_state(conn)).items)
+    discarded = 0
+    if not descartadas and any(o.ai_review for o in items):
+        acted = await kept_ids(conn) if team else set()
+        shown = [o for o in items if not hidden_by_ai(o, acted)]
+        discarded, items = len(items) - len(shown), shown
     if not team or (profile := await _team_profile(conn)) is None:
-        return items, {}
+        return items, {}, discarded
     kept, hidden = apply_profile_all(items, profile)
     kept.sort(key=lambda o: "9999" if o.deadline is None else o.deadline)
     kept.sort(key=lambda o: o.fit.score, reverse=True)
-    return kept, hidden
+    return kept, hidden, discarded
+
+
+def _ai(o: Opportunity) -> dict[str, str] | None:
+    return {"veredicto": o.ai_review.verdict, "motivo": o.ai_review.reason} if o.ai_review else None
 
 
 def _row(o: Opportunity, board: dict[str, str]) -> dict[str, Any]:
@@ -196,6 +213,7 @@ def _row(o: Opportunity, board: dict[str, str]) -> dict[str, Any]:
             "nivel": f.tier,
             "motivos": [_cap(r, 200) for r in f.reasons[:2]],
             "aviso": _cap(f.warnings[0], 200) if f.warnings else None,
+            "revisionIA": _ai(o),
             "tablero": board.get(o.id),
             "url": o.url,
         }
@@ -265,6 +283,10 @@ async def buscar_convocatorias(
     orden: Annotated[
         Orden, Field(description="encaje (nota, como la web), cierre (antes primero) o recientes (vistas por 1.ª vez).")
     ] = "encaje",
+    incluir_descartadas: Annotated[
+        bool,
+        Field(description="Incluir también las que la revisión por IA cree que no tienen que ver con Reforesta."),
+    ] = False,
     limite: Annotated[int, Field(ge=1, le=50, description="Filas por página (máx. 50).")] = 20,
     desde: Annotated[int, Field(ge=0, description="Posición de inicio: usa `siguienteDesde` de la respuesta.")] = 0,
 ) -> CallToolResult:
@@ -273,13 +295,15 @@ async def buscar_convocatorias(
     Úsala para responder «¿qué hay abierto para X en Y?» o listar candidatas. Cada fila trae id, título, organismo,
     fuente, territorio, tipo, estado, cierre (con `cierreEstimado: true` si es una estimación) y días restantes,
     cuándo suele abrir (si hay historial), importe, nota y
-    nivel, 1-2 motivos, el aviso principal y la url oficial. Pide luego `ver_convocatoria` con el id para la ficha.
-    Devuelve `total` y `siguienteDesde` (null si no hay más). Sin token: nota del servidor, sin el perfil del
-    equipo; con token: la misma nota que la web, sin las convocatorias que el perfil del equipo oculta, y el estado
-    en el tablero. Si no encuentras nada, prueba sinónimos o raíces más cortas con '|'."""
+    nivel, 1-2 motivos, el aviso principal, la revisión por IA si la hay y la url oficial. Pide luego
+    `ver_convocatoria` con el id para la ficha. Devuelve `total` y `siguienteDesde` (null si no hay más), y
+    `descartadasPorIA`: cuántas dejó fuera la revisión por IA (inclúyelas con `incluir_descartadas`). Sin token: nota
+    del servidor, sin el perfil del equipo; con token: la misma nota que la web, sin las convocatorias que el perfil
+    del equipo oculta, y el estado en el tablero. Si no encuentras nada, prueba sinónimos o raíces más cortas con
+    '|'."""
     async with _read(ctx) as conn:
         who = await _team_user(ctx, conn)
-        items, hidden = await _catalogue(conn, who is not None)
+        items, hidden, discarded = await _catalogue(conn, who is not None, incluir_descartadas)
         board = await _board_status(conn) if who else {}
         last, _ = await last_ingest(conn)
     alts = _alternatives(texto) if texto else []
@@ -322,6 +346,8 @@ async def buscar_convocatorias(
         "vista": "equipo" if who else "publica",
         "convocatorias": [_row(o, board) for o in page],
     }
+    if discarded:
+        data["descartadasPorIA"] = discarded
     if who:
         data["ocultasPorPerfilDelEquipo"] = len(hidden)
     else:
@@ -383,6 +409,7 @@ def _detail(o: Opportunity) -> dict[str, Any]:
             ],
             "historial": history,
             "programa": o.rsc.to_json() if o.rsc else None,
+            "revisionIA": _ai(o),
         }
     )
 
@@ -423,11 +450,12 @@ async def ver_convocatoria(
     Devuelve lo que muestra la ficha de la web: nota con todos sus motivos y avisos, fechas (publicada, abre, cierra,
     días restantes), importe, beneficiarios, resumen, documentos (título y url), el programa si es de una empresa y
     el historial de ediciones anteriores (BDNS): cuándo suele abrir, plazo habitual, quién ganó (solo recuentos por
-    tipo de entidad), si Reforesta ganó y cuánto, y ONG afines entre los ganadores. Con token añade `equipo`:
-    estado en el tablero, persona asignada, notas y votos «sirve / no sirve». Textos recortados."""
+    tipo de entidad), si Reforesta ganó y cuánto, y ONG afines entre los ganadores, y la revisión por IA si la hay
+    (`descartadaPorIA`: no sale en las búsquedas por defecto). Con token añade `equipo`: estado en el tablero,
+    persona asignada, notas y votos «sirve / no sirve». Textos recortados."""
     async with _read(ctx) as conn:
         who = await _team_user(ctx, conn)
-        items, hidden = await _catalogue(conn, who is not None)
+        items, hidden, _ = await _catalogue(conn, who is not None, descartadas=True)
         o = next((x for x in items if x.id == id), None)
         if o is None and id in hidden:  # hidden by the team's profile: still show it, with the server score
             o = next((x for x in rank((await read_state(conn)).items) if x.id == id), None)
@@ -437,6 +465,8 @@ async def ver_convocatoria(
                 "edición anterior de otra). Búscala con `buscar_convocatorias`."
             )
         data = _detail(o)
+        if o.ai_review and hidden_by_ai(o, await kept_ids(conn) if who else set()):
+            data["descartadaPorIA"] = True
         if who:
             if id in hidden:
                 data["ocultaPorPerfilDelEquipo"] = hidden[id]
@@ -585,12 +615,14 @@ async def fuentes(ctx: Context) -> CallToolResult:
 
 
 SCORING_HOW = (
-    "La nota (0-100) se calcula por reglas, sin IA: las palabras clave de cada línea de trabajo suman su peso; los "
+    "La nota (0-100) se calcula solo por reglas: las palabras clave de cada línea de trabajo suman su peso; los "
     "términos de ONG suman; los excluyentes restan (p. ej. subvención nominativa); el territorio ajusta (Madrid y "
     "ámbito estatal suben; otra comunidad o un ayuntamiento de fuera bajan y topan la nota); el tipo ajusta "
     "(licitaciones, boletines informativos y universidades se topan); y en BDNS el historial suma si Reforesta u ONG "
     "afines ganaron ediciones anteriores y avisa si casi nunca gana una entidad sin ánimo de lucro. Niveles: alto "
-    ">= 60, medio >= 40, bajo < 40. Cada punto aparece como motivo o aviso en la ficha."
+    ">= 60, medio >= 40, bajo < 40. Cada punto aparece como motivo o aviso en la ficha. Si el radar tiene activada "
+    "la revisión por IA, una IA solo ayuda a descartar lo que no tiene que ver (lo saca de la lista por defecto); "
+    "nunca cambia la nota."
 )
 
 

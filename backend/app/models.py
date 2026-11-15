@@ -160,11 +160,23 @@ class History(Contract):
     awards: AwardsSummary | None
 
 
+AiVerdict = Literal["si", "no", "dudoso"]
+
+
+class AiReview(Contract):
+    """«Revisión por IA» (app/review.py, ADR 0041): a second opinion on the topic. It never changes `fit`."""
+
+    verdict: AiVerdict
+    reason: str  # one short Spanish sentence, plain text
+
+
 class Opportunity(OpportunityBase):
     fit: FitAnalysis
     first_seen_at: str | None = Field(default=None, exclude_if=_absent_if_none)  # ISO; Postgres store only
     # BDNS only, attached at read time from bdns_editions (never part of the stored item or its content hash)
     history: History | None = Field(default=None, exclude_if=_absent_if_none)
+    # attached at read time from ai_reviews while the review is on and the verdict is current (never stored in `data`)
+    ai_review: AiReview | None = Field(default=None, exclude_if=_absent_if_none)
 
 
 class SourceHealth(Contract):

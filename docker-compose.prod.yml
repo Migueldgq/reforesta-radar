@@ -2,7 +2,8 @@
 # checkout of this repository (custom command):
 #   docker compose -p <app name> -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
 # (<app name>: the one Dokploy gave the app, e.g. reforesta-radar-prod-fb9o1w; also COMPOSE_PROJECT_NAME), with the
-# .env Dokploy writes from the app's environment: RADAR_DOMAIN and RADAR_DB_PASSWORD (never in git).
+# .env Dokploy writes from the app's environment: RADAR_DOMAIN and RADAR_DB_PASSWORD (never in git); optionally
+# GEMINI_API_KEY for the «Revisión por IA» (ADR 0041).
 # Dokploy's Traefik terminates https and reaches only `web`, over the external network `reforesta-radar-edge`
 # (created by deploy/setup-server.sh, Traefik attached). No service publishes a port.
 
