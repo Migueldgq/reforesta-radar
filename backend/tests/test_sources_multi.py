@@ -3,8 +3,9 @@
 tests/fixtures/<id>/responses.json: url -> body, recorded live on 2026-11-15 and trimmed (anything else is a 404;
 the DOG fixture is the 2026-06-05 summary, the most recent with a relevant notice; a few EU/FB entries are edited to
 cover the municipality warning, the "-CANCELLED" skip and the "becas" drop).
-tests/fixtures/<id>/expected.json: what the TS connector returns on those fixtures with the same frozen clock
-(TZ=Europe/Madrid npx tsx backend/tools/dump_ts_multisource.ts). Items and health must be identical.
+tests/fixtures/<id>/expected.json: what the former TS connector returned on those fixtures with the same frozen clock
+(frozen fixture: the TS backend and its dump tool were removed; see git history before the Python cutover).
+Items and health must be identical.
 """
 
 import json
@@ -22,7 +23,7 @@ from app.sources.base import Source, SourceContext, score_raw
 from app.sources.memo import Memo
 
 FIXTURES = Path(__file__).parent / "fixtures"
-NOW = {  # keep in sync with NOWS in tools/dump_ts_multisource.ts
+NOW = {  # the clocks the expected.json fixtures were dumped with
     "eu": datetime(2026, 11, 15, 12, 0, tzinfo=settings.tz),
     "fb": datetime(2026, 11, 15, 12, 0, tzinfo=settings.tz),
     "bocm": datetime(2026, 11, 15, 12, 0, tzinfo=settings.tz),

@@ -1,64 +1,83 @@
-# Backend del radar (Postgres en Supabase)
+# Backend del radar (FastAPI + Postgres)
 
-Todo es opcional: sin `DATABASE_URL` la app funciona igual que antes (memoria + `.cache/oportunidades.json`).
+El backend es la app de Python en `backend/` (detalles de código, tests y cómo añadir una fuente en
+[backend/README.md](../backend/README.md)). Next.js es solo interfaz: reenvía `/api/*` a esta API.
 
 ## Arquitectura
 
 ```
-GitHub Actions (cron 3×/día + "Run workflow")
-   └─ npx tsx scripts/ingest.ts ──► fuentes (BDNS, BOE, UE, BOCM, DOG, FB, RSC)
+ingest-scheduler (al arrancar y cada 8 h)
+   └─ python -m app.ingest ──► fuentes (BDNS, BOE, UE, BOCM, DOG, FB, RSC)
             │  una transacción por ejecución
             ▼
-   Postgres (Supabase): opportunities · opportunity_changes · ingest_runs · source_runs · fetch_cache
-            ▲  lectura (caché en memoria 60 s)
-   Next.js /api/oportunidades ──► rank() en lectura (encaje geográfico + tipo) ──► UI
+   Postgres 16: opportunities · opportunity_changes · ingest_runs · source_runs · fetch_cache
+            ▲  lectura
+   API FastAPI (/api/oportunidades, /api/fuentes, /api/perfil, /api/analyze-pdf)
+            ▲  rewrite /api/* (next.config.ts, API_URL)
+   Next.js ──► navegador
 ```
 
-- La ingesta guarda el ítem **base**; el ranking se aplica al leer, así un cambio de puntuación no exige reingestar.
+- La ingesta guarda el ítem **base**; el encaje geográfico y por tipo y el orden se aplican al leer, así un cambio
+  de ranking no exige reingestar.
 - Una fuente que falla no toca sus filas. Solo una fuente con estado `ok` marca como `gone_at` lo que ya no devuelve.
-- Las filas de una fuente que ya no está en `SOURCES` (ni es `rsc`) se marcan `gone_at` en la siguiente ingesta, sea cual sea `--source`; el resumen lo indica en «removed sources». La web tampoco muestra la salud de esas fuentes.
-- `?refresh=1` con base de datos no consulta las fuentes desde la web: devuelve el estado guardado.
-- Si la base de datos no responde (o aún no hay ninguna ingesta correcta), la web usa la caché local y lo indica en `storageError`.
-- Esquema: `supabase/migrations/0001_init.sql`. SQL de la app: `src/lib/db.ts` y `src/lib/store-pg.ts`.
+  Las filas de fuentes que ya no están registradas se marcan `gone_at` en la siguiente ingesta.
+- La API nunca consulta las fuentes al responder: no hay `?refresh=1`. «Volver a cargar» en la web solo vuelve a
+  leer la API.
+- `ingestStale` (más de 12 h sin una ingesta correcta) hace que Inicio muestre «Los datos no se actualizan desde
+  hace N h».
+- Si Postgres no responde, la API devuelve 503; si la API no responde, la web muestra un estado de error (o la
+  última copia guardada en el navegador, con un aviso). La portada se pinta sin cifras.
+- Esquema: migraciones de Alembic en `backend/alembic/` (la API las aplica al arrancar).
+- `SCORING_VERSION` (`backend/app/scoring/__init__.py`, ahora 11) se guarda en cada `ingest_runs`; súbelo cuando
+  cambie la puntuación base.
 
 ## Puesta en marcha
 
-1. Crear un proyecto en supabase.com (región UE, p. ej. Frankfurt). Guardar la contraseña de la base de datos.
-2. Aplicar la migración: *SQL Editor* → pegar `supabase/migrations/0001_init.sql` → *Run*. O bien:
-   `psql "<cadena Session pooler>" -f supabase/migrations/0001_init.sql` (es idempotente).
-3. En GitHub: *Settings → Secrets and variables → Actions → New repository secret* `DATABASE_URL` con la cadena
-   **Session pooler** (puerto 5432 en `*.pooler.supabase.com`; sirve para la ingesta y para `pg_dump`).
-4. *Actions → Ingest → Run workflow* para la primera carga (~30–40 s de fuentes).
-5. En el hosting de la web, `DATABASE_URL` con la cadena **Transaction pooler** (puerto 6543). Redesplegar.
-
-## Ejecutar la ingesta en local
-
-```
-DATABASE_URL="postgresql://..." npx tsx scripts/ingest.ts             # todas las fuentes
-DATABASE_URL="postgresql://..." npx tsx scripts/ingest.ts --source bdns,boe
-npx tsx scripts/ingest.ts --dry-run                                    # sin escribir (sin DB: compara contra vacío)
+```bash
+docker compose up -d --build        # postgres, api, ingest-scheduler, web
+docker compose ps                   # api "healthy"; la primera ingesta tarda unos minutos
 ```
 
-El resumen muestra por fuente: nuevas / cambiadas / iguales / desaparecidas, duración y grupos de posibles
-duplicados (no se fusionan todavía). Sale con código 1 solo si fallan todas las fuentes o la escritura.
+| Servicio | URL / puerto (host) | Notas |
+|---|---|---|
+| `web` | http://localhost:3010 (`RADAR_WEB_PORT`) | Next.js `standalone`, usuario sin privilegios. `API_URL=http://api:8000` se fija al construir la imagen (rewrites) y al ejecutar (portada). |
+| `api` | http://localhost:8010 (`RADAR_API_PORT`), docs en `/docs` | Con healthcheck sobre `/health`. |
+| `postgres` | `localhost:5440` (`RADAR_DB_PORT`) | Usuario, contraseña y base `radar` (solo desarrollo; `RADAR_DB_PASSWORD`). |
+| `ingest-scheduler` | — | Ingesta al arrancar y cada `RADAR_INGEST_EVERY_S` (28800 s = 8 h). |
 
-## Riesgos conocidos y salvaguardas
+Los valores se cambian en un `.env` en la raíz (ver `.env.example`). Para el frontend en local con recarga en
+caliente: `docker compose up -d postgres api` y `npm run dev` (usa `API_URL`, por defecto `http://localhost:8010`).
+
+## Ejecutar la ingesta a mano
+
+```bash
+docker compose run --rm ingest                     # todas las fuentes
+docker compose run --rm ingest --source bdns,boe    # algunas
+docker compose run --rm ingest --dry-run            # sin escribir
+```
+
+El resumen muestra por fuente: nuevas / cambiadas / iguales / desaparecidas y la duración. Sale con código 1 solo
+si fallan todas las fuentes o la escritura.
+
+## Qué se retiró
+
+El backend anterior en TypeScript (rutas `src/app/api/*`, conectores y caché en `src/lib/`, `.cache/`,
+`scripts/ingest.ts`, la migración de `supabase/` y el workflow de GitHub Actions que ingestaba en Supabase
+3 veces al día) se eliminó al pasar a Python. Ya no hay ingesta en GitHub Actions ni base de datos en Supabase:
+la ingesta programada es el servicio `ingest-scheduler`. Para algo más robusto en un servidor, usar el cron del
+host con `docker compose run --rm ingest --trigger schedule`.
+
+## Riesgos conocidos
 
 | Riesgo | Salvaguarda |
 |---|---|
-| Supabase Free **se pausa tras 7 días sin actividad** | La ingesta 3×/día debería contar como actividad (sin verificar con Supabase). Si se pausa, la web cae a la caché local (`storageError`). |
-| Supabase Free **no tiene copias de seguridad automáticas** | Job `backup` nocturno: `pg_dump` como artefacto con 7 días de retención. Provisional hasta tener un bucket externo. |
-| GitHub **desactiva los cron tras 60 días sin actividad** en repos públicos | Aviso de frescura: `ingestStale` (> 12 h sin ingesta correcta) muestra "Los datos no se actualizan desde hace N h". Reactivar en *Actions*. |
-| Una fuente cambia su HTML | Se registra en `source_runs`; sus filas anteriores siguen visibles y la fuente sale como parcial. |
-| El cron es UTC | 06/13/19 h en invierno; en verano corre una hora más tarde (ver comentario en el workflow). |
-
-Plan B si Supabase da problemas: Postgres en **Fly.io** (o cualquier Postgres gestionado). Solo cambia
-`DATABASE_URL`; el script de ingesta es independiente de Next y puede programarse con cualquier cron.
+| Sin copias de seguridad automáticas de Postgres | Pendiente: `pg_dump` periódico del volumen `radar-pgdata`. |
+| El bucle de `ingest-scheduler` no es un cron: si el contenedor se recrea, ingesta otra vez al arrancar | Aceptable (la ingesta es idempotente); usar el cron del host si importa la hora exacta. |
+| Una fuente cambia su HTML | Se registra en `source_runs`; sus filas anteriores siguen visibles y la fuente sale como parcial o error. |
 
 ## Siguiente tramo
 
-- Auth con Supabase (enlace mágico) y tablas con políticas RLS explícitas (migración 0002).
-- Tablero de seguimiento compartido (estado, responsable, notas por oportunidad).
+- Tablero de seguimiento compartido (estado, responsable, notas por oportunidad) con autenticación.
 - Perfil de equipo guardado en la base de datos.
-- "Nuevo desde tu última visita" (usa `first_seen_at` y `opportunity_changes`).
+- «Nuevo desde tu última visita» (usa `first_seen_at` y `opportunity_changes`).
 - Alertas (correo) para oportunidades nuevas de encaje alto o plazos que cierran.

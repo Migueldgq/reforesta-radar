@@ -412,8 +412,8 @@ export default function LandingPage() {
                 De dónde salen los datos.
               </h2>
               <p className="mt-4 leading-relaxed text-muted-foreground">
-                Todo se consulta en vivo en fuentes oficiales y webs públicas. No hace falta cuenta, clave ni base de
-                datos. Las cifras cambian cada día.
+                Todo sale de fuentes oficiales y webs públicas, que el radar vuelve a consultar cada 8 horas. No hace
+                falta cuenta ni clave. Las cifras cambian cada día.
               </p>
             </div>
             <div data-reveal className="lg:col-span-8">

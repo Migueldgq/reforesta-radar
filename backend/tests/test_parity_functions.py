@@ -1,7 +1,7 @@
 """Function-level parity with the TypeScript scoring: identical inputs must give identical outputs.
 
-Golden data: tests/golden/ts_functions.json.gz, produced by tools/dump_ts_golden.ts with a frozen clock
-(regenerate with `TZ=Europe/Madrid npx tsx backend/tools/dump_ts_golden.ts` from the repo root).
+Golden data: tests/golden/ts_functions.json.gz, dumped from the former TypeScript scoring with a frozen clock.
+It is a frozen fixture now (the TS backend and its dump tool were removed; see git history before the Python cutover).
 """
 
 import gzip

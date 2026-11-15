@@ -1,0 +1,15 @@
+# Frontend image context (the backend has its own: backend/.dockerignore)
+.git
+.github
+node_modules
+.next
+backend
+demo-video
+data
+docs
+*.md
+.env*
+!.env.example
+*.tsbuildinfo
+.DS_Store
+.impeccable

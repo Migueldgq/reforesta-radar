@@ -89,9 +89,9 @@ function subscribe(l: () => void) {
   };
 }
 
-async function request(force: boolean): Promise<{ data?: Payload; error?: string }> {
+async function request(): Promise<{ data?: Payload; error?: string }> {
   try {
-    const res = await fetch(`/api/oportunidades${force ? "?refresh=1" : ""}`, { cache: "no-store" });
+    const res = await fetch("/api/oportunidades", { cache: "no-store" });
     if (!res.ok) throw new Error(`El servidor respondió ${res.status}`);
     return { data: (await res.json()) as Payload };
   } catch (e) {
@@ -111,6 +111,7 @@ interface RadarState {
   loading: boolean;
   refreshing: boolean;
   error: string | null;
+  /** Re-reads the API. Sources are only fetched by the scheduled ingest, so `force` changes nothing (kept for callers). */
   reload: (force?: boolean) => void;
   byId: Map<string, Opportunity>;
 
@@ -149,11 +150,11 @@ export function RadarProvider({ children }: { children: ReactNode }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fetchRef = useRef<((force: boolean) => Promise<void>) | null>(null);
+  const fetchRef = useRef<(() => Promise<void>) | null>(null);
 
   // Fetch, store the payload for instant paint next time, and re-poll while the server says it is refreshing.
-  const fetchData = useCallback((force: boolean): Promise<void> => {
-    return request(force).then((r) => {
+  const fetchData = useCallback((): Promise<void> => {
+    return request().then((r) => {
       if (r.data) {
         setData(r.data);
         writePayload(r.data);
@@ -163,7 +164,7 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       const again = r.data?.refreshing === true;
       setRefreshing(again);
       if (pollRef.current) clearTimeout(pollRef.current);
-      if (again) pollRef.current = setTimeout(() => void fetchRef.current?.(false), 6000);
+      if (again) pollRef.current = setTimeout(() => void fetchRef.current?.(), 6000);
     });
   }, []);
 
@@ -182,21 +183,18 @@ export function RadarProvider({ children }: { children: ReactNode }) {
       const init = filtersFromUrl();
       if (init) setFilters(init);
     });
-    void fetchData(false);
+    void fetchData();
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
   }, [fetchData]);
 
-  const reload = useCallback(
-    (force = false) => {
-      if (data) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-      void fetchData(force);
-    },
-    [data, fetchData],
-  );
+  const reload = useCallback(() => {
+    if (data) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+    void fetchData();
+  }, [data, fetchData]);
 
   const triage = useSyncExternalStore(subscribe, readTriage, () => EMPTY);
 
