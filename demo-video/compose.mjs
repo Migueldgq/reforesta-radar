@@ -332,7 +332,7 @@ timed.forEach((s, idx) => {
           <span class="mark mark-cn">${MARK_SVG}</span>
           <div class="cn-id">
             <p class="cn-name">${esc(c.name)}</p>
-            <p class="cn-url"><span class="muted">${esc(c.host)}</span>${esc(c.path)}<span class="muted"> · ${esc(c.note)}</span></p>
+            <p class="cn-url"><span class="muted">${esc(c.host)}</span>${esc(c.path)}<br><span class="muted">${esc(c.note)}</span></p>
           </div>
           <span class="cn-state">${CHECK_SVG}<span>${esc(c.state)}</span></span>
         </div>
