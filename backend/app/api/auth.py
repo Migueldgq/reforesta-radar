@@ -114,20 +114,27 @@ async def session(conn: Db, request: Request, response: Response) -> SessionInfo
 
 @router.post("/api/auth/login", response_model=SessionInfo, responses={401: {"description": BAD_LOGIN}, 429: {}})
 async def login(body: LoginIn, conn: Db, request: Request, response: Response) -> SessionInfo:
+    """Throttling rule: app/auth/throttle.py and docs/api-auth.md. A right password is never refused because of
+    other clients' failures, unless the account's hard ceiling is reached."""
     email, ip = normalize_email(body.email), client_ip(request)
-    wait = throttle.by_account.retry_after(email) or throttle.by_ip.retry_after(ip)
-    if wait:
-        log.warning("login throttled ip=%s", ip)
+    pair = f"{email}|{ip}"
+    if wait := throttle.account_ceiling.retry_after(email):
+        log.warning("login refused: account ceiling reached ip=%s", ip)
         raise HTTPException(429, detail=TOO_MANY, headers={"Retry-After": str(wait)})
+    over = throttle.account_ip.retry_after(pair)
+    # record before the (awaited) check, so concurrent guesses cannot all slip under the limits
+    stamp = throttle.account_ceiling.hit(email)
+    throttle.account_ip.hit(pair)
     row = (await conn.execute(select(users).where(func.lower(users.c.email) == email))).first()
     stored = row.password_hash if row is not None and row.active else None
     if not await verify_password_async(stored, body.password):  # dummy hash when there is no usable account
-        throttle.by_account.hit(email)
-        throttle.by_ip.hit(ip)
         log.info("login failed user=%s ip=%s", row.id if row is not None else "unknown", ip)
+        if over:
+            raise HTTPException(429, detail=TOO_MANY, headers={"Retry-After": str(over)})
         raise HTTPException(401, detail=BAD_LOGIN)
     assert row is not None
-    throttle.by_account.reset(email)
+    throttle.account_ceiling.undo(email, stamp)
+    throttle.account_ip.reset(pair)
     values: dict[str, object] = {"last_login_at": now()}
     if needs_rehash(row.password_hash):
         values["password_hash"] = await hash_password_async(body.password)
@@ -233,7 +240,7 @@ async def accept_reset(body: AcceptResetIn, conn: Db, response: Response) -> Ses
     )
     await conn.execute(update(password_resets).where(password_resets.c.id == r.id).values(used_at=now()))
     await revoke_sessions(conn, r.user_id)
-    throttle.by_account.reset(r.email)
+    throttle.account_ceiling.reset(r.email)
     await start_session(conn, response, r.user_id)
     log.info("password reset used: user %d", r.user_id)
     return _session_info(Me(id=r.user_id, email=r.email, name=r.name, role=r.role))

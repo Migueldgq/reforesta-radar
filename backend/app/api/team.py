@@ -215,15 +215,17 @@ async def rename_me(body: NameIn, user: User, conn: Db) -> Me:
 
 @router.post("/api/me/password", status_code=204, responses={400: {}, 429: {}})
 async def change_password(body: PasswordChangeIn, user: User, conn: Db, request: Request) -> Response:
-    """Needs the current password (same throttle as login). Ends every session and starts a fresh one here."""
-    key = normalize_email(user.email)
-    if wait := throttle.by_account.retry_after(key):
+    """Needs the current password (5 wrong ones per 15 min for this user; login is not affected). Ends every
+    session and starts a fresh one here."""
+    key = str(user.id)
+    if wait := throttle.password_change.retry_after(key):
         raise HTTPException(429, detail="Demasiados intentos. Espera unos minutos.", headers={"Retry-After": str(wait)})
+    stamp = throttle.password_change.hit(key)  # before the awaited check: no race
     stored = (await conn.execute(select(users.c.password_hash).where(users.c.id == user.id))).scalar_one()
     if not await verify_password_async(stored, body.current_password):
-        throttle.by_account.hit(key)
         log.info("password change: wrong current password user=%d ip=%s", user.id, client_ip(request))
         raise HTTPException(400, detail="La contraseña actual no es correcta.")
+    throttle.password_change.undo(key, stamp)
     check_password(body.new_password)
     new_hash = await hash_password_async(body.new_password)
     await conn.execute(update(users).where(users.c.id == user.id).values(password_hash=new_hash))
