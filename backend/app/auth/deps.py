@@ -16,6 +16,7 @@ from fastapi import Depends, HTTPException, Request, Response
 from sqlalchemy import delete, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from app.auth import pats
 from app.auth.tokens import hash_token, new_token
 from app.config import settings
 from app.db.tables import sessions, users
@@ -93,8 +94,9 @@ async def start_session(conn: AsyncConnection, response: Response, user_id: int)
 
 
 async def revoke_sessions(conn: AsyncConnection, user_id: int) -> None:
-    """Ends every session of the user (logout everywhere)."""
+    """Ends every session of the user (logout everywhere) and revokes their personal access tokens (MCP)."""
     await conn.execute(delete(sessions).where(sessions.c.user_id == user_id))
+    await pats.revoke_all(conn, user_id)
 
 
 async def session_user(conn: AsyncConnection, request: Request, response: Response) -> CurrentUser | None:
