@@ -4,6 +4,8 @@ Returned as a FitAdjust and applied at read time by rank.adjusted_fit: the delta
 territorial and kind caps still bound it), the cap last (it is a ceiling on the displayed score), the reasons first.
 """
 
+from collections.abc import Callable
+
 from app.models import AwardsSummary, History
 from app.scoring.score import FitAdjust
 
@@ -15,6 +17,9 @@ NON_PROFIT_HIGH = 6
 NON_PROFIT_SHARE_LOW = 0.2
 NON_PROFIT_LOW = -10
 NO_NON_PROFIT_CAP = 45
+# The two penalties need a trustworthy series: every counted edition matched with a title Jaccard >= 0.6, or >= 2
+# counted editions that each show the same thing. Otherwise the counts stay visible in history.awards only.
+STRONG_MATCH = 0.6
 
 # Plural Spanish names of the beneficiary classes (bdns_history.nif_class), for the warnings.
 CLASS_LABELS = {
@@ -42,6 +47,15 @@ def _dominant(a: AwardsSummary) -> tuple[str, int]:
     return next(((k, n) for k, n in a.by_class.items() if k != "sinAnimo"), ("otra", 0))
 
 
+def _penalty_backed(history: History, low: Callable[[int, int], bool]) -> bool:
+    """`low(non_profit, count)` holds for the awards counted, from strong matches or >= 2 agreeing editions."""
+    years = set(history.awards.editions) if history.awards else set()
+    counted = [e for e in history.editions if e.year in years and e.awards and e.awards.count]
+    if counted and all((e.match or 0) >= STRONG_MATCH for e in counted):
+        return True
+    return len(counted) >= 2 and all(low(e.awards.non_profit, e.awards.count) for e in counted if e.awards)
+
+
 def history_adjust(history: History | None) -> FitAdjust | None:
     a = history.awards if history else None
     if a is None:
@@ -66,7 +80,11 @@ def history_adjust(history: History | None) -> FitAdjust | None:
             reasons.append(
                 f"En las últimas ediciones, {a.non_profit} de {a.total} ayudas {verb} a entidades sin ánimo de lucro."
             )
-        elif share < NON_PROFIT_SHARE_LOW:
+        elif (
+            share < NON_PROFIT_SHARE_LOW
+            and history
+            and _penalty_backed(history, lambda np, n: np == 0 if a.non_profit == 0 else np / n < NON_PROFIT_SHARE_LOW)
+        ):
             delta += NON_PROFIT_LOW
             cls, n = _dominant(a)
             label = CLASS_LABELS.get(cls, CLASS_LABELS["otra"])

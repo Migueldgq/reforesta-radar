@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.config import settings
 from app.http import Http
 from app.ingest import history as ingest_history
-from app.models import AwardsSummary, History, Opportunity, ReforestaWin
+from app.models import AwardsSummary, EditionAwards, History, HistoryEdition, Opportunity, ReforestaWin
 from app.scoring.rank import adjusted_fit
 from app.sources import bdns
 from app.sources import bdns_history as h
@@ -121,6 +121,40 @@ def test_matching_one_edition_per_year_picks_the_best_line() -> None:
     assert "904965" not in {c.numero for c in found}
 
 
+def test_amendments_are_not_editions() -> None:
+    # the two doubtful links of the first live run (titles as in BDNS)
+    assert h.is_amendment("Acuerdo por el que se aprueba el incremento del crédito de la convocatoria, para el año "
+                          "2020, de ayudas al desarrollo rural de la isla de Menorca")  # fmt: skip
+    assert h.is_amendment("ORDEN 24/3/2024 modifica orden 30/12/2024 ayudas para silvicultura productiva de coníferas")
+    for title in (
+        "Orden por la que se modifica la Orden de convocatoria de ayudas a entidades ambientales",
+        "Modificación de la convocatoria de subvenciones a asociaciones 2025",
+        "Ampliación de crédito de la convocatoria de ayudas a proyectos ambientales",
+        "Corrección de errores del extracto de la convocatoria de subvenciones",
+        "Rectificación de la Resolución de convocatoria de premios de medio ambiente",
+        "Prórroga del plazo de presentación de solicitudes de las ayudas forestales",
+        "Ampliación del plazo de solicitud de la convocatoria de voluntariado",
+        "Ampliació del termini de la convocatòria de subvencions a entitats",
+        "Correcció d'errades de la convocatòria d'ajuts per a la custòdia del territori",
+        "Increment de crèdit de la convocatòria de subvencions mediambientals",
+        "Corrección de erros da convocatoria de axudas para o voluntariado ambiental",
+        "Ampliación do prazo da convocatoria de subvencións",
+    ):
+        assert h.is_amendment(title), title
+    for title in (
+        "SUBVENCIÓN ENTIDADES SIN ÁNIMO DE LUCRO PROYECTOS AMBIENTALES 2026",
+        "Subvenciones para la modernización de explotaciones forestales",  # "modernización" is not "modific..."
+        "Ayudas a la ampliación de espacios naturales protegidos",
+    ):
+        assert not h.is_amendment(title), title
+
+    current = h.ListedCall("1", "Ayudas para silvicultura productiva de coníferas 2026", "2026-01-10")
+    amended = h.ListedCall("2", "ORDEN modifica orden ayudas para silvicultura productiva de coníferas", "2025-03-01")
+    real = h.ListedCall("3", "Ayudas para silvicultura productiva de coníferas 2024", "2024-01-10")
+    found = h.match_editions(current, frozenset(), [amended, real])
+    assert [(c.numero, c.match) for c in found] == [("3", 1.0)]
+
+
 def test_title_tokens_drop_years_boilerplate_and_organ() -> None:
     organ = frozenset({"fundacion", "biodiversidad"})
     title = (
@@ -188,26 +222,33 @@ def test_window_phrase() -> None:
 
 def test_typical_opening_phrases() -> None:
     def text(*eds: h.EditionRow) -> str:
-        t = h.typical_opening(list(eds))
+        t = h.typical_opening([_ed(eds[0].published_at, eds[0].opened_at, numero="0"), *eds[1:]])  # first: current
         assert t is not None
         return t.text
 
     assert text(_ed("2026-03-01", "2026-03-10"), _ed("2025-03-01", "2025-04-02"), _ed("2024-02-20", "2024-03-05")) == (
         "Suele abrir entre marzo y abril"
     )
-    assert text(_ed("2026-07-01", "2026-07-10"), _ed("2025-07-01", "2025-07-02")) == "Suele abrir en julio"
+    assert text(_ed("2026-07-01", "2026-07-10"), _ed("2025-07-01", "2025-07-02"), _ed("2024-07-01", "2024-07-09")) == (
+        "Suele abrir en julio"
+    )
     # spread over 2 months: said honestly
     assert text(_ed("2026-04-01", "2026-04-10"), _ed("2025-10-01", "2025-10-02"), _ed("2024-06-01", "2024-06-02")) == (
         "Ha abierto entre abril y octubre"
     )
     # around the year end: December to January is a 1-month spread
-    t = h.typical_opening([_ed("2026-01-01", "2026-01-10"), _ed("2025-12-20", "2025-12-22")])
+    t = h.typical_opening([_ed("2026-01-01", "2026-01-10", numero="0"), _ed("2025-12-20", "2025-12-22"),
+                           _ed("2025-01-03", "2025-01-08")])  # fmt: skip
     assert t is not None and (t.from_, t.to, t.text) == (12, 1, "Suele abrir entre diciembre y enero")
-    # editions not every year
-    t = h.typical_opening([_ed("2026-08-03", "2026-08-03"), _ed("2025-06-30", "2025-07-02"),
+    # >= 3 editions with a gap of >= 2 years: irregular
+    t = h.typical_opening([_ed("2026-08-03", "2026-08-03", numero="0"), _ed("2025-06-30", "2025-07-02"),
                            _ed("2022-09-08", "2022-09-09")])  # fmt: skip
     assert t is not None and t.irregular and t.text == "Convocatoria irregular: no sale todos los años"
-    assert h.typical_opening([_ed("2026-08-03", "2026-08-03")]) is None
+    # one previous edition: only when it opened, nothing about regularity (even 3 years apart)
+    for prev in ("2025-05-02", "2023-05-02"):
+        t = h.typical_opening([_ed("2026-08-03", "2026-08-03", numero="0"), _ed(prev, prev)])
+        assert t is not None and not t.irregular and t.text == f"La edición anterior abrió en mayo de {prev[:4]}"
+    assert h.typical_opening([_ed("2026-08-03", "2026-08-03", numero="0")]) is None
 
 
 def test_typical_window_most_common_newest_on_tie() -> None:
@@ -264,19 +305,34 @@ async def test_no_previous_edition_or_unknown_organ_gives_no_rows() -> None:
 # ---------- scoring ----------
 
 
-def _opp(awards: AwardsSummary | None, region: str = "Comunidad de Madrid", nivel: str = "Autonómica") -> Opportunity:
+def _opp(
+    awards: AwardsSummary | None,
+    region: str = "Comunidad de Madrid",
+    nivel: str = "Autonómica",
+    editions: list[HistoryEdition] | None = None,
+) -> Opportunity:
+    """Item with a history whose counted editions default to 2 strong matches splitting the awards."""
     raw = bdns.detail_to_raw(
         {"numeroConvocatoria": "904719", "descripcion": "x", "fechaRecepcion": "2026-05-11"},
         json.loads((FX_BDNS / "detail-904719.json").read_text()),
         NOW,
     )
     o = score_raw(raw, NOW.date()).model_copy(update={"region": region, "nivel_admin": nivel})
-    return o.model_copy(update={"history": History(editions=[], typical_opening=None, typical_window=None,
-                                                   awards=awards)})  # fmt: skip
+    if editions is None and awards is not None:
+        n, np = awards.total, awards.non_profit
+        editions = [_hed(2025, n - n // 2, np - np // 2, 0.9), _hed(2024, n // 2, np // 2, 0.9)]
+    return o.model_copy(update={"history": History(editions=editions or [], typical_opening=None,
+                                                   typical_window=None, awards=awards)})  # fmt: skip
+
+
+def _hed(year: int, count: int, non_profit: int, match: float) -> HistoryEdition:
+    awards = EditionAwards(count=count, non_profit=non_profit, importe=1.0)
+    return HistoryEdition(year=year, numero=str(year), url="u", opened_at=None, closes_at=None, window=None,
+                          match=match, awards=awards)  # fmt: skip
 
 
 def _awards(total: int, non_profit: int, by_class: dict[str, int] | None = None, **kw: Any) -> AwardsSummary:
-    return AwardsSummary(editions=[2025, 2024], total=total, non_profit=non_profit,
+    return AwardsSummary(editions=kw.get("years", [2025, 2024]), total=total, non_profit=non_profit,
                          non_profit_share=round(non_profit / total, 2) if total else 0.0,
                          by_class=by_class or {"sinAnimo": non_profit}, won_by_reforesta=kw.get("won", []),
                          peers=kw.get("peers", []))  # fmt: skip
@@ -315,6 +371,24 @@ def test_history_signal_rules() -> None:
     )
     mixed = adjusted_fit(_opp(_awards(10, 0, {"empresa": 6, "publico": 4})))
     assert mixed.warnings[-1].endswith("(fueron sobre todo a empresas).")
+
+
+def test_penalties_need_a_trustworthy_basis() -> None:
+    base = adjusted_fit(_opp(None))
+    companies = _awards(20, 0, {"empresa": 20}, years=[2025])
+    # one weakly matched edition (Jaccard 0.5): the fact stays in history.awards, the score does not move
+    weak = _opp(companies, editions=[_hed(2025, 20, 0, 0.5)])
+    assert adjusted_fit(weak) == base and weak.history and weak.history.awards == companies
+    # one strongly matched edition (>= 0.6): penalised
+    assert adjusted_fit(_opp(companies, editions=[_hed(2025, 20, 0, 0.6)])).score == 45
+    # two weak editions that agree (both none / both under 20 %): penalised
+    both = _awards(20, 0, {"empresa": 20})
+    assert adjusted_fit(_opp(both, editions=[_hed(2025, 10, 0, 0.5), _hed(2024, 10, 0, 0.55)])).score == 45
+    low = _awards(20, 2, {"ayuntamiento": 18, "sinAnimo": 2})
+    assert adjusted_fit(_opp(low, editions=[_hed(2025, 10, 1, 0.5), _hed(2024, 10, 1, 0.5)])).score == base.score - 10
+    # two weak editions that disagree (0 of 10 and 3 of 10 = 15 % overall): no penalty
+    mixed = _awards(20, 3, {"ayuntamiento": 17, "sinAnimo": 3})
+    assert adjusted_fit(_opp(mixed, editions=[_hed(2025, 10, 0, 0.5), _hed(2024, 10, 3, 0.5)])) == base
 
 
 def test_history_signal_is_bounded_by_territory_and_applied_once() -> None:
