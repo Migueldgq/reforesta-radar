@@ -22,6 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.routing import Route
 
+from app import access_log
 from app.api import analyze_pdf, auth, board, ingest_requests, oauth, perfil, team, tokens
 from app.api.state import last_ingest, read_sources, read_state
 from app.auth.accounts import bootstrap_admin
@@ -38,6 +39,7 @@ from app.scoring.rank import rank
 log = logging.getLogger(__name__)
 # app loggers (auth audit lines, read errors) next to uvicorn's own; never tokens or passwords
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+access_log.install()  # uvicorn's per-request lines without query strings
 
 
 @asynccontextmanager
