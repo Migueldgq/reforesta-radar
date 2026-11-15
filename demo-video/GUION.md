@@ -1,35 +1,73 @@
-# Guion del vídeo de demo — Reforesta Radar (v5, vídeo de lanzamiento)
+# Guion del vídeo de demo — Reforesta Radar (narrado)
 
-Duración: **≈88 s** (87,6 s). 1920×1080, 30 fps, H.264 + AAC, `faststart`. Mismo formato que la v4: lienzo blanco, un titular corto por momento (se escribe letra a letra, palabras clave en verde) y debajo **una pieza recortada de la app real**, con la cámara que entra y se desplaza. Cambios entre momentos con desenfoque y escala; una sección en lienzo verde con barrido circular de entrada y salida. Música de fondo + tecleo, clics, *whoosh* y *pop*. Respecto a la v4 (se conserva en `out/demo-v4.mp4`): tres momentos nuevos (Fuentes, Analizar PDF, Equipo) y la sección del agente de IA explica que el radar se conecta por MCP.
+Duración: **3:39,5** (219.5 s). 1920×1080, 30 fps, H.264 + AAC, `faststart`. Misma estética que la v5 (lienzo blanco, un titular escrito por momento con palabras clave en verde, una pieza recortada de la app real con cámara que entra y se desplaza; sección del agente de IA en lienzo verde), ahora **con locución** en castellano de España que lo explica para quien no es técnico. Los titulares pasan a ser rótulos cortos que acompañan a la voz. Subtítulos aparte, sin quemar: `out/demo-final.es.srt`. La versión anterior, sin voz, se conserva en `out/demo-v5.mp4`.
 
-Los ids y textos son los de `scenes.mjs`. La duración de cada momento de pantalla sale de la grabación (`captures/<id>.json`); los tiempos de abajo son los de la versión renderizada y cambian si se vuelve a capturar. Las cifras de los titulares (`{fuentes}`, `{total}`) salen de la app al capturar (`captures/facts.json`), nunca se escriben a mano. La app se graba con la sesión de una cuenta de demostración (ficticia) y un tablero de ejemplo: ver «Datos de demostración» en `README.md`.
+**La voz marca el ritmo**: cada momento dura lo que su locución más un respiro (ver «Voice» en `README.md`). Voz: «Emilio – Warm, Solid and Convincing» de ElevenLabs (`eleven_v4`), una frase por archivo (`GUION-VOZ.md`). Los tiempos de abajo son los del montaje final y cambian si cambian los archivos de voz o se vuelve a grabar.
 
-| t (s) | id | En pantalla | Titular |
+Las cifras que se ven (7 fuentes, 323 convocatorias, 100, 86, 45…) son las de la app el día de la grabación (15 nov 2026). La app se graba con una cuenta de demostración ficticia y un tablero de ejemplo («Datos de demostración» en `README.md`).
+
+| t | id | En pantalla | Titular |
 |---|---|---|---|
-| 0,0 | `intro` | Salta la marca (cuadrado verde con el brote) y se escribe «Reforesta Radar», centrados. | — |
-| 1,9 | `statement` | Dos líneas centradas; la segunda en verde. | «7 fuentes, 323 convocatorias / *y un equipo de siete.*» |
-| 4,8 | `fuentes` | `/fuentes`: «7 fuentes · 323 convocatorias · última ingesta hace …» y la tabla (fuente, estado «Correcta» / «Sin novedades», resultados, nota); la página baja por las siete fuentes. Vuelve arriba: «Una ingesta programada consulta todas las fuentes cada mañana a las 9:00» y el puntero se posa en **Actualizar ahora** (no se pulsa). | «Siete fuentes, *a la vista*» → «¿No queréis esperar? *Actualizad ahora*» |
-| 12,6 | `inicio` | `/`: cabecera «323 oportunidades de 7 fuentes · datos de hace …» y las cuatro tarjetas; la cámara baja al aviso «Ahora mismo no hay convocatorias abiertas con encaje alto…» y a las primeras filas. | «Las lee *cada mañana*» → «Si hoy no hay nada bueno, *lo dice*» |
-| 18,3 | `ganasteis` | Primera fila: **100**, «Ya la ganasteis». Clic → ficha: «Reforesta ya la ganó en 2025 (29.378 €), 2024 y 2022»; la cámara baja a **Ediciones anteriores**: cuándo abre, plazo habitual, quién la ganó. | «Arriba, *la que ya ganasteis*» → «Cuándo abre y *quién la gana*» |
-| 29,8 | `motivos` | Ficha de BDNS 930968: **45** «Puede encajar: revisa los avisos» y sus motivos; los avisos: cierre estimado y «Ninguna de las 37 ayudas anteriores fue a una entidad sin ánimo de lucro…». | «Cada nota, *con sus motivos*» → «Y sus avisos: *aquí ganan empresas*» |
-| 35,1 | `analizar` | `/analizar`: «Arrastra un PDF o elige un archivo»; clic en **Elegir archivo** y se sube `miteco-convocatoria-923290.pdf` (PDF público de BDNS 923290, MITECO, que está en el radar). Resultado: **86/100** «Encaje alto», «Es la nota del radar para esta convocatoria, la misma que en la lista.»; la cámara baja a **Motivos** (siete) y **Avisos** (cierre estimado). | «¿Tenéis las bases? *Subid el PDF*» → «Misma nota, *mismos motivos*» |
-| 43,6 | `empresas` | `/empresas`: tarjeta de Fundación Unicaja; la cámara se acerca a «Último plazo» y «Qué lo limita». | «Fundaciones, *comprobadas a mano*» → «Y también *lo que las limita*» |
-| 49,1 | `equipo` | Ficha de BDNS 926034: **En estudio**, **Nos sirve**, Responsable → **Marta Ibáñez** (la lista desplegada se corta), nota «Encaja con riberas. ¿Lo miras esta semana?» y **Añadir nota**. | «Marcadla *en estudio*» → «¿Os sirve? *Votadlo*» → «Asignadla y *dejad una nota*» |
-| 57,8 | `seguimiento` | `/seguimiento`: las cuatro columnas; se arrastra la tarjeta recién marcada de «En estudio» a «A presentar». | «Todo el equipo, *un solo tablero*» |
-| 62,1 | `invitar` | `/equipo`: «Personas · 3 activas» (Diego Martín, Lucía Serrano (tú) · Administración, Marta Ibáñez · Equipo). Clic en **Invitar** → «Invitar a alguien»: se escribe nuria@example.org y «Nuria Campos», **Crear invitación** → «Invitación lista» con el enlace y **Copiar enlace**. **Hecho**: la lista con «Enlaces pendientes · Nuria Campos · Invitación · Equipo». | «Invitad al equipo *con un enlace*» → «Cada persona, *con su rol*» |
-| 73,1 | `asistente` | Lienzo verde (barrido circular). **Tarjeta de conector** (sin marca de ningún agente): «Conector MCP», marca + «Reforesta Radar», «vuestro-radar/mcp · Solo lectura», chip «✓ Conectado» (salta a 74,6 s) y debajo «Estándar abierto: vale cualquier agente de IA compatible con MCP». A los 3 s da paso al **chat**: pregunta «¿Qué convocatoria de Madrid ya hemos ganado y cuándo suele abrir?», etiqueta «MCP · Reforesta Radar» con los pasos «Buscó en el radar» y «Abrió la ficha», y la respuesta montada con la salida real de `buscar_convocatorias` y `ver_convocatoria` (`/mcp`, sin token): título, «Comunidad de Madrid · nota 100», «Reforesta ya la ganó en 2025 (29.378 €), 2024 y 2022.», «Ha abierto entre abril y septiembre; plazo habitual: 10 días hábiles.», fuente. | «Conectadlo por MCP *a cualquier agente de IA*» → «Pregúntaselo a *vuestro agente de IA*» |
-| 83,0 | `outro` | Barrido circular de vuelta al blanco: marca + «Reforesta Radar», lema escrito, botón «Ver el código» (un puntero lo pulsa) y github.com/Migueldgq/reforesta-radar. | «Menos horas buscando, *más horas en el monte.*» |
+| 0:00,0 | `intro` | Salta la marca y se escribe «Reforesta Radar». | — |
+| 0:02,8 | `problema` | Dos líneas centradas, cada una al empezar su frase. | «Cientos de convocatorias, *decenas de webs*» / «*y un equipo de siete.*» |
+| 0:15,1 | `promesa` | Dos líneas centradas. | «El radar busca y ordena,» / «*vosotros decidís.*» |
+| 0:25,4 | `inicio` | `/` empezando justo bajo la cabecera (sin el chip «Perfil ajustado»): las cuatro tarjetas (abiertas, cierran en 30 días, encaje alto, próximas ediciones); los gráficos por línea de trabajo y territorio; el aviso «Ahora mismo no hay convocatorias abiertas con encaje alto…» y las primeras filas. | «Siete fuentes, *una sola lista*» → «Por plazo, *tema o territorio*» → «Si hoy no hay nada bueno, *lo dice*» |
+| 0:45,0 | `ganasteis` | Primera fila (BDNS 904719, nota 100). Clic → ficha: «¿Encaja?» con sus motivos; Ediciones anteriores: «Reforesta la ganó en 2025, 2024 y 2022» (de cerca), cuándo abre, plazo habitual y quién la ganó. | «Arriba, *la que ya ganasteis*» → «Una nota, *con sus motivos*» → «Cuándo abre y *quién la gana*» |
+| 1:11,5 | `motivos` | Ficha de BDNS 930968: **45** «Puede encajar: revisa los avisos», motivos (Madrid, forestal) y avisos (cierre estimado; «Ninguna de las 37 ayudas anteriores fue a una entidad sin ánimo de lucro…»); luego toda la lista de motivos y avisos. | «Y sus avisos: *aquí ganan empresas*» → «Reglas a la vista, *no una caja negra*» |
+| 1:30,9 | `empresas` | `/empresas`: el texto «Esta lista no es automática: la hacemos a mano…»; tarjeta de Fundación Unicaja, de cerca «Último plazo» y «Qué lo limita»; abajo «Comprobado el 15 nov 2026». | «Fundaciones, *comprobadas a mano*» → «Y también *lo que las limita*» |
+| 1:48,6 | `analizar` | `/analizar`: **Elegir archivo** → `miteco-convocatoria-923290.pdf` (BDNS 923290, en el radar). **86/100** «Encaje alto», «Es la nota del radar para esta convocatoria, la misma que en la lista.» (la cámara se para en esa línea) y corte a **Motivos** y **Avisos**. El extracto automático de texto no sale. | «¿Tenéis las bases? *Subid el PDF*» → «Misma nota, *mismos motivos*» |
+| 2:02,8 | `equipo` | Ficha de BDNS 926034: **En estudio**, **Nos sirve**, Responsable → **Marta Ibáñez** (la lista desplegada se corta), nota «Encaja con riberas. ¿Lo miras esta semana?» y **Añadir nota**. | «Marcadla *en estudio*» → «¿Os sirve? *Votadlo*» → «Asignadla y *dejad una nota*» |
+| 2:20,4 | `seguimiento` | `/seguimiento`: el puntero recorre las cuatro columnas; se arrastra la tarjeta recién marcada de «En estudio» a «A presentar». | «Todo el equipo, *un solo tablero*» |
+| 2:30,9 | `invitar` | `/equipo`: Personas (Diego Martín, Lucía Serrano, Marta Ibáñez). **Invitar** → nuria@example.org, «Nuria Campos», **Crear invitación** → «Invitación lista» («Sirve una vez y caduca en 7 días»). **Hecho**: roles y «Enlaces pendientes · Nuria Campos». | «Invitad al equipo *con un enlace*» → «Cada persona, *con su rol*» |
+| 2:49,1 | `fuentes` | `/fuentes`: la tabla (fuente, estado, resultados, nota) baja despacio por las siete fuentes; vuelve arriba; cabecera con «Una ingesta programada consulta todas las fuentes cada mañana a las 9:00» y el puntero sobre **Actualizar ahora** (no se pulsa). | «De dónde sale todo, *a la vista*» → «¿No queréis esperar? *Actualizad ahora*» |
+| 3:09,5 | `asistente` | Lienzo verde. Tarjeta de conector (sin marca de ningún agente): «Conector MCP», «Reforesta Radar», «vuestro-radar/mcp · Solo lectura», «✓ Conectado», «Estándar abierto: vale cualquier agente de IA compatible con MCP». Después el chat: «¿Qué convocatoria de Madrid ya hemos ganado y cuándo suele abrir?», «MCP · Reforesta Radar», «Buscó en el radar», «Abrió la ficha» y la respuesta con la salida real de `/mcp`. | «Conectadlo por MCP *a cualquier agente de IA*» → «Pregúntaselo a *vuestro agente de IA*» |
+| 3:32,7 | `outro` | Barrido de vuelta al blanco: marca + «Reforesta Radar», lema, «Ver el código» y github.com/Migueldgq/reforesta-radar. | «Menos horas buscando, *más horas en el monte.*» |
 
-## Locución opcional (≈140 palabras, si se graba)
+## Locución, tal como está montada
 
-«Reforesta Radar. Siete fuentes, cientos de convocatorias y un equipo de siete. Las siete fuentes, a la vista; y si no queréis esperar a mañana, pedid una actualización. El radar las lee cada mañana, y si hoy no hay nada bueno, lo dice. Arriba, la que ya ganasteis: cuándo suele abrir y quién la gana. Cada nota lleva sus motivos y sus avisos: esta parece buena, pero la ganan empresas. ¿Tenéis unas bases en PDF? Subidlas: misma nota y mismos motivos que en la lista. Las fundaciones, comprobadas a mano, con lo que las limita. Marcadla en estudio, votadla, asignadla y dejad una nota: todo el equipo en un solo tablero. Invitad al equipo con un enlace. Y conectad el radar por MCP a cualquier agente de IA, y preguntadle. Menos horas buscando, más horas en el monte.»
-
-Si se añade, la voz manda: alarga las pausas (`sleep`) de `capture.mjs` y baja `MUSIC_LUFS` en `compose.mjs` unos dB.
+| t | Archivo | Texto |
+|---|---|---|
+| 0:00,5 – 0:02,5 | `01-intro` | Esto es Reforesta Radar. |
+| 0:03,3 – 0:08,6 | `02-problema` | Cada año salen cientos de ayudas y programas que podrían financiar vuestros proyectos. |
+| 0:08,9 – 0:14,7 | `03-problema` | Pero están repartidos por muchas webs distintas, y revisarlos a mano lleva horas a un equipo pequeño. |
+| 0:15,6 – 0:20,3 | `04-promesa` | Reforesta Radar los busca por vosotros, los ordena y os explica por qué. |
+| 0:20,7 – 0:25,1 | `05-promesa` | No escribe las solicitudes: os ayuda a decidir dónde poner el tiempo. |
+| 0:25,9 – 0:32,6 | `06-inicio` | Cada mañana, a las nueve, el radar lee siete fuentes públicas y privadas, y lo junta todo en una sola lista. |
+| 0:33,1 – 0:36,9 | `07-inicio` | Podéis mirarla por plazo, por línea de trabajo o por territorio. |
+| 0:37,4 – 0:44,5 | `08-inicio` | Y si hoy no hay nada abierto que encaje bien, os lo dice, y os enseña lo que se repite cada año, para prepararlo con tiempo. |
+| 0:45,5 – 0:50,9 | `09-ganasteis` | Arriba del todo, una que ya conocéis: la de proyectos ambientales de la Comunidad de Madrid. |
+| 0:51,4 – 0:56,2 | `10-ganasteis` | Cada una lleva una nota de cero a cien. Esta tiene cien, con sus motivos. |
+| 0:56,7 – 1:03,9 | `11-ganasteis` | Y lee las ediciones anteriores: Reforesta la ganó en 2025, 2024 y 2022. |
+| 1:04,4 – 1:11,0 | `12-ganasteis` | Suele abrir entre abril y septiembre, y en los dos últimos años todas las ayudas fueron a entidades sin ánimo de lucro. |
+| 1:12,0 – 1:21,5 | `13-motivos` | La nota también avisa. Esta, de Madrid y forestal, parece buena, pero ninguna de las ayudas anteriores fue a una entidad sin ánimo de lucro. |
+| 1:22,0 – 1:30,3 | `14-motivos` | Y se queda en un 45. No hay inteligencia artificial detrás: son reglas a la vista, que podéis ajustar en el Perfil del equipo. |
+| 1:31,4 – 1:37,1 | `15-empresas` | Los programas de empresas y fundaciones no salen en ningún boletín: están comprobados a mano. |
+| 1:37,6 – 1:44,5 | `16-empresas` | Cada uno dice su plazo y qué lo limita: este de Fundación Unicaja solo vale en Andalucía o en Ciudad Real. |
+| 1:45,0 – 1:48,0 | `17-empresas` | Como no se actualizan solos, conviene revisarlos. |
+| 1:49,1 – 1:54,4 | `18-analizar` | ¿Os llegan las bases de una convocatoria en PDF? Subidlas en Analizar PDF. |
+| 1:54,9 – 2:02,2 | `19-analizar` | Si la convocatoria ya está en el radar, el PDF lleva la misma nota que en la lista, con los mismos motivos y avisos. |
+| 2:03,2 – 2:08,2 | `20-equipo` | Cuando una os interesa, se decide en equipo. Primero, la marcáis en estudio. |
+| 2:08,7 – 2:14,7 | `21-equipo` | Cada persona vota si os sirve. Los votos muestran dónde la nota y el equipo no están de acuerdo. |
+| 2:15,2 – 2:19,9 | `22-equipo` | Después, elegís quién se encarga y dejáis una nota, que verá todo el equipo. |
+| 2:20,9 – 2:27,0 | `23-seguimiento` | Todo acaba en un tablero compartido: en estudio, a presentar, presentada y descartada. |
+| 2:27,5 – 2:30,3 | `24-seguimiento` | Para cambiar una de columna, basta con arrastrarla. |
+| 2:31,4 – 2:37,7 | `25-invitar` | Al radar se entra por invitación: escribís el correo, y el radar crea un enlace que enviáis vosotros. |
+| 2:38,2 – 2:41,7 | `26-invitar` | El enlace sirve una sola vez y caduca en siete días. |
+| 2:42,2 – 2:48,6 | `27-invitar` | Hay dos roles: administración, que gestiona el equipo, y equipo, que usa y edita el tablero. |
+| 2:49,6 – 2:58,6 | `28-fuentes` | En Fuentes veis de dónde sale cada dato: la Base de Datos Nacional de Subvenciones, el BOE, los fondos europeos y cuatro fuentes más. |
+| 2:59,1 – 3:03,3 | `29-fuentes` | De cada una, cuántos resultados dio y si la última carga fue bien. |
+| 3:03,8 – 3:09,0 | `30-fuentes` | Y si no queréis esperar a mañana, alguien de administración puede pedir una actualización en el momento. |
+| 3:10,5 – 3:19,4 | `31-asistente` | Y si usáis un asistente de inteligencia artificial, podéis conectarle el radar por MCP, un estándar abierto que vale para cualquier agente de IA. |
+| 3:19,8 – 3:24,0 | `32-asistente` | Es de solo lectura: puede buscar y leer, pero no cambia nada. |
+| 3:25,3 – 3:32,3 | `33-asistente` | Le preguntáis con vuestras palabras; él busca en el radar y os responde con los mismos datos que veis en la aplicación. |
+| 3:33,7 – 3:38,2 | `34-outro` | Reforesta Radar. Menos horas buscando, y más horas en el monte. |
 
 ## Notas
 
-- Las cifras que se ven (7 fuentes, 323 convocatorias, 100, 86, 45, 19 días…) son las de la app el día de la grabación (15 nov 2026). Las de los titulares salen de `captures/facts.json`.
-- La app no redacta solicitudes: el vídeo enseña de dónde salen los datos, encontrar, priorizar, explicar la nota (también la de un PDF), decidir en equipo, invitar al equipo y consultar el radar desde un agente de IA. Nada más.
-- El agente de IA no es de la app: el radar le da datos por su servidor MCP de solo lectura (`/mcp`). MCP es un estándar abierto, así que vale cualquier agente compatible; las tarjetas no llevan nombre, logo ni aspecto de ninguno. «vuestro-radar» es un marcador neutro, no un dominio: la dirección real es la de vuestra web más `/mcp` (`docs/mcp.md`). El texto de la respuesta sale tal cual de las herramientas.
-- «Actualizar ahora» solo se señala con el puntero: pulsarlo lanzaría una ingesta y cambiaría los datos.
-- Personas en pantalla: Lucía Serrano, Diego Martín, Marta Ibáñez y Nuria Campos (invitación) son cuentas ficticias (`@example.org`) creadas para grabar y borradas después. La captura filtra las respuestas de la API en el navegador para que solo se vean esas cuentas (ver `README.md`).
+- La app no redacta solicitudes y la nota no usa IA: son reglas (ADR 0005 y 0006). La locución lo dice así.
+- «Por plazo, tema o territorio»: son los gráficos de la portada, que filtran la lista al pulsarlos.
+- En Analizar PDF se usa el PDF público de la convocatoria BDNS 923290 porque está en el radar y lleva la misma nota que en la lista (86). Ese PDF no trae un objeto extraíble, así que el resumen automático («No se pudo extraer un resumen automático del objeto») queda fuera del plano: la cámara se para en la línea de la nota y corta a los motivos.
+- La portada se graba empezando bajo su cabecera: el chip «Perfil ajustado» refleja el Perfil guardado del equipo real y no forma parte del vídeo (no se ha tocado ese ajuste).
+- El agente de IA no es de la app: el radar le da datos por su servidor MCP de solo lectura (`/mcp`). MCP es un estándar abierto; las tarjetas no llevan nombre, logo ni aspecto de ningún agente. «vuestro-radar» es un marcador neutro, no un dominio.
+- «Actualizar ahora» solo se señala con el puntero: pulsarlo lanzaría una ingesta.
+- Personas en pantalla: Lucía Serrano, Diego Martín, Marta Ibáñez y Nuria Campos (invitación) son cuentas ficticias (`@example.org`) creadas para grabar y borradas después.
