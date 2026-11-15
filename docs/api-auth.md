@@ -12,6 +12,7 @@ Timestamps are ISO 8601 with offset (`2026-11-15T13:18:36.655384+00:00`); dates 
 | Session cookie | `radar_session`: opaque random token, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age` 30 days, `Secure` when `RADAR_COOKIE_SECURE=true` (set it behind https). The API sets and clears it; JavaScript can neither read nor needs to. Expiry is server-side, 30 days after the last use (sliding). |
 | CSRF | Every `POST`, `PUT`, `PATCH`, `DELETE` under `/api/` (login and logout included) **must send `X-Radar-CSRF: 1`**. Requests whose `Sec-Fetch-Site` is `cross-site` or `same-site` are rejected even with the header. Missing/wrong → `403 {"detail": "Petición rechazada (falta la cabecera X-Radar-CSRF o viene de otro sitio)."}`. GETs need nothing. Simplest: one `fetch` wrapper that always adds the header (also for the multipart `/api/analyze-pdf`). |
 | Who may call what | Open: `GET /health`, `/api/auth/*`, `/api/public/*`. Everything else under `/api/` needs a session (401 without). Admin-only routes (marked **admin** below) answer 403 to members. Members can edit everything on the board. |
+| Body size | Bodies over **1 MiB** (16 MiB on `/api/analyze-pdf`) get `413 {"detail": "La petición es demasiado grande."}` before anything else (session check included). |
 | Errors | `{"detail": "<Spanish message, ready to show>"}` with the status code. Validation errors from the schema are FastAPI's `422 {"detail": [{"loc": [...], "msg": "...", ...}]}` (English, for developers: validate in the form before sending). Exceptions: `POST /api/ingest` 409 carries more fields (below); `/api/analyze-pdf` keeps its old `{"error": "..."}` shape. |
 | 401 | `{"detail": "No has iniciado sesión o la sesión ha caducado."}` on any protected route: send the user to the login page (keep the current URL to come back). |
 | 403 | `{"detail": "Solo un administrador puede hacer esto."}`: hide admin-only UI for members (`user.role`). |
@@ -57,8 +58,19 @@ type Triage = "nueva" | "estudio" | "presentar" | "presentada" | "descartada"; /
 | `POST /api/auth/forgot` | `{email}` | `202 {"ok": true}` always (never says whether the address exists) | `404` when e-mail is not configured (`forgotPassword: false`); `429` |
 
 - Passwords: 10 to 256 characters, no composition rules. The API's 400 message says which limit failed.
-- Login is throttled: 5 failures per account in 15 min, 50 per client IP in 15 min; a success resets the account
-  counter. The invitation's e-mail is fixed: `accept` ignores any `email` field.
+- Login throttling (failures within 15 min; every attempt is counted *before* the password is checked, so parallel
+  guesses cannot slip through):
+  1. **Per account, hard ceiling: 50.** Once reached, every login to that account gets `429` without checking the
+     password, from any client, until the window moves on. This bounds online guessing to ~200 per hour per account.
+  2. **Per (account, client IP): 5.** Past it, a *wrong* password from that client gets `429` (instead of 401) with
+     `Retry-After`. A **right password still logs in**: below the ceiling, nobody else's failures ever refuse a
+     correct password (behind the Next.js proxy all browsers may share one IP).
+  A successful login takes back its own attempt and clears its (account, IP) counter. Show the 429 `detail` and
+  disable the button for `Retry-After` seconds.
+- The client IP is the TCP peer unless `FORWARDED_ALLOW_IPS` names a trusted proxy (default: none; see
+  docs/backend.md). Password hashing runs at most `RADAR_ARGON2_CONCURRENCY` (2) at a time: under a burst, logins
+  wait (slower answers), they do not fail.
+- The invitation's e-mail is fixed: `accept` ignores any `email` field.
 - `name` on accept is optional (falls back to the name the admin typed in the invitation; may be empty). Ask for it.
 
 ## Self (`/api/me*`, any signed-in user)
@@ -66,22 +78,24 @@ type Triage = "nueva" | "estudio" | "presentar" | "presentada" | "descartada"; /
 | Method + path | Body | 2xx | Errors |
 |---|---|---|---|
 | `PATCH /api/me` | `{name}` (1-100) | `200 Me` | `400` empty |
-| `POST /api/me/password` | `{currentPassword, newPassword}` | `204`; all sessions ended, a fresh cookie is set for this browser | `400 "La contraseña actual no es correcta."` or length; `429` (shares the login throttle) |
+| `POST /api/me/password` | `{currentPassword, newPassword}` | `204`; all sessions ended, a fresh cookie is set for this browser | `400 "La contraseña actual no es correcta."` or length; `429` after 5 wrong current passwords in 15 min (per user; it never affects logging in) |
 
 ## People
 
 | Method + path | Who | Body | 2xx | Errors |
 |---|---|---|---|---|
 | `GET /api/users` | any | – | `200 {users: {id, name, active}[]}` (assignee picker, authors; inactive people stay listed for old notes; only active ones can be assigned) | – |
-| `GET /api/team` | **admin** | – | `200 {users: TeamUser[], invitations: PendingInvitation[]}` | – |
+| `GET /api/team` | **admin** | – | `200 {users: TeamUser[], invitations: PendingInvitation[], resets: PendingReset[]}` | – |
 | `POST /api/team/invitations` | **admin** | `{email, name?, role?: Role = "member"}` | `201 {invitation: PendingInvitation, link, expiresAt, emailed}` | `400` invalid e-mail; `409` account exists |
 | `DELETE /api/team/invitations/{id}` | **admin** | – | `204` | `404` not pending |
 | `PATCH /api/team/users/{id}` | **admin** | `{role?, active?}` | `200 TeamUser` | `404`; `409 "Tiene que quedar al menos un administrador activo."` |
 | `POST /api/team/users/{id}/reset-link` | **admin** | – | `201 {link, expiresAt, emailed}` | `404` unknown or deactivated |
+| `DELETE /api/team/resets/{id}` | **admin** | – | `204` (that reset link stops working) | `404` not pending |
 
 ```ts
 type TeamUser = { id: number; email: string; name: string; role: Role; active: boolean; createdAt: string; lastLoginAt: string | null };
 type PendingInvitation = { id: number; email: string; name: string; role: Role; createdAt: string; expiresAt: string; createdBy: number | null };
+type PendingReset = { id: number; userId: number; userName: string; createdBy: number | null /* null: self-service e-mail */; createdAt: string; expiresAt: string };
 ```
 
 - `link` is shown **once** (only its hash is stored): display it with a copy button and the hint "envíalo tú por un
@@ -89,6 +103,9 @@ type PendingInvitation = { id: number; email: string; name: string; role: Role; 
   means the API also e-mailed it (only with SMTP configured).
 - A new invitation to an address with a pending one replaces it; a new reset link invalidates the previous one.
 - Role change and deactivation end that person's sessions at once (an admin who demotes themself is logged out).
+  When someone **loses admin or is deactivated**, the pending invitations and unused reset links *they created*
+  stop working at once (and, on deactivation, their own pending reset links too); the team screen should list
+  `invitations` and `resets` with a "Revocar" button each, showing who created them (`createdBy`).
   There is no delete: deactivate. Keep at least two admins (docs/backend.md).
 
 ## Board (`/api/board*`, any signed-in user)
@@ -164,13 +181,15 @@ API's score (read-time fit), **without** the team's Perfil adjustments. Calls go
 }
 ```
 
-Response `200 {trackingImported, trackingKept, profile: "imported"|"kept"|"none", organisms: "imported"|"kept"|"none"}`.
+Response `200 {trackingImported, trackingKept, trackingSkipped, profile: "imported"|"kept"|"none", organisms: "imported"|"kept"|"none"}`.
+Limits: at most 2000 tracking entries (422 above) and a 1 MiB body (413).
 
 **Merge rule: what the team already saved always wins; the browser only fills gaps.**
 - Tracking: each entry with a status other than `nueva` becomes a board row **only if the call has no row yet**;
-  an existing row is left untouched (`trackingKept`). Snapshot from the radar's data, or from the entry
-  (`titulo`, `organismo`, `deadline`) when the call is unknown to the radar. Imported rows are attributed to the
-  importing user, at import time (`at` is not used).
+  an existing row is left untouched (`trackingKept`). Only calls the radar knows (in its data, current or gone from
+  the sources) are imported; never-seen ids are skipped (`trackingSkipped`). The snapshot always comes from the
+  radar's data (the entry's `titulo`, `organismo`, `deadline` and `at` are ignored). Imported rows are attributed
+  to the importing user, at import time.
 - Profile and organisms: imported only if the team has never saved one (`null` on the server) and the imported
   value is not neutral / empty.
 - Idempotent: importing the same data again changes nothing.

@@ -79,7 +79,9 @@ docker compose run --rm api python -m app.users create-admin ana@example.org --n
   `RADAR_COOKIE_SECURE=true` detrás de https), caduca a los 30 días sin uso y se revoca al cerrar sesión, cambiar
   la contraseña o el rol, o desactivar la cuenta; en la base solo hay hashes de los tokens. Las peticiones que
   cambian datos llevan la cabecera `X-Radar-CSRF: 1` y se rechazan si el navegador dice que vienen de otro sitio.
-  Inicio de sesión limitado (5 fallos por cuenta y 50 por IP cada 15 min).
+  Inicio de sesión limitado: 50 fallos por cuenta cada 15 min como tope duro; por cuenta e IP, 5 (a partir de ahí
+  se responde «espera» a las contraseñas incorrectas, pero la correcta sigue entrando). Cuerpos de más de 1 MiB
+  (16 MiB para PDF) se rechazan antes de mirar la sesión; Argon2 se ejecuta como mucho 2 a la vez.
 - Estado compartido en Postgres: tablero de seguimiento (`tracking`, `tracking_notes`; sobrevive a que una
   convocatoria desaparezca de las fuentes), perfil y filtro de organismos del equipo (`org_settings`), votos
   «sirve / no sirve» (`votes`) y peticiones de actualización (`ingest_requests`). Lo que cada navegador tenía en
@@ -103,14 +105,27 @@ El backend anterior en TypeScript (rutas `src/app/api/*`, conectores y caché en
 3 veces al día) se eliminó al pasar a Python. Ya no hay ingesta en GitHub Actions ni base de datos en Supabase:
 la ingesta programada es el servicio `ingest-scheduler` (`backend/app/ingest/scheduler.py`).
 
+## Antes de publicarlo en internet
+
+- [ ] Proxy inverso (Caddy, nginx) con https delante de `web` que **sobrescriba** `X-Forwarded-For`; solo entonces
+      `FORWARDED_ALLOW_IPS` = red de compose (p. ej. `172.16.0.0/12`). Sin proxy, déjalo en `127.0.0.1`.
+- [ ] Límite de tamaño de cuerpo también en el proxy (16 MB basta: el PDF más grande).
+- [ ] `RADAR_COOKIE_SECURE=true` y `RADAR_PUBLIC_URL=https://…` (los enlaces de invitación usan esa URL).
+- [ ] El puerto de la API (`8010`) solo en `127.0.0.1` (como ya está) o sin publicar; si se expone, quitar `/docs`
+      y `/openapi.json`.
+- [ ] No registrar en los logs del proxy las rutas `/invitacion/*` ni `/restablecer/*` (llevan el token).
+- [ ] Quitar `RADAR_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` del `.env` tras el primer arranque; al menos dos admins.
+- [ ] Valorar una vida máxima absoluta de la sesión (hoy: 30 días desde el último uso, sin tope absoluto).
+- [ ] Copias de seguridad de Postgres (ver riesgos).
+
 ## Riesgos conocidos
 
 | Riesgo | Salvaguarda |
 |---|---|
 | Sin copias de seguridad automáticas de Postgres | Pendiente: `pg_dump` periódico del volumen `radar-pgdata`. |
-| Equipo apagado o dormido a las 9:00 | `ingest-scheduler` comprueba cada 5 min e ingesta al despertar si no hubo ninguna ingesta correcta desde las 9:00. |
+| Equipo apagado o dormido a las 9:00 | `ingest-scheduler` comprueba cada 30 s e ingesta al despertar si no hubo ninguna ingesta correcta desde las 9:00. |
 | Una fuente cambia su HTML | Se registra en `source_runs`; sus filas anteriores siguen visibles y la fuente sale como parcial o error. |
-| Límite de intentos por IP poco fiable | Next reenvía la cabecera `X-Forwarded-For` que manda el cliente y no añade la suya: sin un proxy inverso delante que la fije, todos comparten la IP del contenedor `web` (o pueden falsearla). El límite por cuenta sigue aplicando. En producción, poner un proxy (Caddy, nginx) que sobrescriba `X-Forwarded-For`. |
+| IP del cliente poco fiable | Next reenvía el `X-Forwarded-For` que manda el navegador y no añade el suyo, así que la API no se lo cree (`FORWARDED_ALLOW_IPS=127.0.0.1` por defecto): todos los navegadores comparten la IP del contenedor `web`. Por eso una contraseña correcta nunca se rechaza por fallos ajenos (solo el tope de 50 fallos por cuenta bloquea a todos). Con un proxy inverso delante que sobrescriba `X-Forwarded-For`, poner en `FORWARDED_ALLOW_IPS` la red de compose (p. ej. `172.16.0.0/12`). |
 
 ## Siguiente tramo
 
