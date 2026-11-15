@@ -9,6 +9,24 @@ async function signIn(page: import("@playwright/test").Page, email: string, pass
   await page.getByRole("button", { name: "Entrar" }).click();
 }
 
+test("the bare domain without a session shows the landing, whose «Abrir el radar» leads to /login", async ({ page }) => {
+  failOnPageErrors(page);
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/landing$/);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await page.getByRole("link", { name: "Abrir el radar" }).first().click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
+});
+
+test("a stale session cookie on the bare domain ends on the login page, without a loop", async ({ page, baseURL }) => {
+  await page.context().addCookies([{ name: "radar_session", value: "caducada", url: baseURL! }]);
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
+});
+
 test("a protected page without a session goes to /login and comes back after signing in", async ({ page, run }) => {
   await page.goto("/seguimiento");
   await expect(page).toHaveURL(/\/login\?next=%2Fseguimiento$/);
@@ -33,6 +51,7 @@ test("sign in, then sign out from the account menu", async ({ page, run }) => {
   const { email, password, name } = run.accounts.acceso;
   await page.goto("/login");
   await signIn(page, email, password);
+  await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: "Convocatorias" })).toBeVisible();
 
   await page.getByRole("button", { name: new RegExp(`^Tu cuenta: ${name}`) }).click();
@@ -40,7 +59,7 @@ test("sign in, then sign out from the account menu", async ({ page, run }) => {
   await expect(page).toHaveURL(/\/login$/);
 
   await page.goto("/");
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/landing$/);
 });
 
 test("a session that ends mid-use sends the person to /login saying the change was not saved", async ({ page, run, baseURL }) => {

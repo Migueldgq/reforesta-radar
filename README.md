@@ -103,7 +103,7 @@ Pide la contraseña dos veces (mínimo 10 caracteres). Con `--generate` la gener
 
 ### Abrir
 
-- App: http://localhost:3010 (lleva a la pantalla de entrada). Portada pública: http://localhost:3010/landing.
+- App: http://localhost:3010 (sin sesión lleva a la portada pública, http://localhost:3010/landing; su botón «Abrir el radar» va a la pantalla de entrada, http://localhost:3010/login).
 - API: http://localhost:8010, documentación interactiva en http://localhost:8010/docs.
 - Las demás personas se invitan desde **Equipo → Invitar**, que da un enlace para enviar a mano (caduca en 7 días).
   Crea al menos dos administradores: si el único olvida su contraseña, solo se recupera con el comando de arriba.

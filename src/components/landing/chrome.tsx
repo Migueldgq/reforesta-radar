@@ -60,7 +60,7 @@ export function LandingNav() {
             </a>
           </Button>
           <Button asChild size="sm">
-            <Link href="/">
+            <Link href="/login">
               Abrir el radar
               <ArrowRight />
             </Link>
