@@ -5,44 +5,31 @@
 # The review runs on this runner with the owner's Claude subscription (secret CRYSK_CLAUDE_OAUTH_TOKEN): the runner
 # calls Claude directly, no Crysk server is involved (platform mode needs workflow_dispatch and id-token, unused here).
 # Repository facts the reviewer reads: REVIEW.md. Paths it skips: .cryskignore.
+#
+# No `issue_comment` (`/crysk review`) trigger on purpose: a comment run has the secret even on a fork's pull request,
+# so it would hand the Claude credential to a review of outside content. To review again, push or use "Re-run jobs".
 name: Crysk
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  # `/crysk review` (or `/crysk review --full`) on a pull request reviews it again on demand. GitHub runs this
-  # trigger from main's copy of this file. Only the repository owner can start it (job `if` below), because every
-  # run spends the owner's Claude quota; the action also refuses commenters without write access.
-  issue_comment:
-    types: [created]
 
 permissions:
   contents: read # actions/checkout
   pull-requests: write # inline findings and the summary review
-  issues: write # replies on review threads (GitHub models PR conversations as issues)
+  issues: write # outcome comments and replies on review threads (GitHub models PR conversations as issues)
   statuses: write # the `crysk` commit status
   checks: write # the action's admission ledger (`crysk/ci-admission` check runs)
 
 jobs:
   review:
     # Pull requests from this repository only: a fork's `pull_request` run gets no secrets (never use
-    # pull_request_target here). Comments: only the owner's, only on pull requests, only `/crysk …` commands.
-    if: >-
-      (github.event_name == 'pull_request'
-        && github.event.pull_request.head.repo.full_name == github.repository)
-      || (github.event_name == 'issue_comment'
-        && github.event.issue.pull_request
-        && github.event.comment.author_association == 'OWNER'
-        && startsWith(github.event.comment.body, '/crysk '))
-    # One group per pull request; a new push cancels the review of the old head, a comment run queues. A run this
-    # job's `if` would skip gets a group of its own, so it can never cancel or replace a real review.
+    # pull_request_target here).
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    # One review per pull request at a time; a new push cancels the review of the old head.
     concurrency:
-      group: >-
-        ${{ (github.event_name == 'pull_request' || (github.event.comment.author_association == 'OWNER'
-        && startsWith(github.event.comment.body, '/crysk ')))
-        && format('crysk-{0}', github.event.pull_request.number || github.event.issue.number)
-        || format('crysk-noop-{0}', github.run_id) }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+      group: crysk-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
