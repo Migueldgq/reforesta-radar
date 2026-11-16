@@ -95,3 +95,4 @@ Una línea por alternativa y por qué no se eligió (o «motivo no registrado»)
 | [0042](0042-licitaciones-de-instalaciones-por-su-objeto-y-motivo-life-por-subprograma.md) | Licitaciones de instalaciones juzgadas por su objeto y motivo LIFE según el subprograma | Aceptada | 2026-11-15 |
 | [0043](0043-panel-de-dokploy-con-dominio-publico.md) | Panel de Dokploy en un dominio público, con 2FA obligatorio y límites de peticiones | Aceptada | 2026-11-15 |
 | [0044](0044-despliegue-sin-corte.md) | Despliegue sin corte: la versión nueva de `api` y `web` arranca antes de parar la vieja | Aceptada | 2026-11-15 |
+| [0045](0045-revision-de-prs-con-crysk-solo-consultiva.md) | Revisión de PR con Crysk, solo consultiva y fijada por commit | Aceptada | 2026-11-16 |
