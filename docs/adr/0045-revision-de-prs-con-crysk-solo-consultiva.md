@@ -30,9 +30,13 @@ cambios incompatibles entre versiones menores) y de un solo mantenedor, y la acc
   público, así que cualquiera puede descargarlo, pero solo contiene el diff, que ya es público.
 - **Coste**: cuota de la suscripción de Claude del responsable; sin factura por tokens. Con suscripción Crysk no aplica
   tope de tamaño ni de gasto.
-- **Comentario `/crysk review`** (repetir la revisión a mano): solo para el dueño del repositorio. El `if` del trabajo
-  exige `author_association == 'OWNER'`, y la acción además rechaza a quien no tenga permiso de escritura. Motivo: el
-  repositorio es público y cada ejecución gasta la cuota del responsable.
+- **Sin comentario `/crysk review`** (el disparador `issue_comment`): una ejecución por comentario tiene los secretos
+  aunque el PR venga de un fork, así que entregaría la credencial de Claude a una revisión de contenido ajeno (riesgo de
+  inyección de instrucciones). El evento del comentario no trae el repositorio de la rama, y comprobarlo exigiría un
+  paso más que consulte la API; se prefiere no tener el disparador. Lo señaló la propia revisión de Crysk en este PR.
+  Para revisar otra vez: un push nuevo o «Re-run jobs» en el run. Ojo: según la documentación de Crysk, repetir un run
+  vuelve a pasar sus filtros de admisión (por defecto `risk_aware`, como mucho 2 revisiones automáticas por PR), así
+  que puede volver a saltarse la revisión.
 - Permisos del workflow: `contents: read`, `pull-requests: write`, `issues: write`, `statuses: write`,
   `checks: write`, los que pide la documentación de Crysk. Sin `id-token` (solo para el modo plataforma) ni
   `actions: read` (en un repositorio público no hace falta).
@@ -47,7 +51,7 @@ cambios incompatibles entre versiones menores) y de un solo mantenedor, y la acc
   versión, `actions/upload-artifact@v4` y `oven-sh/setup-bun@v2` por etiqueta). Fijar el SHA protege de una versión
   nueva de Crysk, no de esas dependencias.
 - El token de `claude setup-token` caduca a ~1 año: hay que renovarlo y volver a guardar el secreto.
-- El comentario `/crysk review` solo funciona cuando este workflow está en `main`.
+- Sin `/crysk review`, un PR que los filtros de admisión de Crysk dejan sin revisar no se puede forzar desde GitHub.
 - Quitarlo: borrar `.github/workflows/crysk.yml`, `REVIEW.md` y `.cryskignore`, y el secreto
   `CRYSK_CLAUDE_OAUTH_TOKEN` en Settings → Secrets and variables → Actions. Nada más depende de él.
 
@@ -55,4 +59,6 @@ cambios incompatibles entre versiones menores) y de un solo mantenedor, y la acc
 - `mode: gate` y check obligatorio: un proyecto joven no debe poder bloquear una fusión.
 - `uses: cryskai/crysk@v0`: movería la credencial a cada versión nueva sin revisión.
 - Clave de API de Anthropic (`CRYSK_CLAUDE_API_KEY`): factura por tokens; el responsable eligió su suscripción.
-- Comentario abierto a cualquier colaborador con escritura: cada ejecución gasta la cuota del responsable.
+- `/crysk review` solo para el dueño (`author_association == 'OWNER'`): seguía dando la credencial a una revisión de
+  un fork si el dueño comentaba en él.
+- Ese disparador con un paso que consulte la API y rechace los forks: más código propio en la ruta del secreto.
