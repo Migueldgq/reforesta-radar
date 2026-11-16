@@ -1,0 +1,4 @@
+# Paths Crysk leaves out of the reviewed diff (on top of its defaults: package-lock.json, *.min.js, ...).
+# Read from the pull request's base branch. Dialect: a subset of .gitignore.
+uv.lock
+demo-video/audio/

@@ -125,7 +125,9 @@ si el dominio o Traefik fallan. Desde fuera sigue cerrado (`DOCKER-USER` y la li
 1. Se abre un PR. **CI** (`.github/workflows/ci.yml`) pasa `ruff check`, `ruff format --check` y `pytest` del
    backend (con un Postgres 16 de usar y tirar), `npm ci`, `tsc --noEmit`, `npm run lint` y `npm run build` de la web,
    y las pruebas de extremo a extremo con Playwright ([e2e/README.md](../e2e/README.md)). Deploy solo arranca si los
-   tres trabajos salen en verde.
+   tres trabajos salen en verde. Aparte, **Crysk** (`.github/workflows/crysk.yml`, ADR 0045) revisa el PR con IA y
+   deja comentarios: es solo consultivo, no bloquea la fusión ni el despliegue. Para repetir la revisión, un push nuevo
+   o «Re-run jobs»; no hay comando `/crysk review` (no se da la credencial a revisiones de forks, ADR 0045).
 2. Se fusiona en `main`. CI vuelve a pasar sobre `main`.
 3. Si CI sale en verde, **Deploy** (`.github/workflows/deploy.yml`) entra por SSH con la clave de despliegue y pide
    `deploy <commit>`. En el servidor, el comando forzado `reforesta-radar-ci-deploy` comprueba el formato y llama por

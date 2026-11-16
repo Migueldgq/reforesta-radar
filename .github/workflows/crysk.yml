@@ -1,0 +1,43 @@
+# AI review of every pull request with Crysk (https://github.com/cryskai/crysk, ADR 0045). Advisory only: its `crysk`
+# status is green for every finished review and it is not a required check, so it never blocks a merge. It is not
+# the CI workflow, so it cannot trigger or hold back a deploy (deploy.yml listens to CI only).
+#
+# The review runs on this runner with the owner's Claude subscription (secret CRYSK_CLAUDE_OAUTH_TOKEN): the runner
+# calls Claude directly, no Crysk server is involved (platform mode needs workflow_dispatch and id-token, unused here).
+# Repository facts the reviewer reads: REVIEW.md. Paths it skips: .cryskignore.
+#
+# No `issue_comment` (`/crysk review`) trigger on purpose: a comment run has the secret even on a fork's pull request,
+# so it would hand the Claude credential to a review of outside content. To review again, push or use "Re-run jobs".
+name: Crysk
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read # actions/checkout
+  pull-requests: write # inline findings and the summary review
+  issues: write # outcome comments and replies on review threads (GitHub models PR conversations as issues)
+  statuses: write # the `crysk` commit status
+  checks: write # the action's admission ledger (`crysk/ci-admission` check runs)
+
+jobs:
+  review:
+    # Pull requests from this repository only: a fork's `pull_request` run gets no secrets (never use
+    # pull_request_target here).
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    # One review per pull request at a time; a new push cancels the review of the old head.
+    concurrency:
+      group: crysk-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # Crysk computes the diff range and merge base from full history
+      - uses: cryskai/crysk@26576d6d01fbc6d2578526a2dc35c14551c07f03 # v0.7.0
+        with:
+          crysk-secrets: |
+            CRYSK_CLAUDE_OAUTH_TOKEN=${{ secrets.CRYSK_CLAUDE_OAUTH_TOKEN }}
+          mode: advisory
